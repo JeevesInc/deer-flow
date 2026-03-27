@@ -1,0 +1,266 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-03-27T22:53:57.332756Z",
+  "user": {
+    "workContext": {
+      "summary": "User works at Jeeves Financial Technology (jeeves-org.slack.com) in underwriting (UW) operations, reviewing credit line decisions, onboarding scores, and account statuses. Their work involves tools such as Taktile (onboarding scoring), Redshift (data warehouse), and internal UW workflows. They are involved with structured credit products including receivables-backed revolving facilities for business clients, and engage with external partners including Accial Capital, Lendable, CBIZ, and CIM.",
+      "updatedAt": "2026-03-27T22:22:03.549527Z"
+    },
+    "personalContext": {
+      "summary": "",
+      "updatedAt": ""
+    },
+    "topOfMind": {
+      "summary": "User is actively working on receivables-backed credit facility operations, including a pilot program for Easytech involving R$30M (~$5.76M USD) in Mercado Livre/Mercado Pago card receivables pledged via CERC, with Jeeves advancing 85% (~$4.89M USD) at a 2.1% transaction fee. The facility follows a monthly revolving cycle with three phases: Cycle Opening (Days 1–3), Active Monitoring (Days 4–30), and Cycle Closing (Day 30+). User is also actively monitoring credit exposure across accounts, including Macropay (Celulares y accesorios del sureste SA de CV) in Mexico — a confirmed and memory-corrected fact: Macropay's balance column in loc_tape and current_balance in companies_dm are in MXN (not USD), and the true USD balance from loc_tape.balance_usd is approximately $1.86M as of Mar 26, 2026 (most recent available), well within their credit limit of $6,257,865.60 USD. Today's (Mar 27) balance_usd is NULL because FX rates have not yet been applied. User has expressed frustration that this correction was not properly committed to memory in a prior session and expects the system to retain confirmed data corrections going forward. Key internal stakeholders in these workflows include Matheus, Leti, Isabel, William, and Pablo. User has an upcoming Jeeves Advance Request Discussion meeting on Mon Mar 30 at 11am PDT, accepted by both Camila Fernandez and Isabel Diaz Miranda. User is engaged with external capital and credit partners including Accial Capital (Alejandro Martín Schwartz, Ricardo Martinez), Lendable (Agustin De Luca), and CBIZ (Vincent McAndress). A draft reply to Vincent McAndress has been composed and saved to Gmail Drafts, requesting to reschedule the CBIZ call to next week with open availability — user should review and send when ready. User has established a data convention for Redshift queries: most tables have a USD column and figures should always be quoted in USD by default; if no USD column exists, values are in local currency.",
+      "updatedAt": "2026-03-27T22:53:57.315756Z"
+    }
+  },
+  "history": {
+    "recentMonths": {
+      "summary": "User has been engaged in underwriting operations work at Jeeves, reviewing credit decisions and onboarding scores using Taktile and Redshift. Recently, they have been working with structured credit product documentation, specifically a pilot operational guide for Easytech's card receivables facility — a monthly revolving structure backed by Mercado Livre/Mercado Pago receivables registered through CERC. The facility involves a waterfall payment structure (Fees → Principal → Excess) and multi-team coordination across cycle phases. User is also actively monitoring credit exposure across their portfolio, including Macropay in Mexico. A critical and confirmed data correction has been made and re-confirmed across multiple sessions: Macropay's `current_balance` field in `companies_dm` (33,321,112.06) is denominated in MXN, not USD — it was previously misread as a USD figure implying a massive overage. The true USD balance, sourced from `loc_tape.balance_usd`, is approximately $1,859,784.55 USD as of Mar 26, 2026, which is well within Macropay's credit limit of $6,257,865.60 USD. The `balance_usd` column in `loc_tape` represents only the USD-denominated portion of spend and may be NULL on the current day if FX rates haven't been applied yet (confirmed NULL on Mar 27, 2026). User expressed frustration that this correction was not retained from a prior session, underscoring the importance of persisting confirmed data corrections in memory. User is coordinating with external partners including Accial Capital, Lendable, CBIZ, and CIM, and has recurring touchpoints such as an Additional Credit Committee meeting and a Jeeves Advance Request Discussion scheduled for late March/early April 2026. The CBIZ touchpoint involves a Teams meeting invite from Vincent McAndress about open items; user decided to reschedule this call to the following week with open availability, and a draft reply was saved to Gmail Drafts for review and sending. User has also codified a Redshift data convention: most tables include a USD column and all figures should default to USD unless local currency is explicitly requested.",
+      "updatedAt": "2026-03-27T22:53:57.315756Z"
+    },
+    "earlierContext": {
+      "summary": "",
+      "updatedAt": ""
+    },
+    "longTermBackground": {
+      "summary": "",
+      "updatedAt": ""
+    }
+  },
+  "facts": [
+    {
+      "id": "fact_28612805",
+      "content": "User works in a Slack workspace called 'Jeeves' (jeeves-org.slack.com)",
+      "category": "context",
+      "confidence": 0.8,
+      "createdAt": "2026-03-27T19:33:36.445639Z",
+      "source": "manual"
+    },
+    {
+      "id": "fact_0b0fc714",
+      "content": "User performs underwriting (UW) operations work, reviewing credit line decisions and onboarding scores for business clients",
+      "category": "context",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T21:09:25.028450Z",
+      "source": "manual"
+    },
+    {
+      "id": "fact_792e865c",
+      "content": "User works with Taktile for onboarding scoring and Redshift as a data warehouse in their UW workflow",
+      "category": "knowledge",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T21:09:25.028450Z",
+      "source": "manual"
+    },
+    {
+      "id": "fact_dc6baae2",
+      "content": "User is working with a receivables-backed revolving credit facility pilot for Easytech, involving R$30M (~$5.76M USD) in Mercado Livre/Mercado Pago card receivables pledged via CERC",
+      "category": "context",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:11:52.015119Z",
+      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
+    },
+    {
+      "id": "fact_6ac11d74",
+      "content": "Jeeves advances 85% of pledged receivables (~$4.89M USD) under the Easytech pilot facility, with a 2.1% transaction fee pro-rated by days remaining in the cycle",
+      "category": "knowledge",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:11:52.015119Z",
+      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
+    },
+    {
+      "id": "fact_43a33239",
+      "content": "The Easytech receivables facility follows a three-phase monthly cycle: Cycle Opening (Days 1–3), Active Monitoring (Days 4–30), and Cycle Closing (Day 30+), with a waterfall of Fees → Principal → Excess",
+      "category": "knowledge",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:11:52.015119Z",
+      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
+    },
+    {
+      "id": "fact_454339ed",
+      "content": "Key operational stakeholders in the Easytech pilot include Matheus, Leti, Isabel, William, and Pablo",
+      "category": "context",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:11:52.015119Z",
+      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
+    },
+    {
+      "id": "fact_8cb3c0f4",
+      "content": "User's UW work at Jeeves includes structured credit products backed by card receivables in Brazilian markets (Mercado Livre/Mercado Pago), involving CERC pledge registration",
+      "category": "context",
+      "confidence": 0.85,
+      "createdAt": "2026-03-27T22:11:52.015119Z",
+      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
+    },
+    {
+      "id": "fact_754e808d",
+      "content": "User has a Jeeves Advance Request Discussion meeting scheduled for Mon Mar 30 at 11am PDT, accepted by Camila Fernandez and Isabel Diaz Miranda",
+      "category": "context",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:22:03.549527Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_fdb63633",
+      "content": "User works with external capital partners including Accial Capital (Alejandro Martín Schwartz, Ricardo Martinez) and Lendable (Agustin De Luca)",
+      "category": "context",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:22:03.549527Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_4dae2564",
+      "content": "User has a recurring CIM <> Jeeves Weekly Touch Base meeting (Elena Amato from CIM), which was canceled on Mar 24",
+      "category": "context",
+      "confidence": 0.85,
+      "createdAt": "2026-03-27T22:22:03.549527Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_b5e9f8c6",
+      "content": "User has recurring one-on-one meetings with Shalom Hassan (Brian / Shalom)",
+      "category": "context",
+      "confidence": 0.8,
+      "createdAt": "2026-03-27T22:22:03.549527Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_fabb4046",
+      "content": "User participates in Additional Credit Committee meetings at Jeeves, with AI-generated notes captured via Gemini",
+      "category": "context",
+      "confidence": 0.85,
+      "createdAt": "2026-03-27T22:22:03.549527Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_af0acf66",
+      "content": "Vincent McAndress (CBIZ) sent a Microsoft Teams meeting invite titled 'CBIZ Call (other open items)' with no specific agenda, offering to adjust timing if needed; Teams dial-in: +1 872-240-8796, Conference ID: 261 804 73#",
+      "category": "context",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:23:02.265080Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_342a8e2f",
+      "content": "User requested to reschedule the CBIZ call with Vincent McAndress to next week and asked for a draft reply to be composed on their behalf",
+      "category": "behavior",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:26:43.588811Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_91e8d787",
+      "content": "User prefers to keep scheduling replies open-ended (e.g., 'happy to work around your availability') rather than proposing specific times when rescheduling meetings",
+      "category": "preference",
+      "confidence": 0.75,
+      "createdAt": "2026-03-27T22:27:36.583000Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_bc282426",
+      "content": "A Gmail draft reply to Vincent McAndress (CBIZ) was composed requesting to reschedule the CBIZ call to next week with open availability; draft is pending user review and sending",
+      "category": "behavior",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:27:36.583000Z",
+      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+    },
+    {
+      "id": "fact_57664bb1",
+      "content": "User monitors credit exposure and balance-vs-limit overages as part of their UW operations work at Jeeves",
+      "category": "behavior",
+      "confidence": 0.8,
+      "createdAt": "2026-03-27T22:45:29.578742Z",
+      "source": "60314bbe-adaa-408a-a666-0b100ad7c75e"
+    },
+    {
+      "id": "fact_61309b6e",
+      "content": "Macropay's last transaction date was Mar 25, 2026",
+      "category": "context",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:48:41.541551Z",
+      "source": "24294e2e-edc3-4123-a0cd-31143a41df14"
+    },
+    {
+      "id": "fact_77609aef",
+      "content": "In Redshift, most tables have a USD column; if no USD column exists, values should be treated as local currency",
+      "category": "knowledge",
+      "confidence": 0.99,
+      "createdAt": "2026-03-27T22:50:02.527283Z",
+      "source": "ae0f8a0c-ea72-4027-9fd9-fe452cb4e391"
+    },
+    {
+      "id": "fact_f5ca3e03",
+      "content": "User prefers all monetary figures to be quoted in USD by default unless they explicitly request local currency",
+      "category": "preference",
+      "confidence": 0.99,
+      "createdAt": "2026-03-27T22:50:02.527283Z",
+      "source": "ae0f8a0c-ea72-4027-9fd9-fe452cb4e391"
+    },
+    {
+      "id": "fact_9dee4de5",
+      "content": "Macropay's `current_balance` field in `companies_dm` (33,321,112.06) is denominated in MXN, not USD — it was previously misread as a USD figure",
+      "category": "knowledge",
+      "confidence": 0.97,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_451ae926",
+      "content": "Macropay's true USD balance from `loc_tape.balance_usd` is approximately $1,859,784.55 USD as of Mar 26, 2026 (most recent available), well within their credit limit of $6,257,865.60 USD",
+      "category": "context",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_5e0dc950",
+      "content": "In `capital_markets_dm.loc_tape`, the `balance` column is in local currency (MXN for Macropay) and `balance_usd` is the correct USD figure; `balance_usd` may be NULL on the current day if FX rates have not yet been applied",
+      "category": "knowledge",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_621caf94",
+      "content": "The `balance_usd` column in `loc_tape` represents only the USD-denominated portion of card spend, not a full FX conversion of the local currency balance",
+      "category": "knowledge",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_ef7857e1",
+      "content": "Redshift connection uses psycopg2 with credentials from environment variables (REDSHIFT_HOST, REDSHIFT_PORT, REDSHIFT_DB, REDSHIFT_USER, REDSHIFT_PASSWORD), sslmode='require', sslrootcert='disable'; system uses `python` not `python3`",
+      "category": "knowledge",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_ec6e65f7",
+      "content": "Key Redshift tables for balance queries: `capital_markets_dm.loc_tape` (LOC daily snapshots, balance_usd, filter dt=MAX(dt)), `capital_markets_dm.gwc_tape` (GWC daily snapshots, balance_usd), `master_customer_dm.companies_dm` (company lookup with name, legal_name, company_id, current_balance in local currency)",
+      "category": "knowledge",
+      "confidence": 0.95,
+      "createdAt": "2026-03-27T22:52:51.343136Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_ccb2522d",
+      "content": "User confirmed and re-emphasized that Macropay's balance_usd in loc_tape was NULL on Mar 27, 2026 because FX rates had not yet been applied for that day",
+      "category": "knowledge",
+      "confidence": 0.97,
+      "createdAt": "2026-03-27T22:53:57.315756Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    },
+    {
+      "id": "fact_657329aa",
+      "content": "User expressed frustration that a previously discussed data correction (Macropay MXN vs USD balance) was not properly retained in memory, indicating strong expectation that confirmed corrections persist across sessions",
+      "category": "behavior",
+      "confidence": 0.9,
+      "createdAt": "2026-03-27T22:53:57.315756Z",
+      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+    }
+  ]
+}

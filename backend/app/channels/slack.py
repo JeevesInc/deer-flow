@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import time
 from typing import Any
 
 from markdown_to_mrkdwn import SlackMarkdownConverter
@@ -31,6 +33,10 @@ class SlackChannel(Channel):
         self._web_client = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users: set[str] = set(config.get("allowed_users", []))
+        self._own_bot_id: str | None = None
+        # Dedup: track recently processed message timestamps to avoid
+        # double-processing when Slack sends both 'message' and 'app_mention'
+        self._seen_ts: dict[str, float] = {}  # ts -> wall-clock time
 
     async def start(self) -> None:
         if self._running:
@@ -59,6 +65,14 @@ class SlackChannel(Channel):
             web_client=self._web_client,
         )
         self._loop = asyncio.get_event_loop()
+
+        # Fetch our own bot_id so we can ignore only self-messages (not other bots like Gmail)
+        try:
+            auth_info = self._web_client.auth_test()
+            self._own_bot_id = auth_info.get("bot_id")
+            logger.info("Slack bot identity: user_id=%s, bot_id=%s", auth_info.get("user_id"), self._own_bot_id)
+        except Exception:
+            logger.warning("Could not fetch bot identity; falling back to rejecting all bot messages")
 
         self._socket_client.socket_mode_request_listeners.append(self._on_socket_event)
 
@@ -200,19 +214,98 @@ class SlackChannel(Channel):
         except Exception:
             logger.exception("Error processing Slack event")
 
+    @staticmethod
+    def _clean_slack_text(text: str) -> str:
+        """Convert Slack mrkdwn text to plain text suitable for the agent.
+
+        Slack wraps URLs as ``<URL>`` or ``<URL|label>``, user mentions as
+        ``<@U1234>``, and channel references as ``<#C1234|channel-name>``.
+
+        This method:
+        - Unwraps URLs: ``<https://example.com>`` → ``https://example.com``
+        - Unwraps labeled URLs: ``<https://example.com|Example>`` → ``https://example.com``
+        - Preserves user mentions: ``<@U1234>`` stays as-is
+        - Simplifies channel refs: ``<#C1234|general>`` → ``#general``
+        """
+        def _replace(m: re.Match) -> str:
+            inner = m.group(1)
+            # User mention: <@U1234> — keep as-is
+            if inner.startswith("@"):
+                return m.group(0)
+            # Channel reference: <#C1234|channel-name>
+            if inner.startswith("#"):
+                parts = inner.split("|", 1)
+                return f"#{parts[1]}" if len(parts) == 2 else inner
+            # URL: <https://...|label> or <https://...>
+            parts = inner.split("|", 1)
+            return parts[0]
+
+        return re.sub(r"<([^>]+)>", _replace, text)
+
+    @staticmethod
+    def _extract_attachment_urls(event: dict) -> list[str]:
+        """Pull URLs from Slack attachments, files, and blocks that may not appear in text."""
+        urls: list[str] = []
+        # Attachments (link unfurls, bot-posted rich content)
+        for att in event.get("attachments", []):
+            for key in ("original_url", "from_url", "title_link", "app_unfurl_url"):
+                url = att.get(key)
+                if url and url not in urls:
+                    urls.append(url)
+        # Shared files (Google Drive shares, uploaded docs)
+        for f in event.get("files", []):
+            for key in ("url_private", "permalink", "url_private_download"):
+                url = f.get(key)
+                if url and url not in urls:
+                    urls.append(url)
+        return urls
+
+    # Subtypes that indicate metadata events, not real messages
+    _IGNORED_SUBTYPES = {
+        "message_changed", "message_deleted", "message_replied",
+        "channel_join", "channel_leave", "channel_topic", "channel_purpose",
+        "channel_archive", "channel_unarchive", "ekm_access_denied",
+        "me_message", "group_join", "group_leave",
+    }
+
     def _handle_message_event(self, event: dict) -> None:
-        # Ignore bot messages
-        if event.get("bot_id") or event.get("subtype"):
+        # Ignore our own messages (loop prevention)
+        msg_bot_id = event.get("bot_id")
+        if msg_bot_id and self._own_bot_id and msg_bot_id == self._own_bot_id:
+            return
+        # If we couldn't determine our own bot_id, fall back to blocking all bot messages
+        if msg_bot_id and not self._own_bot_id:
+            return
+        # Ignore non-message subtypes (edits, joins, etc.) but allow bot_message subtype
+        subtype = event.get("subtype", "")
+        if subtype in self._IGNORED_SUBTYPES:
             return
 
-        user_id = event.get("user", "")
+        # Dedup: Slack sends both 'message' and 'app_mention' for @mentions in channels.
+        # Skip if we already processed this exact message timestamp.
+        msg_ts = event.get("ts", "")
+        now = time.monotonic()
+        # Prune entries older than 10 seconds
+        self._seen_ts = {ts: t for ts, t in self._seen_ts.items() if now - t < 10}
+        if msg_ts in self._seen_ts:
+            logger.debug("Dedup: skipping already-seen message ts=%s", msg_ts)
+            return
+        self._seen_ts[msg_ts] = now
 
-        # Check allowed users
-        if self._allowed_users and user_id not in self._allowed_users:
+        user_id = event.get("user", "") or event.get("bot_id", "")
+
+        # Check allowed users (bot-forwarded messages bypass this check)
+        if self._allowed_users and user_id not in self._allowed_users and not msg_bot_id:
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
             return
 
-        text = event.get("text", "").strip()
+        text = self._clean_slack_text(event.get("text", "")).strip()
+
+        # Extract URLs from Slack attachments/files that aren't in the text body
+        extra_urls = self._extract_attachment_urls(event)
+        if extra_urls:
+            text = text + "\n\nAttached links:\n" + "\n".join(extra_urls) if text else "\n".join(extra_urls)
+
         if not text:
             return
 

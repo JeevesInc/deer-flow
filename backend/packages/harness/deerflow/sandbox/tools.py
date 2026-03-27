@@ -16,6 +16,10 @@ from deerflow.sandbox.sandbox import Sandbox
 from deerflow.sandbox.sandbox_provider import get_sandbox_provider
 
 _ABSOLUTE_PATH_PATTERN = re.compile(r"(?<![:\w])/(?:[^\s\"'`;&|<>()]+)")
+# Strip URLs (http:// or https://) from commands before scanning for absolute paths.
+# Without this, URL path components (e.g. /docs.google.com/...) get flagged as
+# unsafe filesystem paths.
+_URL_PATTERN = re.compile(r"https?://[^\s\"'`;&|<>()]*")
 _LOCAL_BASH_SYSTEM_PATH_PREFIXES = (
     "/bin/",
     "/usr/bin/",
@@ -480,9 +484,12 @@ def validate_local_bash_command_paths(command: str, thread_data: ThreadDataState
     if thread_data is None:
         raise SandboxRuntimeError("Thread data not available for local sandbox")
 
+    # Remove URLs so their path components aren't flagged as filesystem paths
+    command_no_urls = _URL_PATTERN.sub("", command)
+
     unsafe_paths: list[str] = []
 
-    for absolute_path in _ABSOLUTE_PATH_PATTERN.findall(command):
+    for absolute_path in _ABSOLUTE_PATH_PATTERN.findall(command_no_urls):
         if absolute_path == VIRTUAL_PATH_PREFIX or absolute_path.startswith(f"{VIRTUAL_PATH_PREFIX}/"):
             _reject_path_traversal(absolute_path)
             continue
@@ -526,7 +533,7 @@ def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState 
         skills_pattern = re.compile(rf"{re.escape(skills_container)}(/[^\s\"';&|<>()]*)?")
 
         def replace_skills_match(match: re.Match) -> str:
-            return _resolve_skills_path(match.group(0))
+            return _resolve_skills_path(match.group(0)).replace("\\", "/")
 
         result = skills_pattern.sub(replace_skills_match, result)
 
@@ -537,7 +544,7 @@ def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState 
         acp_pattern = re.compile(rf"{re.escape(_ACP_WORKSPACE_VIRTUAL_PATH)}(/[^\s\"';&|<>()]*)?")
 
         def replace_acp_match(match: re.Match, _tid: str | None = _thread_id) -> str:
-            return _resolve_acp_workspace_path(match.group(0), _tid)
+            return _resolve_acp_workspace_path(match.group(0), _tid).replace("\\", "/")
 
         result = acp_pattern.sub(replace_acp_match, result)
 
@@ -546,7 +553,7 @@ def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState 
         pattern = re.compile(rf"{re.escape(VIRTUAL_PATH_PREFIX)}(/[^\s\"';&|<>()]*)?")
 
         def replace_user_data_match(match: re.Match) -> str:
-            return replace_virtual_path(match.group(0), thread_data)
+            return replace_virtual_path(match.group(0), thread_data).replace("\\", "/")
 
         result = pattern.sub(replace_user_data_match, result)
 

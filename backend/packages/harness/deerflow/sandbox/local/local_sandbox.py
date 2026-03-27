@@ -155,12 +155,13 @@ class LocalSandbox(Sandbox):
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
 
+        shell = self._get_shell()
         result = subprocess.run(
-            resolved_command,
-            executable=self._get_shell(),
-            shell=True,
+            [shell, "-c", resolved_command],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=600,
         )
         output = result.stdout

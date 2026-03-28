@@ -91,12 +91,17 @@ def main():
     print(f"=== {name} ===")
     print(f"Type: {mime}\n")
 
+    text = None
+
     if mime == 'application/vnd.google-apps.document':
         content = service.files().export(fileId=doc_id, mimeType='text/plain').execute()
+        text = content.decode('utf-8') if isinstance(content, bytes) else content
     elif mime == 'application/vnd.google-apps.spreadsheet':
         content = service.files().export(fileId=doc_id, mimeType='text/csv').execute()
+        text = content.decode('utf-8') if isinstance(content, bytes) else content
     elif mime == 'application/vnd.google-apps.presentation':
         content = service.files().export(fileId=doc_id, mimeType='text/plain').execute()
+        text = content.decode('utf-8') if isinstance(content, bytes) else content
     elif mime in (
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'application/msword',
@@ -116,16 +121,79 @@ def main():
             tmp_path = tmp.name
         try:
             doc = docx.Document(tmp_path)
-            content = '\n'.join(p.text for p in doc.paragraphs)
+            text = '\n'.join(p.text for p in doc.paragraphs)
         finally:
             os.unlink(tmp_path)
-        text = content
+    elif mime in (
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+    ):
+        # Download .xlsx/.xls and convert to CSV text
+        raw = service.files().get_media(fileId=doc_id).execute()
+        try:
+            import openpyxl
+        except ImportError:
+            import subprocess as _sp
+            _sp.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'openpyxl'])
+            import openpyxl
+        import io
+        wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+        parts = []
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            parts.append(f"--- Sheet: {sheet_name} ---")
+            for row in ws.iter_rows(values_only=True):
+                parts.append(','.join(str(c) if c is not None else '' for c in row))
+        wb.close()
+        text = '\n'.join(parts)
+    elif mime in (
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.ms-powerpoint',
+    ):
+        # Download .pptx/.ppt and extract text
+        raw = service.files().get_media(fileId=doc_id).execute()
+        try:
+            from pptx import Presentation
+        except ImportError:
+            import subprocess as _sp
+            _sp.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'python-pptx'])
+            from pptx import Presentation
+        import io
+        prs = Presentation(io.BytesIO(raw))
+        parts = []
+        for i, slide in enumerate(prs.slides, 1):
+            parts.append(f"--- Slide {i} ---")
+            for shape in slide.shapes:
+                if hasattr(shape, 'text') and shape.text.strip():
+                    parts.append(shape.text)
+        text = '\n'.join(parts)
+    elif mime == 'application/pdf':
+        # Download PDF and save to workspace for further processing
+        raw = service.files().get_media(fileId=doc_id).execute()
+        workspace = os.environ.get('WORKSPACE_PATH', '/mnt/user-data/workspace')
+        safe_name = re.sub(r'[^\w\-.]', '_', name)
+        save_path = os.path.join(workspace, safe_name)
+        with open(save_path, 'wb') as f:
+            f.write(raw)
+        print(f"Downloaded PDF to: {save_path}")
+        print(f"Size: {len(raw)} bytes")
+        print("Use Python to process this file further.")
+        sys.exit(0)
     else:
-        print(f"Binary file type ({mime}). Cannot display as text.")
+        # Unknown binary type — download to workspace so the agent can process it
+        raw = service.files().get_media(fileId=doc_id).execute()
+        workspace = os.environ.get('WORKSPACE_PATH', '/mnt/user-data/workspace')
+        safe_name = re.sub(r'[^\w\-.]', '_', name)
+        save_path = os.path.join(workspace, safe_name)
+        with open(save_path, 'wb') as f:
+            f.write(raw)
+        print(f"Binary file type ({mime}). Downloaded to: {save_path}")
+        print(f"Size: {len(raw)} bytes")
+        print("Use Python to process this file further.")
         sys.exit(0)
 
-    text = content.decode('utf-8') if isinstance(content, bytes) else content
-    print(text)
+    if text:
+        print(text)
 
 
 if __name__ == '__main__':

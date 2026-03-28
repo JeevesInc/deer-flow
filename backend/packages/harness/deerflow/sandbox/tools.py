@@ -305,6 +305,25 @@ def _thread_actual_to_virtual_mappings(thread_data: ThreadDataState) -> dict[str
     return {actual: virtual for virtual, actual in _thread_virtual_to_actual_mappings(thread_data).items()}
 
 
+def _build_path_env_exports(thread_data: ThreadDataState | None) -> str:
+    """Build shell export commands for resolved thread paths.
+
+    Injects WORKSPACE_PATH, OUTPUTS_PATH, UPLOADS_PATH as env vars so Python
+    scripts running inside bash can use os.environ['OUTPUTS_PATH'] instead of
+    hard-coding /mnt/user-data/ paths (which don't resolve on Windows).
+    """
+    if thread_data is None:
+        return ""
+    parts = []
+    for key, env_var in [("workspace_path", "WORKSPACE_PATH"), ("outputs_path", "OUTPUTS_PATH"), ("uploads_path", "UPLOADS_PATH")]:
+        path = thread_data.get(key)
+        if path:
+            # Normalize to forward slashes for Git Bash on Windows
+            path = path.replace("\\", "/")
+            parts.append(f'export {env_var}="{path}"')
+    return "; ".join(parts) + ";" if parts else ""
+
+
 def mask_local_paths_in_output(output: str, thread_data: ThreadDataState | None) -> str:
     """Mask host absolute paths from local sandbox output using virtual paths.
 
@@ -725,6 +744,12 @@ def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, com
         if is_local_sandbox(runtime):
             validate_local_bash_command_paths(command, thread_data)
             command = replace_virtual_paths_in_command(command, thread_data)
+            # Inject resolved path env vars so Python scripts can use
+            # os.environ['OUTPUTS_PATH'] etc. instead of /mnt/user-data/ paths
+            # which don't resolve natively on Windows.
+            env_exports = _build_path_env_exports(thread_data)
+            if env_exports:
+                command = f"{env_exports} {command}"
             output = sandbox.execute_command(command)
             return mask_local_paths_in_output(output, thread_data)
         return sandbox.execute_command(command)

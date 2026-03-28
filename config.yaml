@@ -117,7 +117,7 @@ channels:
   session:
     assistant_id: lead_agent
     config:
-      recursion_limit: 100
+      recursion_limit: 500
     context:
       thinking_enabled: true
       is_plan_mode: false

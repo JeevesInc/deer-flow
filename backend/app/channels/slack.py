@@ -260,6 +260,118 @@ class SlackChannel(Channel):
                     urls.append(url)
         return urls
 
+    def _fetch_slack_message(self, channel_id: str, message_ts: str) -> str | None:
+        """Fetch a Slack message's text content using the Web API.
+
+        Uses conversations.history (or conversations.replies for threaded
+        messages) to retrieve the actual message text.  Returns None on error.
+        """
+        if not self._web_client:
+            return None
+        try:
+            # Try conversations.history with inclusive=true to get the exact message
+            resp = self._web_client.conversations_history(
+                channel=channel_id,
+                latest=message_ts,
+                inclusive=True,
+                limit=1,
+            )
+            msgs = resp.get("messages", [])
+            if msgs:
+                return msgs[0].get("text", "")
+        except Exception as exc:
+            logger.debug("[Slack] conversations.history failed for %s/%s: %s", channel_id, message_ts, exc)
+            # Try conversations.replies as fallback (message might be in a thread)
+            try:
+                resp = self._web_client.conversations_replies(
+                    channel=channel_id,
+                    ts=message_ts,
+                    limit=1,
+                )
+                msgs = resp.get("messages", [])
+                if msgs:
+                    return msgs[0].get("text", "")
+            except Exception as exc2:
+                logger.debug("[Slack] conversations.replies also failed: %s", exc2)
+        return None
+
+    # Regex: https://WORKSPACE.slack.com/archives/CHANNEL_ID/pTIMESTAMP
+    _SLACK_ARCHIVE_RE = re.compile(
+        r"https?://[a-zA-Z0-9\-]+\.slack\.com/archives/([A-Z0-9]+)/p(\d+)"
+    )
+
+    def _resolve_single_slack_url(self, url: str) -> str | None:
+        """If *url* is a Slack archive link, fetch the message and return
+        a text block like ``[Slack message from #channel]: ...``.
+        Returns None if it's not a Slack URL or fetch fails.
+        """
+        m = self._SLACK_ARCHIVE_RE.search(url)
+        if not m:
+            return None
+        channel_id = m.group(1)
+        # Slack archive timestamps: p1234567890123456 -> 1234567890.123456
+        raw_ts = m.group(2)
+        message_ts = raw_ts[:10] + "." + raw_ts[10:] if len(raw_ts) > 10 else raw_ts
+        msg_text = self._fetch_slack_message(channel_id, message_ts)
+        if msg_text:
+            cleaned = self._clean_slack_text(msg_text)
+            logger.info("[Slack] Resolved archive URL -> %d chars from channel %s", len(cleaned), channel_id)
+            return f"[Slack message from channel {channel_id}]:\n{cleaned}"
+        return None
+
+    def _resolve_slack_archive_urls(self, text: str) -> str:
+        """Find Slack archive URLs in *text* and append the resolved message content."""
+        urls = self._SLACK_ARCHIVE_RE.findall(text)
+        if not urls:
+            return text
+        resolved_parts = []
+        for channel_id, raw_ts in urls:
+            message_ts = raw_ts[:10] + "." + raw_ts[10:] if len(raw_ts) > 10 else raw_ts
+            msg_text = self._fetch_slack_message(channel_id, message_ts)
+            if msg_text:
+                cleaned = self._clean_slack_text(msg_text)
+                resolved_parts.append(f"[Slack message from channel {channel_id}]:\n{cleaned}")
+        if resolved_parts:
+            text = text + "\n\n" + "\n\n".join(resolved_parts)
+        return text
+
+    @staticmethod
+    def _extract_forwarded_text(event: dict) -> str:
+        """Extract text content from forwarded messages and rich attachments.
+
+        When a user forwards a Slack message, the original content appears in
+        the ``attachments`` array with fields like ``text``, ``fallback``,
+        ``pretext``, and ``author_name``.  The parent message's ``text`` field
+        is often empty, so without this extraction the forwarded content is
+        silently lost.
+        """
+        parts: list[str] = []
+        for att in event.get("attachments", []):
+            # Skip link-unfurl attachments that only have a URL preview
+            # (those are handled by _extract_attachment_urls)
+            if att.get("is_app_unfurl") or att.get("service_name"):
+                # Still grab text if present (some unfurls have summaries)
+                att_text = att.get("text", "").strip()
+                if att_text:
+                    parts.append(att_text)
+                continue
+
+            lines: list[str] = []
+            author = att.get("author_name") or att.get("author_subname", "")
+            if author:
+                lines.append(f"[From {author}]")
+            pretext = att.get("pretext", "").strip()
+            if pretext:
+                lines.append(pretext)
+            att_text = att.get("text", "").strip()
+            if not att_text:
+                att_text = att.get("fallback", "").strip()
+            if att_text:
+                lines.append(att_text)
+            if lines:
+                parts.append("\n".join(lines))
+        return "\n\n".join(parts)
+
     # Subtypes that indicate metadata events, not real messages
     _IGNORED_SUBTYPES = {
         "message_changed", "message_deleted", "message_replied",
@@ -299,12 +411,47 @@ class SlackChannel(Channel):
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
             return
 
+        # Debug: log raw event keys for diagnosing forwarded message issues
+        att_count = len(event.get("attachments", []))
+        file_count = len(event.get("files", []))
+        block_count = len(event.get("blocks", []))
+        if att_count or file_count or block_count:
+            logger.info(
+                "[Slack] Event has attachments=%d files=%d blocks=%d subtype=%s",
+                att_count, file_count, block_count, event.get("subtype", "(none)"),
+            )
+            # Log attachment details for debugging
+            for i, att in enumerate(event.get("attachments", [])):
+                logger.info(
+                    "[Slack]   attachment[%d]: keys=%s, text_len=%d, fallback_len=%d, from_url=%s",
+                    i, list(att.keys()), len(att.get("text", "")), len(att.get("fallback", "")),
+                    att.get("from_url", "(none)")[:120],
+                )
+
         text = self._clean_slack_text(event.get("text", "")).strip()
+
+        # Extract forwarded message content from attachments
+        forwarded_text = self._extract_forwarded_text(event)
+        if forwarded_text:
+            logger.info("[Slack] Extracted forwarded content (%d chars) from attachments", len(forwarded_text))
+            text = text + "\n\nForwarded message:\n" + forwarded_text if text else "Forwarded message:\n" + forwarded_text
+
+        # Resolve Slack archive URLs to actual message content
+        # Pattern: https://WORKSPACE.slack.com/archives/CHANNEL_ID/pTIMESTAMP
+        text = self._resolve_slack_archive_urls(text)
 
         # Extract URLs from Slack attachments/files that aren't in the text body
         extra_urls = self._extract_attachment_urls(event)
         if extra_urls:
-            text = text + "\n\nAttached links:\n" + "\n".join(extra_urls) if text else "\n".join(extra_urls)
+            # Also resolve any Slack archive URLs in attachment URLs
+            resolved_urls = []
+            for url in extra_urls:
+                resolved = self._resolve_single_slack_url(url)
+                if resolved:
+                    resolved_urls.append(resolved)
+                else:
+                    resolved_urls.append(url)
+            text = text + "\n\nAttached links:\n" + "\n".join(resolved_urls) if text else "\n".join(resolved_urls)
 
         if not text:
             return

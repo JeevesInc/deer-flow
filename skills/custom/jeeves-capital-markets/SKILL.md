@@ -19,7 +19,7 @@ The team's capital markets work lives in a shared Google Drive folder.
 |--------|----|---------------|-------------------|
 | `.archive/` | — | Old/deprecated files, prior deal versions | User asks for historical versions or "old" docs |
 | `.github/` | `1Vs2emp9jbSF3AbTqn6jkdqIHNIOy50yK` | Analytics repo: ~56 SQL files in `sql/`, credit models, Python scripts | User needs a SQL query template or analytics code. Load `jeeves-sql-library` skill for the full catalog. |
-| `Debt/` | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` | One subfolder per lending facility. Inside each lender: credit agreements, amendments, data tapes, compliance certs, term sheets, legal docs | User references a lender name, asks about a credit facility, or needs a contract |
+| `Debt/` | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` | One subfolder per lending facility. Key subfolders: `CIM/` (US Bridge BBs in `{YYYYMM}/US/`), `MX/` (SOFOM Master BBs, ID: `16eLxEnedju5fetUmvO4W8VFvwwb8MMTD`). Also: credit agreements, amendments, data tapes, compliance certs, term sheets, legal docs | User references a lender name, asks about a credit facility, needs a contract, or asks to build a borrowing base |
 | `Insurance/` | — | Insurance policies, certificates, renewal docs | User asks about insurance coverage |
 | `Portfolio Reporting/` | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` | Monthly subfolders (`YYYYMM`). Inside each: portfolio reports, data tape snapshots, charts, board materials | User asks for a monthly report, portfolio snapshot, or board deck |
 | `Strategy/` | — | Strategic planning docs, market analysis, new product proposals | User asks about strategy or planning materials |
@@ -76,6 +76,8 @@ When the agent generates output files, upload them to the **correct location** i
 
 | Output type | Save to | How |
 |-------------|---------|-----|
+| US Borrowing Base (Bridge) | `Debt/CIM/{YYYYMM}/US/` | Browse CIM to find the month's US folder ID |
+| MX Borrowing Base (SOFOM) | `Debt/MX/` | **Standalone folder** ID: `16eLxEnedju5fetUmvO4W8VFvwwb8MMTD` — NOT inside CIM monthly subfolders |
 | Lender data tape | `Debt/{Lender}/Data Tapes/` | List the lender folder to find the Data Tapes subfolder ID, then `upload_to_drive.py <file> --folder <ID>` |
 | Portfolio report / board deck | `Portfolio Reporting/{YYYYMM}/` | List Portfolio Reporting to find the month's folder ID, create the month folder first if it doesn't exist |
 | Redline / contract markup | `Debt/{Lender}/` (same subfolder as the source doc) | Upload next to the original document |

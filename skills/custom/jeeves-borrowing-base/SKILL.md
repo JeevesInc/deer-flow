@@ -17,8 +17,8 @@ There are three deliverables:
 
 | Deliverable | Script | Template location (Drive) | Upload to |
 |-------------|--------|---------------------------|-----------|
-| **US Borrowing Base** | `build_us.py` | Latest `Jeeves Bridge Borrowing Base - *.xlsx` in `CIM/{YYYYMM}/US/` | `Debt/CIM/{YYYYMM}/US/` |
-| **MX Borrowing Base** | `build_mx.py` | Latest `Jeeves SOFOM Borrowing Base - Master - *.xlsx` in `CIM/{YYYYMM}/MX/` | `Debt/CIM/{YYYYMM}/MX/` |
+| **US Borrowing Base** | `build_us.py` | Latest `Jeeves Bridge Borrowing Base - *.xlsx` in `Debt/CIM/{YYYYMM}/US/` | `Debt/CIM/{YYYYMM}/US/` |
+| **MX Borrowing Base** | `build_mx.py` | Latest `Jeeves SOFOM Borrowing Base - Master - *.xlsx` in `Debt/MX/` (ID: `16eLxEnedju5fetUmvO4W8VFvwwb8MMTD`) | `Debt/MX/` |
 | **Portfolio Report** | `build_us.py --date {EOM}` | *(no template — raw output is the report)* | `Portfolio Reporting/{YYYYMM}/` |
 
 ---
@@ -82,7 +82,13 @@ python /mnt/skills/custom/jeeves-borrowing-base/build_mx.py --start-date 2026-03
 
 ### 2. Find the latest SOFOM Master template on Drive
 
-Browse the current month's MX folder in CIM. Look for the latest `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx`. Note its Drive file ID.
+Browse the standalone MX folder (NOT inside CIM monthly folders):
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "16eLxEnedju5fetUmvO4W8VFvwwb8MMTD"
+```
+
+Look for the latest `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx`. Note its Drive file ID.
 
 ### 3. Merge data into the template
 
@@ -93,10 +99,10 @@ python /mnt/skills/custom/jeeves-borrowing-base/merge_template.py "$OUTPUTS_PATH
 ### 4. Upload to Drive
 
 ```bash
-python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx" --folder "<CIM_MX_FOLDER_ID>"
+python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx" --folder "16eLxEnedju5fetUmvO4W8VFvwwb8MMTD"
 ```
 
-Name the file: `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx`
+Upload to the standalone `MX` folder. Name the file: `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx`
 
 ---
 
@@ -130,12 +136,12 @@ Name the file: `Portfolio Report - {YYYYMM}01.xlsx`
 
 ## Key Drive Locations
 
-| Location | How to find |
-|----------|-------------|
-| Debt/CIM/ folders | List `Debt/` folder: `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU`, look for CIM subfolder |
-| CIM/{YYYYMM}/US/ | Latest Bridge templates live here |
-| CIM/{YYYYMM}/MX/ | Latest SOFOM Master templates live here |
-| Portfolio Reporting/ | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` — monthly subfolders |
+| Location | Folder ID | Description |
+|----------|-----------|-------------|
+| `Debt/` | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` | Parent of all lender folders |
+| `Debt/CIM/{YYYYMM}/US/` | *(browse to find)* | US Bridge templates — inside CIM monthly subfolders |
+| `Debt/MX/` | `16eLxEnedju5fetUmvO4W8VFvwwb8MMTD` | **MX SOFOM Master files — standalone folder, NOT inside CIM monthly subfolders** |
+| `Portfolio Reporting/` | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` | Monthly report subfolders |
 
 ## Data Sources
 

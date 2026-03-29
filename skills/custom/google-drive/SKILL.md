@@ -32,21 +32,48 @@ After creating any output file (Excel, PowerPoint, CSV, PDF, etc.), upload it so
 python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/outputs/<filename>"
 ```
 
+Upload to a specific Drive folder instead of the default:
+
+```bash
+python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/outputs/<filename>" --folder "<FOLDER_ID>"
+```
+
 The script:
-- Creates a "DeerFlow Output" folder in the user's Google Drive (first time only)
-- Uploads the file there
+- Without `--folder`: creates a "DeerFlow Output" folder in the user's Google Drive (first time only) and uploads there
+- With `--folder`: uploads directly to the specified Drive folder
 - Makes it viewable by anyone with the link
 - Prints the shareable link
 
 **IMPORTANT:** Always upload generated files to Google Drive and share the link in your response. Do NOT just say the file was created — the user cannot access local files.
 
-## Supported URL formats (fetch)
+## Browse a Google Drive folder
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "<FOLDER_ID_OR_URL>"
+```
+
+List recursively (default depth 2):
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "<FOLDER_ID_OR_URL>" --recursive
+```
+
+Set a custom max depth:
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "<FOLDER_ID_OR_URL>" --recursive --max-depth 3
+```
+
+Lists each item with name, ID, mimeType, and last modified date. Folders appear first, then files.
+
+## Supported URL formats (fetch & browse)
 
 - `https://docs.google.com/document/d/{ID}/edit`
 - `https://docs.google.com/spreadsheets/d/{ID}/edit`
 - `https://docs.google.com/presentation/d/{ID}/edit`
 - `https://drive.google.com/file/d/{ID}/view`
 - `https://drive.google.com/open?id={ID}`
+- `https://drive.google.com/drive/folders/{ID}` (for folder browsing)
 
 ## Rules
 

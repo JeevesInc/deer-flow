@@ -108,7 +108,7 @@ def main():
 
     print(f"  Writing {filename}...")
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
-        df_combined.to_excel(writer, sheet_name='tape_combined', index=False)
+        df_combined.to_excel(writer, sheet_name='tape', index=False)
 
     print(f"\nDone! Output: {output_path}")
     if len(df_combined) > 0:

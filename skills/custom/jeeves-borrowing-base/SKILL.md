@@ -77,7 +77,7 @@ python /mnt/skills/custom/jeeves-borrowing-base/build_mx.py --start-date 2026-03
 - Defaults to a 3-day range ending yesterday if dates are omitted
 - Queries Redshift for SOFOM tape for each date in range (only SOFOM-transferred companies)
 - Applies SOFOM eligibility calculations per day
-- Saves a single-tab workbook: `tape_combined`
+- Saves a single-tab workbook: `tape`
 - Output: `$OUTPUTS_PATH/Borrowing Base - SOFOM - {YYYYMMDD}.xlsx`
 
 ### 2. Find the latest SOFOM Master template on Drive

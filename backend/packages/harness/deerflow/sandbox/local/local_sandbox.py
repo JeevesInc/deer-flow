@@ -151,6 +151,24 @@ class LocalSandbox(Sandbox):
             return shell_from_path
         raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, and `sh` on PATH.")
 
+    @staticmethod
+    def _get_subprocess_env() -> dict[str, str]:
+        """Build a sanitized environment for subprocess calls.
+
+        On Windows with Git Bash / MSYS2, sh.exe can crash with a
+        Cygwin/PTY initialization error when TERM is set to a value
+        that expects a real terminal (e.g. xterm-256color) but no PTY
+        is available (subprocess.run captures stdout/stderr via pipes).
+        Setting TERM=dumb and MSYS=disable_pcon avoids this.
+        """
+        env = os.environ.copy()
+        env["TERM"] = "dumb"
+        env["MSYS"] = "disable_pcon"
+        # Prevent MSYS2 path mangling (e.g. /mnt/ → C:\msys\mnt\)
+        env["MSYS_NO_PATHCONV"] = "1"
+        env["MSYS2_ARG_CONV_EXCL"] = "*"
+        return env
+
     def execute_command(self, command: str) -> str:
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
@@ -163,6 +181,7 @@ class LocalSandbox(Sandbox):
             encoding="utf-8",
             errors="replace",
             timeout=600,
+            env=self._get_subprocess_env(),
         )
         output = result.stdout
         if result.stderr:

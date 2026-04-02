@@ -81,17 +81,15 @@ title:
   model_name: null
 
 # ── Summarization ──────────────────────────────────────────────────
+# DISABLED — Each Slack thread is its own focused conversation with
+# full context preserved in SQLite checkpoints. Claude's 200K context
+# window is large enough for even heavy threads. Cross-thread knowledge
+# is handled by the memory system (memory.json), not summarization.
+#
+# Previously at 15K tokens this was destroying thread context and
+# replacing it with "Previous conversation was too long to summarize."
 summarization:
-  enabled: true
-  model_name: null
-  trigger:
-    - type: tokens
-      value: 15564
-  keep:
-    type: messages
-    value: 10
-  trim_tokens_to_summarize: 15564
-  summary_prompt: null
+  enabled: false
 
 # ── Memory ─────────────────────────────────────────────────────────
 memory:

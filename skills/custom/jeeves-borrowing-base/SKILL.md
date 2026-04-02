@@ -19,7 +19,7 @@ There are three deliverables:
 |-------------|--------|---------------------------|-----------|
 | **US Borrowing Base** | `build_us.py` | Latest `Jeeves Bridge Borrowing Base - *.xlsx` in `Debt/CIM/{YYYYMM}/US/` | `Debt/CIM/{YYYYMM}/US/` |
 | **MX Borrowing Base** | `build_mx.py` | Latest `Jeeves SOFOM Borrowing Base - Master - *.xlsx` in `Debt/CIM/{YYYYMM}/MX/` | `Debt/CIM/{YYYYMM}/MX/` |
-| **Portfolio Report** | `build_us.py --date {EOM}` | *(no template — raw output is the report)* | `Portfolio Reporting/{YYYYMM}/` |
+| **Portfolio Report** | `build_portfolio_report.py --date {EOM} --template-id <ID>` | Previous month's `Portfolio Reporting - {YYYYMM}01.xlsx` (has formula tabs) | `Portfolio Reporting/{YYYYMM}/` |
 
 ---
 
@@ -108,29 +108,64 @@ Upload to `CIM/{YYYYMM}/MX/`. Name the file: `Jeeves SOFOM Borrowing Base - Mast
 
 ## Step-by-step: Monthly Portfolio Report
 
-Run at end of month (last day).
+Run at end of month (last day). The portfolio report is NOT just raw data — it is a multi-tab workbook with formula-driven Summary dashboards, a Country breakdown, LOC tape, rollforward, and a mods (repayment plan) tab.
 
-### 1. Generate the data workbook
+**Template structure (7 tabs):**
+
+| Tab | Type | Description |
+|-----|------|-------------|
+| **Summary** | Formulas | Dashboard: UPB, DQ buckets, charge-offs, receivable rollforward, MoM comparison |
+| **Summary (2)** | Formulas | Second summary view |
+| **Country** | Formulas | DQ breakdown by country (Mexico, Colombia, Brazil) |
+| **loc** | Data | LOC tape — one row per account at EOM |
+| **rollforward** | Data | Balance rollforward BOP→EOP |
+| **mods** | Data | GWC repayment plans (`loan_reference_number LIKE 'RPP%'`, ~95 rows) |
+| **loans** | Formulas | Loan-level summary |
+
+**Summary MoM comparison:** Column L = current period (formulas). Column N = prior period (hard-coded values). Before inserting new data, you MUST copy the current col L values to col N so the MoM deltas (col P/Q) work correctly.
+
+### 1. Find the previous month's report (template)
+
+Browse `Portfolio Reporting/` to find the latest report:
 
 ```bash
-python /mnt/skills/custom/jeeves-borrowing-base/build_us.py --date 2026-03-31
+python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
 ```
 
-The full borrowing base output at EOM **is** the portfolio report.
+Navigate to the most recent month folder and note the file ID of the `Portfolio Reporting - {YYYYMM}01.xlsx` file. This is the template.
 
-### 2. Upload to Portfolio Reporting
+### 2. Run the portfolio report builder
 
-Browse `Portfolio Reporting/` to find or create the month folder:
+```bash
+python /mnt/skills/custom/jeeves-borrowing-base/build_portfolio_report.py --date 2026-03-31 --template-id <PREVIOUS_REPORT_FILE_ID>
+```
+
+This single command:
+1. Queries LOC tape for EOM date
+2. Queries rollforward (prior month-end → EOM)
+3. Queries GWC mods (repayment plans: `loan_reference_number LIKE 'RPP%'`)
+4. Downloads the previous month's report as a template
+5. Copies current col L → col N in Summary tabs (preserves MoM comparison)
+6. Replaces the 3 data tabs (loc, rollforward, mods) with fresh data
+7. Saves as `Portfolio Report - {YYYYMM}01.xlsx`
+
+Output: `$OUTPUTS_PATH/Portfolio Report - {YYYYMM}01.xlsx`
+
+### 3. Upload to Portfolio Reporting
+
+Find or create the month folder, then upload:
 
 ```bash
 python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
 ```
 
 ```bash
-python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx" --folder "<MONTH_FOLDER_ID>"
+python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Portfolio Report - {YYYYMM}01.xlsx" --folder "<MONTH_FOLDER_ID>"
 ```
 
-Name the file: `Portfolio Report - {YYYYMM}01.xlsx`
+### 4. Remind the user
+
+After upload, remind the user to **open in Excel** to let the Summary/Country/loans formulas recalculate (openpyxl preserves formulas but doesn't evaluate them).
 
 ---
 
@@ -152,6 +187,7 @@ Name the file: `Portfolio Report - {YYYYMM}01.xlsx`
 
 ## Rules
 
+- **CRITICAL — Never use today's date.** Redshift data is only available through yesterday. Always use yesterday or earlier. If the user says "run the borrowing base" or "run today's BB", use **yesterday's date** as the end date. The scripts will reject today's date with an error. "Today's borrowing base" means "through yesterday's data."
 - **Always state the date range** in your response so the user knows what data is in the output
 - **Never modify existing Bridge/SOFOM Master files on Drive** — always create a new dated copy
 - After merging, remind the user to **open in Excel** to let formulas recalculate (openpyxl preserves formulas but doesn't evaluate them)

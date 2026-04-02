@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import time
+import urllib.request
+from pathlib import Path
 from typing import Any
 
 from markdown_to_mrkdwn import SlackMarkdownConverter
@@ -37,6 +40,9 @@ class SlackChannel(Channel):
         # Dedup: track recently processed message timestamps to avoid
         # double-processing when Slack sends both 'message' and 'app_mention'
         self._seen_ts: dict[str, float] = {}  # ts -> wall-clock time
+        # Progress tracking: map thread_ts -> ts of our "Working on it..." message
+        # so we can edit it in-place with progress updates.
+        self._progress_message_ts: dict[str, str] = {}
 
     async def start(self) -> None:
         if self._running:
@@ -95,9 +101,42 @@ class SlackChannel(Channel):
         if not self._web_client:
             return
 
+        slack_text = _slack_md_converter.convert(msg.text)
+
+        # --- Non-final (progress) updates: edit the "Working on it..." message ---
+        if not msg.is_final and msg.thread_ts:
+            progress_ts = self._progress_message_ts.get(msg.thread_ts)
+            if progress_ts:
+                try:
+                    await asyncio.to_thread(
+                        self._web_client.chat_update,
+                        channel=msg.chat_id,
+                        ts=progress_ts,
+                        text=slack_text,
+                    )
+                    return
+                except Exception as exc:
+                    logger.warning("[Slack] progress update failed, will post new message: %s", exc)
+            # No cached progress message — post a new one and cache it
+            try:
+                resp = await asyncio.to_thread(
+                    self._web_client.chat_postMessage,
+                    channel=msg.chat_id,
+                    text=slack_text,
+                    thread_ts=msg.thread_ts,
+                )
+                new_ts = resp.get("ts")
+                if new_ts:
+                    self._progress_message_ts[msg.thread_ts] = new_ts
+                return
+            except Exception as exc:
+                logger.warning("[Slack] progress post failed: %s", exc)
+                return  # Non-final updates are best-effort
+
+        # --- Final message: post as a new reply ---
         kwargs: dict[str, Any] = {
             "channel": msg.chat_id,
-            "text": _slack_md_converter.convert(msg.text),
+            "text": slack_text,
         }
         if msg.thread_ts:
             kwargs["thread_ts"] = msg.thread_ts
@@ -106,8 +145,19 @@ class SlackChannel(Channel):
         for attempt in range(_max_retries):
             try:
                 await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)
-                # Add a completion reaction to the thread root
                 if msg.thread_ts:
+                    # Clean up the progress message — delete it now that we have the real response
+                    progress_ts = self._progress_message_ts.pop(msg.thread_ts, None)
+                    if progress_ts:
+                        try:
+                            await asyncio.to_thread(
+                                self._web_client.chat_delete,
+                                channel=msg.chat_id,
+                                ts=progress_ts,
+                            )
+                        except Exception:
+                            pass  # Best-effort cleanup
+                    # Add completion reaction to the thread root
                     await asyncio.to_thread(
                         self._add_reaction,
                         msg.chat_id,
@@ -129,8 +179,9 @@ class SlackChannel(Channel):
                     await asyncio.sleep(delay)
 
         logger.error("[Slack] send failed after %d attempts: %s", _max_retries, last_exc)
-        # Add failure reaction on error
+        # Clean up progress tracking on failure
         if msg.thread_ts:
+            self._progress_message_ts.pop(msg.thread_ts, None)
             try:
                 await asyncio.to_thread(
                     self._add_reaction,
@@ -180,16 +231,24 @@ class SlackChannel(Channel):
                 logger.warning("[Slack] failed to add reaction %s: %s", emoji, exc)
 
     def _send_running_reply(self, channel_id: str, thread_ts: str) -> None:
-        """Send a 'Working on it......' reply in the thread (called from SDK thread)."""
+        """Send a 'Working on it......' reply in the thread (called from SDK thread).
+
+        Caches the posted message's ``ts`` so that subsequent progress updates
+        can edit it in-place via ``chat_update``.
+        """
         if not self._web_client:
             return
         try:
-            self._web_client.chat_postMessage(
+            resp = self._web_client.chat_postMessage(
                 channel=channel_id,
                 text=":hourglass_flowing_sand: Working on it...",
                 thread_ts=thread_ts,
             )
-            logger.info("[Slack] 'Working on it...' reply sent in channel=%s, thread_ts=%s", channel_id, thread_ts)
+            # Cache the ts so we can edit this message with progress updates
+            msg_ts = resp.get("ts")
+            if msg_ts:
+                self._progress_message_ts[thread_ts] = msg_ts
+            logger.info("[Slack] 'Working on it...' reply sent in channel=%s, thread_ts=%s, msg_ts=%s", channel_id, thread_ts, msg_ts)
         except Exception:
             logger.exception("[Slack] failed to send running reply in channel=%s", channel_id)
 
@@ -372,6 +431,71 @@ class SlackChannel(Channel):
                 parts.append("\n".join(lines))
         return "\n\n".join(parts)
 
+    def _download_slack_file(self, file_info: dict) -> str | None:
+        """Download a Slack-hosted file using the bot token.
+
+        Returns the local file path on success, None on failure.
+        Files are saved to ``.deer-flow/slack_downloads/`` so the agent
+        can access them via ``read_file`` or ``bash``.
+        """
+        url = file_info.get("url_private_download") or file_info.get("url_private")
+        if not url:
+            return None
+
+        name = file_info.get("name", "file")
+        # Sanitize filename
+        safe_name = re.sub(r'[^\w\-.]', '_', name)
+        # Prefix with timestamp to avoid collisions
+        ts = time.strftime("%Y%m%d_%H%M%S")
+        safe_name = f"{ts}_{safe_name}"
+
+        # Save to .deer-flow/slack_downloads/
+        backend_dir = Path(__file__).resolve().parent.parent.parent
+        dl_dir = backend_dir / ".deer-flow" / "slack_downloads"
+        dl_dir.mkdir(parents=True, exist_ok=True)
+        dest = dl_dir / safe_name
+
+        bot_token = self.config.get("bot_token", "")
+        if not bot_token:
+            logger.warning("[Slack] No bot_token for file download")
+            return None
+
+        try:
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {bot_token}"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = resp.read()
+            dest.write_bytes(data)
+            size_kb = len(data) / 1024
+            logger.info("[Slack] Downloaded file: %s (%.1f KB) -> %s", name, size_kb, dest)
+            return str(dest)
+        except Exception as exc:
+            logger.error("[Slack] Failed to download file %s: %s", name, exc)
+            return None
+
+    def _download_event_files(self, event: dict) -> list[dict]:
+        """Download all files from a Slack event. Returns list of {name, path, size, mimetype}."""
+        files = event.get("files", [])
+        if not files:
+            return []
+
+        downloaded = []
+        for f in files:
+            mode = f.get("mode", "")
+            # Skip external files (Google Drive links etc.) — those are handled as URLs
+            if mode == "external":
+                continue
+
+            local_path = self._download_slack_file(f)
+            if local_path:
+                downloaded.append({
+                    "name": f.get("name", "file"),
+                    "path": local_path,
+                    "size": f.get("size", 0),
+                    "mimetype": f.get("mimetype", ""),
+                    "filetype": f.get("filetype", ""),
+                })
+        return downloaded
+
     # Subtypes that indicate metadata events, not real messages
     _IGNORED_SUBTYPES = {
         "message_changed", "message_deleted", "message_replied",
@@ -428,6 +552,9 @@ class SlackChannel(Channel):
                     att.get("from_url", "(none)")[:120],
                 )
 
+        # Download any Slack-hosted files before processing text
+        downloaded_files = self._download_event_files(event)
+
         text = self._clean_slack_text(event.get("text", "")).strip()
 
         # Extract forwarded message content from attachments
@@ -452,6 +579,15 @@ class SlackChannel(Channel):
                 else:
                     resolved_urls.append(url)
             text = text + "\n\nAttached links:\n" + "\n".join(resolved_urls) if text else "\n".join(resolved_urls)
+
+        # Append downloaded file paths so the agent can access them
+        if downloaded_files:
+            file_lines = []
+            for df in downloaded_files:
+                size_str = f"{df['size'] / 1024:.1f} KB" if df['size'] else "unknown size"
+                file_lines.append(f"- {df['name']} ({df['mimetype'] or df['filetype']}, {size_str}): {df['path']}")
+            file_block = "Attached files (downloaded to local disk):\n" + "\n".join(file_lines)
+            text = text + "\n\n" + file_block if text else file_block
 
         if not text:
             return

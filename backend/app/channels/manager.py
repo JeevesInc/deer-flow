@@ -7,6 +7,7 @@ import logging
 import mimetypes
 import time
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from app.channels.message_bus import InboundMessage, InboundMessageType, MessageBus, OutboundMessage, ResolvedAttachment
@@ -26,9 +27,15 @@ DEFAULT_RUN_CONTEXT: dict[str, Any] = {
 }
 STREAM_UPDATE_MIN_INTERVAL_SECONDS = 0.35
 
+def _stamp_message(text: str) -> str:
+    """Prepend the current date/time to a user message so the agent always knows 'now'."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M, %A")
+    return f"<current_date>{now}</current_date>\n{text}"
+
+
 CHANNEL_CAPABILITIES = {
-    "feishu": {"supports_streaming": True},
-    "slack": {"supports_streaming": False},
+    "feishu": {"supports_streaming": True, "stream_update_interval": STREAM_UPDATE_MIN_INTERVAL_SECONDS},
+    "slack": {"supports_streaming": True, "stream_update_interval": 10.0},
     "telegram": {"supports_streaming": False},
 }
 
@@ -192,6 +199,72 @@ def _accumulate_stream_text(
     return buffers[message_id], message_id
 
 
+# -- Tool-call progress helpers --------------------------------------------
+
+# Human-readable labels for common tool names
+_TOOL_LABELS: dict[str, str] = {
+    "bash": "Running command",
+    "read_file": "Reading file",
+    "write_file": "Writing file",
+    "str_replace": "Editing file",
+    "ls": "Listing directory",
+    "present_files": "Preparing files",
+    "web_search": "Searching the web",
+    "web_fetch": "Fetching web page",
+    "task": "Delegating to subagent",
+    "ask_clarification": "Asking for clarification",
+}
+
+
+def _extract_tool_call_name(event_data: Any) -> str | None:
+    """Extract the tool name from a messages-tuple event if it's an AI tool-call."""
+    payload = event_data
+    if isinstance(event_data, (list, tuple)) and event_data:
+        payload = event_data[0]
+    if not isinstance(payload, Mapping):
+        return None
+    if str(payload.get("type", "")).lower() != "ai":
+        return None
+    tool_calls = payload.get("tool_calls") or []
+    if not tool_calls:
+        # Also check kwargs.tool_calls
+        kwargs = payload.get("kwargs")
+        if isinstance(kwargs, Mapping):
+            tool_calls = kwargs.get("tool_calls") or []
+    if tool_calls and isinstance(tool_calls, list):
+        first = tool_calls[0]
+        if isinstance(first, Mapping):
+            return first.get("name")
+    return None
+
+
+def _is_tool_result(event_data: Any) -> bool:
+    """Check if a messages-tuple event is a tool result (tool finished running)."""
+    payload = event_data
+    if isinstance(event_data, (list, tuple)) and event_data:
+        payload = event_data[0]
+    if not isinstance(payload, Mapping):
+        return False
+    return "tool" in str(payload.get("type", "")).lower()
+
+
+def _format_progress_text(tool_name: str, elapsed_seconds: int, tools_seen: list[str] | None = None) -> str:
+    """Format a human-readable progress line for the currently running tool."""
+    label = _TOOL_LABELS.get(tool_name, f"Using {tool_name}")
+    minutes, seconds = divmod(elapsed_seconds, 60)
+    if minutes > 0:
+        time_str = f"{minutes}m {seconds}s"
+    else:
+        time_str = f"{seconds}s"
+    line = f":hourglass_flowing_sand: {label}... ({time_str})"
+    # Show breadcrumb of tools used so far (compact)
+    if tools_seen and len(tools_seen) > 1:
+        prev = [_TOOL_LABELS.get(t, t) for t in tools_seen if t != tool_name]
+        if prev:
+            line += f"\n:footprints: Done: {', '.join(prev[-5:])}"
+    return line
+
+
 def _extract_artifacts(result: dict | list) -> list[str]:
     """Extract artifact paths from the last AI response cycle only.
 
@@ -351,6 +424,10 @@ class ChannelManager:
     def _channel_supports_streaming(channel_name: str) -> bool:
         return CHANNEL_CAPABILITIES.get(channel_name, {}).get("supports_streaming", False)
 
+    @staticmethod
+    def _channel_update_interval(channel_name: str) -> float:
+        return CHANNEL_CAPABILITIES.get(channel_name, {}).get("stream_update_interval", STREAM_UPDATE_MIN_INTERVAL_SECONDS)
+
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
         users_layer = _as_dict(channel_layer.get("users"))
@@ -386,9 +463,15 @@ class ChannelManager:
     def _get_client(self):
         """Return the ``langgraph_sdk`` async client, creating it on first use."""
         if self._client is None:
+            import httpx
             from langgraph_sdk import get_client
 
-            self._client = get_client(url=self._langgraph_url)
+            # Agent runs can take 10-20+ minutes for complex analysis tasks.
+            # Default read timeout (300s) is too short — use 1 hour.
+            self._client = get_client(
+                url=self._langgraph_url,
+                timeout=httpx.Timeout(connect=5, read=3600, write=300, pool=5),
+            )
         return self._client
 
     # -- lifecycle ---------------------------------------------------------
@@ -452,13 +535,18 @@ class ChannelManager:
                     await self._handle_command(msg)
                 else:
                     await self._handle_chat(msg)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "Error handling message from %s (chat=%s)",
                     msg.channel_name,
                     msg.chat_id,
                 )
-                await self._send_error(msg, "An internal error occurred. Please try again.")
+                import httpx
+                if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, TimeoutError)):
+                    error_text = "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
+                else:
+                    error_text = "An internal error occurred. Please try again."
+                await self._send_error(msg, error_text)
 
     # -- chat handling -----------------------------------------------------
 
@@ -504,11 +592,12 @@ class ChannelManager:
             )
             return
 
+        stamped_text = _stamp_message(msg.text)
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r)", thread_id, msg.text[:100])
         result = await client.runs.wait(
             thread_id,
             assistant_id,
-            input={"messages": [{"role": "human", "content": msg.text}]},
+            input={"messages": [{"role": "human", "content": stamped_text}]},
             config=run_config,
             context=run_context,
         )
@@ -552,6 +641,7 @@ class ChannelManager:
         run_config: dict[str, Any],
         run_context: dict[str, Any],
     ) -> None:
+        stamped_text = _stamp_message(msg.text)
         logger.info("[Manager] invoking runs.stream(thread_id=%s, text=%r)", thread_id, msg.text[:100])
 
         last_values: dict[str, Any] | list | None = None
@@ -562,11 +652,50 @@ class ChannelManager:
         last_publish_at = 0.0
         stream_error: BaseException | None = None
 
+        # Tool-call progress tracking: show what the agent is doing
+        active_tool: str | None = None
+        tool_start_at = 0.0
+        tools_seen: list[str] = []  # History of tools invoked this turn
+        update_interval = self._channel_update_interval(msg.channel_name)
+        stream_done = False
+
+        async def _publish_progress(text: str) -> None:
+            nonlocal last_published_text, last_publish_at
+            if not text or text == last_published_text:
+                return
+            now = time.monotonic()
+            if last_published_text and now - last_publish_at < update_interval:
+                return
+            await self.bus.publish_outbound(
+                OutboundMessage(
+                    channel_name=msg.channel_name,
+                    chat_id=msg.chat_id,
+                    thread_id=thread_id,
+                    text=text,
+                    is_final=False,
+                    thread_ts=msg.thread_ts,
+                )
+            )
+            last_published_text = text
+            last_publish_at = now
+
+        async def _heartbeat_loop() -> None:
+            """Periodically publish progress while a tool is running."""
+            while not stream_done:
+                await asyncio.sleep(update_interval)
+                if stream_done:
+                    break
+                if active_tool:
+                    elapsed = int(time.monotonic() - tool_start_at)
+                    await _publish_progress(_format_progress_text(active_tool, elapsed, tools_seen))
+
+        heartbeat_task = asyncio.create_task(_heartbeat_loop())
+
         try:
             async for chunk in client.runs.stream(
                 thread_id,
                 assistant_id,
-                input={"messages": [{"role": "human", "content": msg.text}]},
+                input={"messages": [{"role": "human", "content": stamped_text}]},
                 config=run_config,
                 context=run_context,
                 stream_mode=["messages-tuple", "values"],
@@ -575,6 +704,20 @@ class ChannelManager:
                 data = getattr(chunk, "data", None)
 
                 if event == "messages-tuple":
+                    # Check for tool-call events (AI requesting a tool)
+                    tool_name = _extract_tool_call_name(data)
+                    if tool_name:
+                        active_tool = tool_name
+                        tool_start_at = time.monotonic()
+                        if tool_name not in tools_seen:
+                            tools_seen.append(tool_name)
+                        # Immediately publish on tool transition
+                        await _publish_progress(_format_progress_text(active_tool, 0, tools_seen))
+
+                    # Check for tool-result events (tool finished)
+                    if _is_tool_result(data):
+                        active_tool = None
+
                     accumulated_text, current_message_id = _accumulate_stream_text(streamed_buffers, current_message_id, data)
                     if accumulated_text:
                         latest_text = accumulated_text
@@ -584,29 +727,21 @@ class ChannelManager:
                     if snapshot_text:
                         latest_text = snapshot_text
 
-                if not latest_text or latest_text == last_published_text:
-                    continue
+                # Publish real AI text when available
+                if latest_text:
+                    await _publish_progress(latest_text)
 
-                now = time.monotonic()
-                if last_published_text and now - last_publish_at < STREAM_UPDATE_MIN_INTERVAL_SECONDS:
-                    continue
-
-                await self.bus.publish_outbound(
-                    OutboundMessage(
-                        channel_name=msg.channel_name,
-                        chat_id=msg.chat_id,
-                        thread_id=thread_id,
-                        text=latest_text,
-                        is_final=False,
-                        thread_ts=msg.thread_ts,
-                    )
-                )
-                last_published_text = latest_text
-                last_publish_at = now
         except Exception as exc:
             stream_error = exc
             logger.exception("[Manager] streaming error: thread_id=%s", thread_id)
         finally:
+            stream_done = True
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+
             result = last_values if last_values is not None else {"messages": [{"type": "ai", "content": latest_text}]}
             response_text = _extract_response_text(result)
             artifacts = _extract_artifacts(result)

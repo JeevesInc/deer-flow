@@ -203,7 +203,7 @@ def read_changes(file_path: str):
         # Fall back to showing the document text so the agent has context
         print("\nDocument text:")
         for p in doc.paragraphs:
-            if p.text.strip():
+            if (p.text or '').strip():
                 print(p.text)
         return
 
@@ -312,7 +312,7 @@ def suggest(file_path: str, changes_json_path: str, output_path: str):
             continue
 
         for para in doc.paragraphs:
-            if find_text not in para.text:
+            if find_text not in (para.text or ''):
                 continue
 
             para_xml = para._element
@@ -468,8 +468,8 @@ def compare(file1_path: str, file2_path: str, output_path: str, track_changes: b
     doc1 = docx.Document(local1)
     doc2 = docx.Document(local2)
 
-    paras1 = [p.text for p in doc1.paragraphs]
-    paras2 = [p.text for p in doc2.paragraphs]
+    paras1 = [p.text or '' for p in doc1.paragraphs]
+    paras2 = [p.text or '' for p in doc2.paragraphs]
 
     if track_changes:
         _compare_with_track_changes(doc1, paras1, paras2, output_path)
@@ -868,7 +868,7 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
         author = entry.get('author', 'Jeeves')
 
         for para in doc.paragraphs:
-            if para_match.lower() in para.text.lower():
+            if para_match.lower() in (para.text or '').lower():
                 comment_el = etree.SubElement(comments_element, f'{{{W_NS}}}comment')
                 comment_el.set(f'{{{W_NS}}}id', str(comment_id))
                 comment_el.set(f'{{{W_NS}}}author', author)

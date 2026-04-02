@@ -70,15 +70,40 @@ def _download_template(drive_id):
     return tmp.name, name
 
 
-def _copy_sheet_data(source_ws, target_ws):
-    """Copy cell values from one worksheet to another."""
+def _clear_sheet(ws):
+    """Clear all cell values in a worksheet without deleting it."""
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.value = None
+
+
+def _copy_sheet_data(source_ws, target_ws, *, add_index: bool = False):
+    """Copy cell values from one worksheet to another.
+
+    Args:
+        add_index: If True, insert a numeric index in column A and shift
+            data one column to the right.  The original Bridge/SOFOM
+            templates have a pandas index column (col A = 0, 1, 2...)
+            that formula tabs reference.  ``build_us.py`` writes data
+            with ``index=False``, so we re-add it here.
+    """
+    col_offset = 1 if add_index else 0
+
     for row in source_ws.iter_rows():
         for cell in row:
-            target_ws[cell.coordinate].value = cell.value
+            target_col = cell.column + col_offset
+            target_cell = target_ws.cell(row=cell.row, column=target_col)
+            target_cell.value = cell.value
             if cell.number_format:
-                target_ws[cell.coordinate].number_format = cell.number_format
+                target_cell.number_format = cell.number_format
 
-    # Copy column widths
+    if add_index:
+        # Write index values in column A (header = blank, rows = 0, 1, 2...)
+        # Skip row 1 (header row — leave blank like pandas does)
+        for r in range(2, source_ws.max_row + 1):
+            target_ws.cell(row=r, column=1, value=r - 2)
+
+    # Copy column widths (shifted if index was added)
     for col_letter, dim in source_ws.column_dimensions.items():
         target_ws.column_dimensions[col_letter].width = dim.width
 
@@ -121,28 +146,25 @@ def main():
         formula_tabs = [s for s in template_wb.sheetnames if s not in data_sheet_names]
         print(f"Template formula tabs (preserved): {formula_tabs}")
 
-        # Delete old data tabs from template
+        # Tabs that need a pandas index column (col A) to match the
+        # original template structure.  elig_summary does not have one.
+        _TABS_WITH_INDEX = {'tape_start', 'tape_end', 'rollforward', 'tape', 'tape_combined'}
+
+        # Replace data tabs in-place (clear + rewrite) to preserve tab order.
+        # If a data tab doesn't exist in the template yet, append it.
         for name in data_sheet_names:
+            source_ws = data_wb[name]
+            needs_index = name in _TABS_WITH_INDEX
+
             if name in template_wb.sheetnames:
-                print(f"  Removing old '{name}' from template...")
-                del template_wb[name]
-
-        # Copy fresh data tabs into template
-        for name in data_sheet_names:
-            if name in data_wb.sheetnames:
-                print(f"  Adding fresh '{name}' to template...")
-                source_ws = data_wb[name]
+                print(f"  Replacing '{name}' in template (in-place)...")
+                target_ws = template_wb[name]
+                _clear_sheet(target_ws)
+            else:
+                print(f"  Adding new '{name}' to template...")
                 target_ws = template_wb.create_sheet(name)
-                _copy_sheet_data(source_ws, target_ws)
 
-        # Reorder sheets: put data tabs first, then formula tabs
-        desired_order = data_sheet_names + formula_tabs
-        actual = template_wb.sheetnames
-        for i, name in enumerate(desired_order):
-            if name in actual:
-                current_idx = actual.index(name)
-                template_wb.move_sheet(name, offset=i - current_idx)
-                actual = template_wb.sheetnames  # refresh after move
+            _copy_sheet_data(source_ws, target_ws, add_index=needs_index)
 
         # Determine output path
         if args.output:

@@ -57,7 +57,15 @@ python /mnt/skills/custom/jeeves-borrowing-base/build_portfolio_report.py --date
 
 This single command: queries LOC tape, rollforward, GWC mods (RPP% filter); downloads previous report as template; copies col L → col N in Summary tabs (MoM); replaces data tabs; saves as `Portfolio Report - {YYYYMM}01.xlsx`.
 
-### Step 3: Upload
+### Step 3: Upload to the correct month folder
+
+The folder is based on the **report date** (the --date value), NOT the current date. For `--date 2026-03-31`, upload to `Portfolio Reporting/202603/`. For `--date 2026-02-28`, upload to `Portfolio Reporting/202602/`.
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
+```
+
+Find the `{YYYYMM}/` folder matching the report month, then upload:
 
 ```bash
 python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Portfolio Report - {YYYYMM}01.xlsx" --folder "<MONTH_FOLDER_ID>"

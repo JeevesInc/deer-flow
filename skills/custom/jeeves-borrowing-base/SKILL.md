@@ -41,13 +41,15 @@ The portfolio report is a 7-tab workbook with formula-driven Summary dashboards.
 | **mods** | Data | GWC repayment plans (`loan_reference_number LIKE 'RPP%'`, ~95 rows) |
 | **loans** | Formulas | Loan-level summary |
 
-### Step 1: Find the previous month's report (template)
+### Step 1: Find a valid template (previous month's report WITH formulas)
 
 ```bash
 python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
 ```
 
-Navigate to the most recent month folder. Note the file ID of `Portfolio Reporting - {YYYYMM}01.xlsx`.
+Navigate to the most recent month folder and find `Portfolio Reporting - {YYYYMM}01.xlsx`.
+
+**IMPORTANT:** The template MUST be a correctly built report that contains Summary formula tabs — not raw data. If the most recent report was incorrectly generated (just raw BB data without formulas), go back one more month to find a valid template. A valid template is ~30+ MB and has 7 tabs including formula-driven Summary sheets. A raw-data-only file is ~5 MB and has no formulas. Currently, the last known valid template is `Portfolio Reporting - 20260201.xlsx` in `202602/` (file ID: `1WqO1z9ezMm51wFySuA-lphNB2tboUCYJ`).
 
 ### Step 2: Run the builder
 

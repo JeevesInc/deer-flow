@@ -49,7 +49,7 @@ python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3
 
 Navigate to the most recent month folder and find `Portfolio Reporting - {YYYYMM}01.xlsx`.
 
-**IMPORTANT:** The template MUST be a correctly built report that contains Summary formula tabs — not raw data. If the most recent report was incorrectly generated (just raw BB data without formulas), go back one more month to find a valid template. A valid template is ~30+ MB and has 7 tabs including formula-driven Summary sheets. A raw-data-only file is ~5 MB and has no formulas. Currently, the last known valid template is `Portfolio Reporting - 20260201.xlsx` in `202602/` (file ID: `1WqO1z9ezMm51wFySuA-lphNB2tboUCYJ`).
+**IMPORTANT:** The template MUST be a real report named **`Portfolio Reporting - {YYYYMM}01.xlsx`** that contains Summary formula tabs (Summary, Summary (2), Country, loans). Do NOT use files named `Portfolio Report - *.xlsx` (no "ing") — those are broken raw-data files the bot generated incorrectly. A valid template has 7 tabs with formulas in the Summary sheets. Currently, the last known valid template is `Portfolio Reporting - 20260301.xlsx` in `202603/` (file ID: `1tQ4JwCHJHP2U4-k0iiFwalyDY0KzO5PC`).
 
 ### Step 2: Run the builder
 

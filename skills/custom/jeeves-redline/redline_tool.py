@@ -482,24 +482,81 @@ def compare(file1_path: str, file2_path: str, output_path: str, track_changes: b
             os.unlink(f)
 
 
+def _match_paragraphs(paras1, paras2, threshold=0.4):
+    """Match paragraphs by similarity regardless of order.
+
+    Returns:
+        matches: list of (i, j, ratio) tuples — matched pairs
+        unmatched1: set of indices in paras1 with no match (deletions)
+        unmatched2: set of indices in paras2 with no match (insertions)
+    """
+    # Skip empty paragraphs for matching purposes
+    used1 = set()
+    used2 = set()
+    matches = []
+
+    # First pass: exact matches (fast)
+    text_to_idx1 = {}
+    for i, t in enumerate(paras1):
+        if t.strip():
+            text_to_idx1.setdefault(t, []).append(i)
+    for j, t in enumerate(paras2):
+        if t.strip() and t in text_to_idx1 and text_to_idx1[t]:
+            i = text_to_idx1[t].pop(0)
+            matches.append((i, j, 1.0))
+            used1.add(i)
+            used2.add(j)
+
+    # Second pass: fuzzy match remaining non-empty paragraphs
+    remaining1 = [(i, paras1[i]) for i in range(len(paras1))
+                  if i not in used1 and paras1[i].strip()]
+    remaining2 = [(j, paras2[j]) for j in range(len(paras2))
+                  if j not in used2 and paras2[j].strip()]
+
+    # Build similarity scores and greedily pick best matches
+    scored = []
+    for i, t1 in remaining1:
+        for j, t2 in remaining2:
+            ratio = difflib.SequenceMatcher(None, t1.split(), t2.split()).ratio()
+            if ratio >= threshold:
+                scored.append((ratio, i, j))
+    scored.sort(reverse=True)
+
+    for ratio, i, j in scored:
+        if i not in used1 and j not in used2:
+            matches.append((i, j, ratio))
+            used1.add(i)
+            used2.add(j)
+
+    # Empty paragraphs: match by position (they're structural, not content)
+    empty1 = [i for i in range(len(paras1)) if i not in used1 and not paras1[i].strip()]
+    empty2 = [j for j in range(len(paras2)) if j not in used2 and not paras2[j].strip()]
+    for i, j in zip(empty1, empty2):
+        matches.append((i, j, 1.0))
+        used1.add(i)
+        used2.add(j)
+
+    unmatched1 = set(range(len(paras1))) - used1
+    unmatched2 = set(range(len(paras2))) - used2
+    return matches, unmatched1, unmatched2
+
+
 def _compare_with_track_changes(base_doc, paras1, paras2, output_path):
-    """Produce a document with proper Word track changes markup."""
+    """Produce a document with proper Word track changes markup.
+
+    Uses similarity-based paragraph matching so that reordered sections
+    are compared inline (word-level diff) rather than shown as full
+    delete + insert.  The output follows doc2's paragraph order.
+    """
     from lxml import etree
 
     now = _now_iso()
     author = 'Jeeves'
     rev_id = 100
 
-    matcher = difflib.SequenceMatcher(None, paras1, paras2)
-    changes = {'equal': 0, 'delete': 0, 'insert': 0, 'replace': 0}
-
     body = base_doc.element.body
-
-    # Build a mapping from paragraph text to XML elements
     para_elements = list(body.iter(W_TAG('p')))
-
-    # We'll build a new body content list
-    new_body_children = []
+    changes = {'equal': 0, 'modified': 0, 'delete': 0, 'insert': 0}
 
     # Preserve non-paragraph elements (like sectPr) at the end
     non_para = []
@@ -508,57 +565,53 @@ def _compare_with_track_changes(base_doc, paras1, paras2, output_path):
         if tag != 'p':
             non_para.append(child)
 
-    # Process opcodes
-    para_idx = 0
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag == 'equal':
-            for k in range(i1, i2):
-                if para_idx + (k - i1) < len(para_elements):
-                    new_body_children.append(para_elements[para_idx + (k - i1)])
-            para_idx += (i2 - i1)
-            changes['equal'] += (i2 - i1)
+    # Match paragraphs by similarity (handles reordering)
+    matches, unmatched1, unmatched2 = _match_paragraphs(paras1, paras2)
 
-        elif tag == 'delete':
-            for k in range(i1, i2):
-                if para_idx + (k - i1) < len(para_elements):
-                    p_el = para_elements[para_idx + (k - i1)]
-                    # Wrap all runs in <w:del>
-                    _wrap_para_runs_in_del(p_el, rev_id, author, now)
-                    rev_id += 1
+    # Build lookup: doc2 index → (doc1 index, ratio)
+    j_to_match = {}
+    for i, j, ratio in matches:
+        j_to_match[j] = (i, ratio)
+
+    new_body_children = []
+
+    # Walk doc2's paragraph order — this is the "new" document structure
+    for j in range(len(paras2)):
+        if j in j_to_match:
+            i, ratio = j_to_match[j]
+            if i < len(para_elements):
+                p_el = para_elements[i]
+                if ratio >= 0.999:
+                    # Exact match — keep as-is
                     new_body_children.append(p_el)
-            para_idx += (i2 - i1)
-            changes['delete'] += (i2 - i1)
-
-        elif tag == 'insert':
-            for text in paras2[j1:j2]:
-                # Create new paragraph with <w:ins> markup
-                p_el = _make_ins_paragraph(text, rev_id, author, now)
+                    changes['equal'] += 1
+                else:
+                    # Similar — inline word-level diff
+                    rev_id = _inline_diff_paragraph(p_el, paras1[i], paras2[j], rev_id, author, now)
+                    new_body_children.append(p_el)
+                    changes['modified'] += 1
+            else:
+                # Index out of range (shouldn't happen) — treat as insert
+                p_el = _make_ins_paragraph(paras2[j], rev_id, author, now)
                 rev_id += 1
                 new_body_children.append(p_el)
-            changes['insert'] += (j2 - j1)
+                changes['insert'] += 1
+        elif j in unmatched2:
+            # New paragraph with no match in doc1 — pure insertion
+            p_el = _make_ins_paragraph(paras2[j], rev_id, author, now)
+            rev_id += 1
+            new_body_children.append(p_el)
+            changes['insert'] += 1
 
-        elif tag == 'replace':
-            # For 1:1 paragraph replacements, do inline (word-level) diff
-            # so only the changed words are marked, not the entire paragraph.
-            if (i2 - i1) == 1 and (j2 - j1) == 1 and para_idx < len(para_elements):
-                p_el = para_elements[para_idx]
-                rev_id = _inline_diff_paragraph(p_el, paras1[i1], paras2[j1], rev_id, author, now)
+    # Append unmatched doc1 paragraphs as deletions at the end
+    for i in sorted(unmatched1):
+        if i < len(para_elements):
+            p_el = para_elements[i]
+            if paras1[i].strip():  # skip empty deleted paras
+                _wrap_para_runs_in_del(p_el, rev_id, author, now)
+                rev_id += 1
                 new_body_children.append(p_el)
-                para_idx += 1
-            else:
-                # Multi-paragraph replace: fall back to delete old + insert new
-                for k in range(i1, i2):
-                    if para_idx + (k - i1) < len(para_elements):
-                        p_el = para_elements[para_idx + (k - i1)]
-                        _wrap_para_runs_in_del(p_el, rev_id, author, now)
-                        rev_id += 1
-                        new_body_children.append(p_el)
-                para_idx += (i2 - i1)
-                for text in paras2[j1:j2]:
-                    p_el = _make_ins_paragraph(text, rev_id, author, now)
-                    rev_id += 1
-                    new_body_children.append(p_el)
-            changes['replace'] += max(i2 - i1, j2 - j1)
+                changes['delete'] += 1
 
     # Rebuild body
     for child in list(body):
@@ -572,8 +625,8 @@ def _compare_with_track_changes(base_doc, paras1, paras2, output_path):
     base_doc.save(output_path)
 
     print(f"Redline (with track changes) saved to: {output_path}")
-    print(f"Changes: {changes['delete']} deletions, {changes['insert']} insertions, "
-          f"{changes['replace']} replacements, {changes['equal']} unchanged paragraphs")
+    print(f"Changes: {changes['equal']} unchanged, {changes['modified']} modified (inline diff), "
+          f"{changes['delete']} deleted, {changes['insert']} inserted paragraphs")
     print("Open in Word and enable Review > Track Changes to see all revisions.")
 
 

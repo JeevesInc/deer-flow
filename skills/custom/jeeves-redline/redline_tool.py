@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Document redlining tool — compare two Word documents or add negotiation comments.
+"""Document redlining tool — compare docs, read/write track changes, add comments.
 
 Usage:
-    python redline_tool.py compare <file1> <file2> [--output redline.docx]
+    python redline_tool.py compare <file1> <file2> [--output redline.docx] [--track-changes]
+    python redline_tool.py read-changes <file.docx>
+    python redline_tool.py suggest <file.docx> <changes.json> [--output suggested.docx]
     python redline_tool.py comment <file.docx> <comments.json> [--output commented.docx]
 
 Files can be local paths, Google Drive file IDs, or Google Drive URLs.
@@ -17,6 +19,7 @@ import os
 import re
 import sys
 import tempfile
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 
@@ -81,13 +84,11 @@ def _download_from_drive(file_ref: str) -> str:
     name = meta.get('name', 'document')
 
     if mime == 'application/vnd.google-apps.document':
-        # Google Doc — export as docx
         content = service.files().export(
             fileId=file_id,
             mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         ).execute()
     else:
-        # Binary file — download directly
         content = service.files().get_media(fileId=file_id).execute()
 
     suffix = '.docx'
@@ -118,7 +119,344 @@ def _get_output_path(args: list, default_name: str) -> str:
     return os.path.join(output_dir, default_name)
 
 
-def compare(file1_path: str, file2_path: str, output_path: str):
+# ---------------------------------------------------------------------------
+# Word XML namespace constants
+# ---------------------------------------------------------------------------
+
+W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+W_TAG = lambda tag: f'{{{W_NS}}}{tag}'
+
+
+def _now_iso():
+    return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+# ---------------------------------------------------------------------------
+# read-changes: Parse track changes from an existing document
+# ---------------------------------------------------------------------------
+
+def read_changes(file_path: str):
+    """Read and display track changes (revisions) from a Word document."""
+    import docx
+    from lxml import etree
+
+    local_file = _resolve_file(file_path)
+    doc = docx.Document(local_file)
+
+    body = doc.element.body
+    changes = []
+
+    # Find all insertion and deletion elements in document order
+    for elem in body.iter():
+        tag = etree.QName(elem.tag).localname if '}' in elem.tag else elem.tag
+
+        if tag == 'ins':
+            author = elem.get(W_TAG('author'), 'Unknown')
+            date = elem.get(W_TAG('date'), '')
+            # Collect inserted text from child runs
+            text_parts = []
+            for t in elem.iter(W_TAG('t')):
+                if t.text:
+                    text_parts.append(t.text)
+            text = ''.join(text_parts)
+            if text.strip():
+                changes.append({
+                    'type': 'insertion',
+                    'text': text,
+                    'author': author,
+                    'date': date,
+                })
+
+        elif tag == 'del':
+            author = elem.get(W_TAG('author'), 'Unknown')
+            date = elem.get(W_TAG('date'), '')
+            # Deletions use <w:delText> instead of <w:t>
+            text_parts = []
+            for dt in elem.iter(W_TAG('delText')):
+                if dt.text:
+                    text_parts.append(dt.text)
+            text = ''.join(text_parts)
+            if text.strip():
+                changes.append({
+                    'type': 'deletion',
+                    'text': text,
+                    'author': author,
+                    'date': date,
+                })
+
+        elif tag == 'rPrChange':
+            # Formatting change — note but less critical
+            author = elem.get(W_TAG('author'), 'Unknown')
+            date = elem.get(W_TAG('date'), '')
+            changes.append({
+                'type': 'format_change',
+                'text': '(formatting change)',
+                'author': author,
+                'date': date,
+            })
+
+    # Also read comments for full context
+    comments = _read_comments(doc)
+
+    if not changes and not comments:
+        print(f"No track changes or comments found in {os.path.basename(local_file)}")
+        # Fall back to showing the document text so the agent has context
+        print("\nDocument text:")
+        for p in doc.paragraphs:
+            if p.text.strip():
+                print(p.text)
+        return
+
+    if changes:
+        print(f"Found {len(changes)} tracked change(s):\n")
+        for i, c in enumerate(changes, 1):
+            marker = '+' if c['type'] == 'insertion' else '-' if c['type'] == 'deletion' else '~'
+            date_str = c['date'][:10] if c['date'] else ''
+            print(f"  [{marker}] {c['type'].upper()} by {c['author']} ({date_str})")
+            # Show text with context
+            text = c['text']
+            if len(text) > 200:
+                text = text[:200] + '...'
+            print(f"      {text}")
+            print()
+
+    if comments:
+        print(f"\nFound {len(comments)} comment(s):\n")
+        for c in comments:
+            print(f"  [{c['author']}] {c['text']}")
+            print()
+
+    # Output as JSON for agent processing
+    print("\n--- JSON ---")
+    print(json.dumps({
+        'changes': changes,
+        'comments': comments,
+        'total_changes': len(changes),
+        'total_comments': len(comments),
+        'insertions': len([c for c in changes if c['type'] == 'insertion']),
+        'deletions': len([c for c in changes if c['type'] == 'deletion']),
+    }, indent=2))
+
+    if local_file.startswith(tempfile.gettempdir()):
+        os.unlink(local_file)
+
+
+def _read_comments(doc):
+    """Extract comments from a document."""
+    comments = []
+    for rel in doc.part.rels.values():
+        if 'comments' in rel.reltype:
+            from lxml import etree
+            comments_xml = etree.fromstring(rel.target_part.blob)
+            for comment_el in comments_xml.iter(W_TAG('comment')):
+                author = comment_el.get(W_TAG('author'), 'Unknown')
+                date = comment_el.get(W_TAG('date'), '')
+                text_parts = []
+                for t in comment_el.iter(W_TAG('t')):
+                    if t.text:
+                        text_parts.append(t.text)
+                text = ''.join(text_parts)
+                if text.strip():
+                    comments.append({
+                        'author': author,
+                        'date': date,
+                        'text': text,
+                    })
+            break
+    return comments
+
+
+# ---------------------------------------------------------------------------
+# suggest: Apply changes as proper Word track changes (w:ins / w:del)
+# ---------------------------------------------------------------------------
+
+def suggest(file_path: str, changes_json_path: str, output_path: str):
+    """Apply suggested changes to a document as Word tracked revisions.
+
+    The changes JSON should be an array of objects:
+    [
+      {
+        "find": "original text to replace",
+        "replace": "new suggested text",
+        "author": "Jeeves"
+      },
+      {
+        "find": "text to delete",
+        "replace": "",
+        "author": "Jeeves"
+      }
+    ]
+
+    Produces a .docx with proper <w:del>/<w:ins> markup that shows up
+    in Word's Track Changes review pane and can be accepted/rejected.
+    """
+    import docx
+    from lxml import etree
+
+    local_file = _resolve_file(file_path)
+
+    with open(changes_json_path, 'r', encoding='utf-8') as f:
+        changes_data = json.load(f)
+
+    doc = docx.Document(local_file)
+    now = _now_iso()
+    applied = 0
+    rev_id = 100  # Starting revision ID
+
+    for change in changes_data:
+        find_text = change.get('find', '')
+        replace_text = change.get('replace', '')
+        author = change.get('author', 'Jeeves')
+
+        if not find_text:
+            continue
+
+        for para in doc.paragraphs:
+            if find_text not in para.text:
+                continue
+
+            para_xml = para._element
+
+            # Find the run(s) containing the target text
+            # We need to handle text that may span multiple runs
+            full_text = ''
+            runs_with_positions = []
+            for run_el in para_xml.iter(W_TAG('r')):
+                for t_el in run_el.iter(W_TAG('t')):
+                    if t_el.text:
+                        start_pos = len(full_text)
+                        full_text += t_el.text
+                        runs_with_positions.append((run_el, t_el, start_pos, len(full_text)))
+
+            find_start = full_text.find(find_text)
+            if find_start == -1:
+                continue
+
+            find_end = find_start + len(find_text)
+
+            # Build new XML elements to replace the affected runs
+            # Strategy: rebuild the paragraph's runs with del/ins markup
+            new_elements = []
+            processed_up_to = 0
+
+            for run_el, t_el, r_start, r_end in runs_with_positions:
+                # Get run properties (formatting) to preserve
+                rpr = run_el.find(W_TAG('rPr'))
+                rpr_copy = None
+                if rpr is not None:
+                    rpr_copy = etree.tostring(rpr)
+
+                text = t_el.text or ''
+                local_start = max(find_start - r_start, 0)
+                local_end = min(find_end - r_start, len(text))
+
+                # Text before the change in this run
+                before = text[:local_start] if r_start < find_start and local_start > 0 else ''
+                # Text that's being changed in this run
+                middle = text[max(local_start, 0):max(local_end, 0)] if r_start < find_end and r_end > find_start else ''
+                # Text after the change in this run
+                after = text[local_end:] if r_end > find_end and local_end < len(text) else ''
+
+                # No overlap with change region — keep run as-is
+                if r_end <= find_start or r_start >= find_end:
+                    new_elements.append(('keep', run_el))
+                    continue
+
+                # Before text — keep as normal run
+                if before:
+                    r = etree.Element(W_TAG('r'))
+                    if rpr_copy:
+                        r.append(etree.fromstring(rpr_copy))
+                    t = etree.SubElement(r, W_TAG('t'))
+                    t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                    t.text = before
+                    new_elements.append(('new', r))
+
+                # Middle text — wrap in <w:del>
+                if middle:
+                    del_el = etree.Element(W_TAG('del'))
+                    del_el.set(W_TAG('id'), str(rev_id))
+                    del_el.set(W_TAG('author'), author)
+                    del_el.set(W_TAG('date'), now)
+                    rev_id += 1
+
+                    r = etree.SubElement(del_el, W_TAG('r'))
+                    if rpr_copy:
+                        r.append(etree.fromstring(rpr_copy))
+                    dt = etree.SubElement(r, W_TAG('delText'))
+                    dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                    dt.text = middle
+                    new_elements.append(('new', del_el))
+
+                    # Insert replacement text right after the deletion (only once, on last affected run)
+                    if replace_text and r_end >= find_end:
+                        ins_el = etree.Element(W_TAG('ins'))
+                        ins_el.set(W_TAG('id'), str(rev_id))
+                        ins_el.set(W_TAG('author'), author)
+                        ins_el.set(W_TAG('date'), now)
+                        rev_id += 1
+
+                        r = etree.SubElement(ins_el, W_TAG('r'))
+                        if rpr_copy:
+                            r.append(etree.fromstring(rpr_copy))
+                        t = etree.SubElement(r, W_TAG('t'))
+                        t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                        t.text = replace_text
+                        new_elements.append(('new', ins_el))
+
+                # After text — keep as normal run
+                if after:
+                    r = etree.Element(W_TAG('r'))
+                    if rpr_copy:
+                        r.append(etree.fromstring(rpr_copy))
+                    t = etree.SubElement(r, W_TAG('t'))
+                    t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+                    t.text = after
+                    new_elements.append(('new', r))
+
+            # Now replace the runs in the paragraph XML
+            # Remove old runs
+            for run_el, _, _, _ in runs_with_positions:
+                try:
+                    para_xml.remove(run_el)
+                except ValueError:
+                    pass
+
+            # Insert new elements (preserve non-run children like bookmarks, comments)
+            insert_point = None
+            for child in list(para_xml):
+                tag = etree.QName(child.tag).localname if '}' in child.tag else child.tag
+                if tag == 'pPr':
+                    insert_point = child
+                    break
+
+            idx = list(para_xml).index(insert_point) + 1 if insert_point is not None else 0
+            for elem_type, elem in new_elements:
+                if elem_type == 'keep':
+                    para_xml.insert(idx, elem)
+                else:
+                    para_xml.insert(idx, elem)
+                idx += 1
+
+            applied += 1
+            break  # Only apply once per change entry
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    doc.save(output_path)
+
+    print(f"Document with tracked changes saved to: {output_path}")
+    print(f"Applied {applied} of {len(changes_data)} suggested change(s)")
+    print("Open in Word and go to Review > Track Changes to accept/reject each suggestion.")
+
+    if local_file.startswith(tempfile.gettempdir()):
+        os.unlink(local_file)
+
+
+# ---------------------------------------------------------------------------
+# compare: Paragraph-level diff (visual or tracked changes)
+# ---------------------------------------------------------------------------
+
+def compare(file1_path: str, file2_path: str, output_path: str, track_changes: bool = False):
     """Compare two .docx files and produce a redlined document."""
     import docx
     from docx.shared import Pt, RGBColor
@@ -133,10 +471,245 @@ def compare(file1_path: str, file2_path: str, output_path: str):
     paras1 = [p.text for p in doc1.paragraphs]
     paras2 = [p.text for p in doc2.paragraphs]
 
-    # Build the redline document
+    if track_changes:
+        _compare_with_track_changes(doc1, paras1, paras2, output_path)
+    else:
+        _compare_visual(local1, local2, paras1, paras2, output_path)
+
+    # Clean up temp files
+    for f in [local1, local2]:
+        if f.startswith(tempfile.gettempdir()):
+            os.unlink(f)
+
+
+def _compare_with_track_changes(base_doc, paras1, paras2, output_path):
+    """Produce a document with proper Word track changes markup."""
+    from lxml import etree
+
+    now = _now_iso()
+    author = 'Jeeves'
+    rev_id = 100
+
+    matcher = difflib.SequenceMatcher(None, paras1, paras2)
+    changes = {'equal': 0, 'delete': 0, 'insert': 0, 'replace': 0}
+
+    body = base_doc.element.body
+
+    # Build a mapping from paragraph text to XML elements
+    para_elements = list(body.iter(W_TAG('p')))
+
+    # We'll build a new body content list
+    new_body_children = []
+
+    # Preserve non-paragraph elements (like sectPr) at the end
+    non_para = []
+    for child in list(body):
+        tag = etree.QName(child.tag).localname if '}' in child.tag else child.tag
+        if tag != 'p':
+            non_para.append(child)
+
+    # Process opcodes
+    para_idx = 0
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            for k in range(i1, i2):
+                if para_idx + (k - i1) < len(para_elements):
+                    new_body_children.append(para_elements[para_idx + (k - i1)])
+            para_idx += (i2 - i1)
+            changes['equal'] += (i2 - i1)
+
+        elif tag == 'delete':
+            for k in range(i1, i2):
+                if para_idx + (k - i1) < len(para_elements):
+                    p_el = para_elements[para_idx + (k - i1)]
+                    # Wrap all runs in <w:del>
+                    _wrap_para_runs_in_del(p_el, rev_id, author, now)
+                    rev_id += 1
+                    new_body_children.append(p_el)
+            para_idx += (i2 - i1)
+            changes['delete'] += (i2 - i1)
+
+        elif tag == 'insert':
+            for text in paras2[j1:j2]:
+                # Create new paragraph with <w:ins> markup
+                p_el = _make_ins_paragraph(text, rev_id, author, now)
+                rev_id += 1
+                new_body_children.append(p_el)
+            changes['insert'] += (j2 - j1)
+
+        elif tag == 'replace':
+            # For 1:1 paragraph replacements, do inline (word-level) diff
+            # so only the changed words are marked, not the entire paragraph.
+            if (i2 - i1) == 1 and (j2 - j1) == 1 and para_idx < len(para_elements):
+                p_el = para_elements[para_idx]
+                rev_id = _inline_diff_paragraph(p_el, paras1[i1], paras2[j1], rev_id, author, now)
+                new_body_children.append(p_el)
+                para_idx += 1
+            else:
+                # Multi-paragraph replace: fall back to delete old + insert new
+                for k in range(i1, i2):
+                    if para_idx + (k - i1) < len(para_elements):
+                        p_el = para_elements[para_idx + (k - i1)]
+                        _wrap_para_runs_in_del(p_el, rev_id, author, now)
+                        rev_id += 1
+                        new_body_children.append(p_el)
+                para_idx += (i2 - i1)
+                for text in paras2[j1:j2]:
+                    p_el = _make_ins_paragraph(text, rev_id, author, now)
+                    rev_id += 1
+                    new_body_children.append(p_el)
+            changes['replace'] += max(i2 - i1, j2 - j1)
+
+    # Rebuild body
+    for child in list(body):
+        body.remove(child)
+    for child in new_body_children:
+        body.append(child)
+    for child in non_para:
+        body.append(child)
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    base_doc.save(output_path)
+
+    print(f"Redline (with track changes) saved to: {output_path}")
+    print(f"Changes: {changes['delete']} deletions, {changes['insert']} insertions, "
+          f"{changes['replace']} replacements, {changes['equal']} unchanged paragraphs")
+    print("Open in Word and enable Review > Track Changes to see all revisions.")
+
+
+def _wrap_para_runs_in_del(para_el, rev_id, author, date):
+    """Wrap all runs in a paragraph inside a <w:del> element."""
+    from lxml import etree
+
+    runs = list(para_el.iter(W_TAG('r')))
+    if not runs:
+        return
+
+    del_el = etree.Element(W_TAG('del'))
+    del_el.set(W_TAG('id'), str(rev_id))
+    del_el.set(W_TAG('author'), author)
+    del_el.set(W_TAG('date'), date)
+
+    for run in runs:
+        # Convert <w:t> to <w:delText>
+        for t in run.iter(W_TAG('t')):
+            new_dt = etree.Element(W_TAG('delText'))
+            new_dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            new_dt.text = t.text
+            t.getparent().replace(t, new_dt)
+        run.getparent().remove(run)
+        del_el.append(run)
+
+    # Insert del_el after pPr (or at start)
+    ppr = para_el.find(W_TAG('pPr'))
+    if ppr is not None:
+        ppr.addnext(del_el)
+    else:
+        para_el.insert(0, del_el)
+
+
+def _inline_diff_paragraph(para_el, old_text, new_text, rev_id, author, date):
+    """Replace a paragraph's content with word-level tracked changes.
+
+    Instead of deleting the entire paragraph and inserting a new one
+    (which makes everything blue in Word), this does a word-level diff
+    so only the changed words are marked as deletions/insertions.
+    Unchanged words stay in their original formatting (black).
+    """
+    from lxml import etree
+
+    old_words = old_text.split()
+    new_words = new_text.split()
+    matcher = difflib.SequenceMatcher(None, old_words, new_words)
+
+    # Remove existing runs from the paragraph (keep pPr)
+    ppr = para_el.find(W_TAG('pPr'))
+    for child in list(para_el):
+        if child.tag != W_TAG('pPr'):
+            para_el.remove(child)
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            # Unchanged words — plain run
+            r = etree.SubElement(para_el, W_TAG('r'))
+            t = etree.SubElement(r, W_TAG('t'))
+            t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            t.text = ' '.join(old_words[i1:i2]) + ' '
+
+        elif tag == 'delete':
+            # Deleted words — wrap in <w:del>
+            del_el = etree.SubElement(para_el, W_TAG('del'))
+            del_el.set(W_TAG('id'), str(rev_id))
+            del_el.set(W_TAG('author'), author)
+            del_el.set(W_TAG('date'), date)
+            rev_id += 1
+            r = etree.SubElement(del_el, W_TAG('r'))
+            dt = etree.SubElement(r, W_TAG('delText'))
+            dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            dt.text = ' '.join(old_words[i1:i2]) + ' '
+
+        elif tag == 'insert':
+            # Inserted words — wrap in <w:ins>
+            ins_el = etree.SubElement(para_el, W_TAG('ins'))
+            ins_el.set(W_TAG('id'), str(rev_id))
+            ins_el.set(W_TAG('author'), author)
+            ins_el.set(W_TAG('date'), date)
+            rev_id += 1
+            r = etree.SubElement(ins_el, W_TAG('r'))
+            t = etree.SubElement(r, W_TAG('t'))
+            t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            t.text = ' '.join(new_words[j1:j2]) + ' '
+
+        elif tag == 'replace':
+            # Changed words — delete old, insert new
+            del_el = etree.SubElement(para_el, W_TAG('del'))
+            del_el.set(W_TAG('id'), str(rev_id))
+            del_el.set(W_TAG('author'), author)
+            del_el.set(W_TAG('date'), date)
+            rev_id += 1
+            r = etree.SubElement(del_el, W_TAG('r'))
+            dt = etree.SubElement(r, W_TAG('delText'))
+            dt.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            dt.text = ' '.join(old_words[i1:i2]) + ' '
+
+            ins_el = etree.SubElement(para_el, W_TAG('ins'))
+            ins_el.set(W_TAG('id'), str(rev_id))
+            ins_el.set(W_TAG('author'), author)
+            ins_el.set(W_TAG('date'), date)
+            rev_id += 1
+            r = etree.SubElement(ins_el, W_TAG('r'))
+            t = etree.SubElement(r, W_TAG('t'))
+            t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+            t.text = ' '.join(new_words[j1:j2]) + ' '
+
+    return rev_id
+
+
+def _make_ins_paragraph(text, rev_id, author, date):
+    """Create a new paragraph element with <w:ins> wrapped run."""
+    from lxml import etree
+
+    p = etree.Element(W_TAG('p'))
+    ins_el = etree.SubElement(p, W_TAG('ins'))
+    ins_el.set(W_TAG('id'), str(rev_id))
+    ins_el.set(W_TAG('author'), author)
+    ins_el.set(W_TAG('date'), date)
+
+    r = etree.SubElement(ins_el, W_TAG('r'))
+    t = etree.SubElement(r, W_TAG('t'))
+    t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    t.text = text
+    return p
+
+
+def _compare_visual(local1, local2, paras1, paras2, output_path):
+    """Original visual comparison — red strikethrough / blue underline."""
+    import docx
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_UNDERLINE
+
     redline = docx.Document()
 
-    # Add header
     header_para = redline.add_paragraph()
     run = header_para.add_run("REDLINE COMPARISON")
     run.bold = True
@@ -149,7 +722,7 @@ def compare(file1_path: str, file2_path: str, output_path: str):
     run = header_para.add_run(f"Revised: {os.path.basename(local2)}")
     run.font.size = Pt(9)
     run.font.color.rgb = RGBColor(128, 128, 128)
-    redline.add_paragraph()  # spacer
+    redline.add_paragraph()
 
     matcher = difflib.SequenceMatcher(None, paras1, paras2)
     changes = {'equal': 0, 'delete': 0, 'insert': 0, 'replace': 0}
@@ -179,13 +752,11 @@ def compare(file1_path: str, file2_path: str, output_path: str):
             changes['insert'] += (j2 - j1)
 
         elif tag == 'replace':
-            # Show deleted (old) paragraphs
             for text in paras1[i1:i2]:
                 p = redline.add_paragraph()
                 run = p.add_run(text)
                 run.font.color.rgb = RGBColor(255, 0, 0)
                 run.font.strikethrough = True
-            # Show inserted (new) paragraphs
             for text in paras2[j1:j2]:
                 p = redline.add_paragraph()
                 run = p.add_run(text)
@@ -193,7 +764,6 @@ def compare(file1_path: str, file2_path: str, output_path: str):
                 run.font.underline = WD_UNDERLINE.SINGLE
             changes['replace'] += max(i2 - i1, j2 - j1)
 
-    # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     redline.save(output_path)
 
@@ -201,11 +771,10 @@ def compare(file1_path: str, file2_path: str, output_path: str):
     print(f"Changes: {changes['delete']} deletions, {changes['insert']} insertions, "
           f"{changes['replace']} replacements, {changes['equal']} unchanged paragraphs")
 
-    # Clean up temp files
-    for f in [local1, local2]:
-        if f.startswith(tempfile.gettempdir()):
-            os.unlink(f)
 
+# ---------------------------------------------------------------------------
+# comment: Add Word comments (unchanged from before)
+# ---------------------------------------------------------------------------
 
 def comment(file_path: str, comments_json_path: str, output_path: str):
     """Add Word comments to a .docx at matching paragraphs."""
@@ -219,19 +788,14 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
 
     doc = docx.Document(local_file)
 
-    # Word comment XML namespace
-    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     nsmap = {'w': W_NS}
 
-    # Access or create the comments part
-    from docx.opc.constants import RELATIONSHIP_TYPE as RT
     from docx.opc.part import Part
     from docx.opc.packuri import PackURI
 
     comments_part = None
     comments_element = None
 
-    # Check if comments part already exists
     for rel in doc.part.rels.values():
         if 'comments' in rel.reltype:
             comments_part = rel.target_part
@@ -239,40 +803,34 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
             break
 
     if comments_element is None:
-        # Create a new comments XML element
         comments_element = etree.Element(f'{{{W_NS}}}comments', nsmap=nsmap)
 
     comment_id = 0
     matched = 0
+    now = _now_iso()
 
     for entry in comments_data:
         para_match = entry.get('paragraph_match', '')
         comment_text = entry.get('comment', '')
         author = entry.get('author', 'Jeeves')
 
-        # Find matching paragraph
         for para in doc.paragraphs:
             if para_match.lower() in para.text.lower():
-                # Create the comment element
                 comment_el = etree.SubElement(comments_element, f'{{{W_NS}}}comment')
                 comment_el.set(f'{{{W_NS}}}id', str(comment_id))
                 comment_el.set(f'{{{W_NS}}}author', author)
-                comment_el.set(f'{{{W_NS}}}date', '2026-03-28T00:00:00Z')
+                comment_el.set(f'{{{W_NS}}}date', now)
 
-                # Add comment paragraph
                 cp = etree.SubElement(comment_el, f'{{{W_NS}}}p')
                 cr = etree.SubElement(cp, f'{{{W_NS}}}r')
                 ct = etree.SubElement(cr, f'{{{W_NS}}}t')
                 ct.text = comment_text
 
-                # Add comment reference to the paragraph's XML
                 para_xml = para._element
-                # Add commentRangeStart before first run
                 range_start = etree.Element(f'{{{W_NS}}}commentRangeStart')
                 range_start.set(f'{{{W_NS}}}id', str(comment_id))
                 para_xml.insert(0, range_start)
 
-                # Add commentRangeEnd and commentReference after last run
                 range_end = etree.SubElement(para_xml, f'{{{W_NS}}}commentRangeEnd')
                 range_end.set(f'{{{W_NS}}}id', str(comment_id))
 
@@ -289,11 +847,9 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
         else:
             print(f"WARNING: No paragraph match for: '{para_match[:60]}...'", file=sys.stderr)
 
-    # Write comments part back
     if comments_part is not None:
         comments_part._blob = etree.tostring(comments_element, xml_declaration=True, encoding='UTF-8', standalone=True)
     else:
-        # Add new comments part to the document
         comments_blob = etree.tostring(comments_element, xml_declaration=True, encoding='UTF-8', standalone=True)
         comments_part_uri = PackURI('/word/comments.xml')
         content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml'
@@ -305,17 +861,19 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
         )
         doc.part.relate_to(comments_part, 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments')
 
-    # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     doc.save(output_path)
 
     print(f"Commented document saved to: {output_path}")
     print(f"Comments added: {matched} of {len(comments_data)}")
 
-    # Clean up temp files
     if local_file.startswith(tempfile.gettempdir()):
         os.unlink(local_file)
 
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
 
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
@@ -326,7 +884,9 @@ def main():
     args = sys.argv[1:]
     if not args or args[0] in ('-h', '--help'):
         print("Usage:", file=sys.stderr)
-        print("  python redline_tool.py compare <file1> <file2> [--output redline.docx]", file=sys.stderr)
+        print("  python redline_tool.py compare <file1> <file2> [--track-changes] [--output redline.docx]", file=sys.stderr)
+        print("  python redline_tool.py read-changes <file.docx>", file=sys.stderr)
+        print("  python redline_tool.py suggest <file.docx> <changes.json> [--output suggested.docx]", file=sys.stderr)
         print("  python redline_tool.py comment <file.docx> <comments.json> [--output commented.docx]", file=sys.stderr)
         sys.exit(1)
 
@@ -339,7 +899,21 @@ def main():
             print("ERROR: compare requires two file arguments", file=sys.stderr)
             sys.exit(1)
         output = _get_output_path(args, 'redline_output.docx')
-        compare(args[1], args[2], output)
+        tc = '--track-changes' in args
+        compare(args[1], args[2], output, track_changes=tc)
+
+    elif command == 'read-changes':
+        if len(args) < 2:
+            print("ERROR: read-changes requires a .docx file", file=sys.stderr)
+            sys.exit(1)
+        read_changes(args[1])
+
+    elif command == 'suggest':
+        if len(args) < 3:
+            print("ERROR: suggest requires a .docx file and a changes JSON file", file=sys.stderr)
+            sys.exit(1)
+        output = _get_output_path(args, 'suggested_output.docx')
+        suggest(args[1], args[2], output)
 
     elif command == 'comment':
         if len(args) < 3:
@@ -349,7 +923,7 @@ def main():
         comment(args[1], args[2], output)
 
     else:
-        print(f"ERROR: Unknown command '{command}'. Use 'compare' or 'comment'.", file=sys.stderr)
+        print(f"ERROR: Unknown command '{command}'. Use 'compare', 'read-changes', 'suggest', or 'comment'.", file=sys.stderr)
         sys.exit(1)
 
 

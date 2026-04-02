@@ -2,10 +2,15 @@
 """Build the monthly Portfolio Report.
 
 Usage:
-    python build_portfolio_report.py --date 2026-03-31 --template-id <DRIVE_FILE_ID>
+    python build_portfolio_report.py --date 2026-04-01 --template-id <DRIVE_FILE_ID>
+
+--date is the REPORT DATE (1st of the month). The report covers the previous
+month's data:
+  --date 2026-04-01 → EOP=2026-03-31, BOP=2026-02-28
+  File: Portfolio Report - 20260401.xlsx → uploaded to Portfolio Reporting/202604/
 
 Steps:
-  1. Run LOC tape + rollforward queries (same as build_us.py)
+  1. Run LOC tape + rollforward queries for EOP (day before report date)
   2. Run GWC mods query (repayment plans only: loan_reference_number LIKE 'RPP%')
   3. Download previous month's report from Drive as template
   4. Copy current period's formula values (col L) to prior period column (col N)
@@ -158,20 +163,26 @@ def main():
     import openpyxl
 
     # Compute dates
+    # --date is the report date (1st of month), e.g. 2026-04-01.
+    # The report covers the PREVIOUS month:
+    #   EOP = day before report date (2026-03-31) — last day of data
+    #   BOP = last day of the month before that (2026-02-28)
+    # File is named with the report date and uploaded to the report month folder.
     yesterday = dt.date.today() - dt.timedelta(days=1)
-    date_end = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+    report_date = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+    date_end = report_date - dt.timedelta(days=1)  # EOP = day before report date
 
     if date_end >= dt.date.today():
-        print(f"ERROR: date {date_end} is today or in the future. "
-              f"Redshift data is only available through yesterday ({yesterday}). "
-              f"Use --date {yesterday} or earlier.", file=sys.stderr)
+        print(f"ERROR: EOP date {date_end} (derived from report date {report_date}) "
+              f"is today or in the future. Redshift data is only available through "
+              f"yesterday ({yesterday}).", file=sys.stderr)
         sys.exit(1)
 
-    # BOP = last day of prior month
+    # BOP = last day of month before EOP's month
     date_beg = date_end.replace(day=1) - dt.timedelta(days=1)
-    month_str = date_end.strftime('%Y%m')
+    month_str = report_date.strftime('%Y%m')  # folder/filename uses report date month
 
-    print(f"Portfolio Report: BOP={date_beg}, EOP={date_end}")
+    print(f"Portfolio Report: report_date={report_date}, BOP={date_beg}, EOP={date_end}")
 
     # ── Step 1: Query LOC tape + rollforward ───────────────────────
     tape_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'data_tape.sql')).read()

@@ -21,7 +21,7 @@ allowed-tools:
 
 **A borrowing base is NEVER a substitute for a portfolio report.** They are completely different files with different structures, different data (portfolio report has a mods tab and Summary dashboards), and go in different Drive folders.
 
-**Date interpretation for portfolio reports:** The user may say "4/1 portfolio reporting" meaning "generate the March EOM portfolio report" (since 4/1 is the first business day after March ends). Use the **last day of the prior month** as the --date. For example: "4/1 portfolio reporting" → `--date 2026-03-31`. "3/1 portfolio reporting" → `--date 2026-02-28`.
+**Date interpretation:** "4/1 portfolio reporting" → `--date 2026-04-01`. The report date is the 1st of the month. The script derives EOP (3/31) and BOP (2/28) automatically. File is named `Portfolio Report - 20260401.xlsx` and uploaded to `Portfolio Reporting/202604/`.
 
 ---
 
@@ -52,14 +52,14 @@ Navigate to the most recent month folder. Note the file ID of `Portfolio Reporti
 ### Step 2: Run the builder
 
 ```bash
-python /mnt/skills/custom/jeeves-borrowing-base/build_portfolio_report.py --date 2026-03-31 --template-id <PREVIOUS_REPORT_FILE_ID>
+python /mnt/skills/custom/jeeves-borrowing-base/build_portfolio_report.py --date 2026-04-01 --template-id <PREVIOUS_REPORT_FILE_ID>
 ```
 
-This single command: queries LOC tape, rollforward, GWC mods (RPP% filter); downloads previous report as template; copies col L → col N in Summary tabs (MoM); replaces data tabs; saves as `Portfolio Report - {YYYYMM}01.xlsx`.
+`--date` is the report date (1st of month). The script automatically derives EOP=3/31 and BOP=2/28. It queries LOC tape, rollforward, GWC mods (RPP% filter); downloads previous report as template; copies col L → col N in Summary tabs (MoM); replaces data tabs; saves as `Portfolio Report - 20260401.xlsx`.
 
 ### Step 3: Upload to the correct month folder
 
-The folder is based on the **report date** (the --date value), NOT the current date. For `--date 2026-03-31`, upload to `Portfolio Reporting/202603/`. For `--date 2026-02-28`, upload to `Portfolio Reporting/202602/`.
+The folder matches the **report date month**. For `--date 2026-04-01`, upload to `Portfolio Reporting/202604/`. For `--date 2026-03-01`, upload to `Portfolio Reporting/202603/`.
 
 ```bash
 python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"

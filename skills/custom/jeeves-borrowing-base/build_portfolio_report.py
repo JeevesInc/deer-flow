@@ -124,23 +124,34 @@ def _get_col_l_values(ws_data_only) -> dict:
     return values
 
 
-def _replace_data_sheet(wb, sheet_name: str, df) -> None:
+def _replace_data_sheet(wb, sheet_name: str, df, *, include_index: bool = False) -> None:
     """Replace a data sheet in the workbook with new DataFrame content.
 
-    Removes the old sheet and creates a new one, preserving tab order.
+    Clears the existing sheet and writes new data in place, preserving
+    the sheet's position in the workbook tab order.
+
+    Args:
+        wb: openpyxl Workbook.
+        sheet_name: Name of the sheet to replace.
+        df: pandas DataFrame with the new data.
+        include_index: If True, write the DataFrame index as column A
+            (matches the pandas default ``to_excel`` behavior).  The
+            ``loc`` and ``rollforward`` tabs in the real portfolio report
+            have a pandas index column; ``mods`` does not.
     """
-    import openpyxl
     from openpyxl.utils.dataframe import dataframe_to_rows
 
-    # Find the position of the existing sheet
     if sheet_name in wb.sheetnames:
-        idx = wb.sheetnames.index(sheet_name)
-        del wb[sheet_name]
+        ws = wb[sheet_name]
+        # Clear all existing data (rows and columns) without deleting the sheet
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.value = None
     else:
-        idx = len(wb.sheetnames)
+        # Sheet doesn't exist — append at end
+        ws = wb.create_sheet(sheet_name)
 
-    ws = wb.create_sheet(sheet_name, idx)
-    for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), 1):
+    for r_idx, row in enumerate(dataframe_to_rows(df, index=include_index, header=True), 1):
         for c_idx, value in enumerate(row, 1):
             ws.cell(row=r_idx, column=c_idx, value=value)
 
@@ -241,14 +252,19 @@ def main():
     # ── Step 5: Replace data tabs ──────────────────────────────────
     print("  Replacing data tabs...")
 
-    print(f"    loc: {len(df_loc)} rows x {len(df_loc.columns)} cols")
-    _replace_data_sheet(wb, 'loc', df_loc)
+    # loc and rollforward have a pandas index in col A (the original report
+    # was written with df.to_excel which includes the index by default).
+    # Summary formulas reference columns by letter, so the index column
+    # must be present or every formula shifts left by one.
+    # mods does NOT have an index column.
+    print(f"    loc: {len(df_loc)} rows x {len(df_loc.columns)} cols (+ index)")
+    _replace_data_sheet(wb, 'loc', df_loc, include_index=True)
 
-    print(f"    rollforward: {len(df_rollforward)} rows x {len(df_rollforward.columns)} cols")
-    _replace_data_sheet(wb, 'rollforward', df_rollforward)
+    print(f"    rollforward: {len(df_rollforward)} rows x {len(df_rollforward.columns)} cols (+ index)")
+    _replace_data_sheet(wb, 'rollforward', df_rollforward, include_index=True)
 
     print(f"    mods: {len(df_mods)} rows x {len(df_mods.columns)} cols")
-    _replace_data_sheet(wb, 'mods', df_mods)
+    _replace_data_sheet(wb, 'mods', df_mods, include_index=False)
 
     # ── Step 6: Save ───────────────────────────────────────────────
     filename = f"Portfolio Report - {month_str}01.xlsx"

@@ -9,23 +9,25 @@ allowed-tools:
 
 # Borrowing Base & Portfolio Report Pipeline
 
-## IMPORTANT — Route the request correctly
+## CRITICAL — Route the request correctly
 
-**"Portfolio report" / "portfolio reporting" ≠ borrowing base.** These are DIFFERENT deliverables:
+**"Portfolio report" / "portfolio reporting" is NOT a borrowing base.** STOP and read this table:
 
 | If the user says... | They want | Script | Upload to |
 |---------------------|-----------|--------|-----------|
-| "portfolio report", "portfolio reporting", "monthly report" | **Portfolio Report** (7-tab workbook with Summary dashboards, mods, MoM comparison) | `build_portfolio_report.py` | `Portfolio Reporting/{YYYYMM}/` |
-| "borrowing base", "BB", "run the tape", "US BB" | **US Borrowing Base** (Bridge) | `build_us.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/US/` |
-| "SOFOM", "MX BB", "MX borrowing base" | **MX Borrowing Base** (SOFOM) | `build_mx.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/MX/` |
+| "portfolio report", "portfolio reporting", "monthly report", "run reporting" | **Portfolio Report** → use `build_portfolio_report.py` | `build_portfolio_report.py` | `Portfolio Reporting/{YYYYMM}/` |
+| "borrowing base", "BB", "run the tape", "US BB" | **US Borrowing Base** | `build_us.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/US/` |
+| "SOFOM", "MX BB", "MX borrowing base" | **MX Borrowing Base** | `build_mx.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/MX/` |
 
-**Never substitute a borrowing base for a portfolio report.** They have different structures, different data, and go in different Drive folders.
+**A borrowing base is NEVER a substitute for a portfolio report.** They are completely different files with different structures, different data (portfolio report has a mods tab and Summary dashboards), and go in different Drive folders.
+
+**Date interpretation for portfolio reports:** The user may say "4/1 portfolio reporting" meaning "generate the March EOM portfolio report" (since 4/1 is the first business day after March ends). Use the **last day of the prior month** as the --date. For example: "4/1 portfolio reporting" → `--date 2026-03-31`. "3/1 portfolio reporting" → `--date 2026-02-28`.
 
 ---
 
 ## Monthly Portfolio Report
 
-The portfolio report is a 7-tab workbook with formula-driven Summary dashboards. It is NOT raw data — it uses a template from the previous month.
+The portfolio report is a 7-tab workbook with formula-driven Summary dashboards. It is NOT raw data — it uses a template from the previous month. **If the user asks for "portfolio reporting", THIS is what they want — not borrowing bases.**
 
 **Template structure:**
 
@@ -130,8 +132,9 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves 
 
 ## Rules
 
+- **CRITICAL — "portfolio reporting" = `build_portfolio_report.py`. NEVER use `build_us.py` for a portfolio report.**
 - **CRITICAL — Never use today's date.** Data only available through yesterday. Scripts reject today/future.
-- **"Portfolio reporting" → use `build_portfolio_report.py`, NOT `build_us.py`**
+- **Date mapping for portfolio reports:** "N/1 portfolio reporting" → use last day of prior month as --date (e.g., "4/1" → `--date 2026-03-31`)
 - Always state the date range in your response
 - Never modify existing files on Drive — create new dated copies
 - Remind user to open in Excel for formula recalculation

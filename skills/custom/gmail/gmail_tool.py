@@ -1,49 +1,42 @@
 #!/usr/bin/env python3
-"""Gmail tool: search emails, read messages, and create draft replies.
+"""Gmail tool: search emails, read messages, and create draft replies with attachments.
 
 Usage:
     python gmail_tool.py search "query"           # Search emails
     python gmail_tool.py read <message_id>         # Read a specific email
-    python gmail_tool.py draft <message_id> "body" # Draft a reply to an email
-    python gmail_tool.py draft-new "to" "subject" "body"  # Draft a new email
+    python gmail_tool.py draft <message_id> "body" [--attach file1 [--attach file2]]
+    python gmail_tool.py draft-new "to" "subject" "body" [--attach file1 [--attach file2]]
+
+Attachments can be:
+    - Local file paths: /mnt/user-data/outputs/report.xlsx
+    - Google Drive file IDs: drive:1LocDOgKKjQ4xs9bBRtkq_VvBTiCqmcMj
 
 Requires env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
 """
 
 import base64
 import email.utils
+import mimetypes
 import os
 import re
 import sys
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
-def _get_creds():
-    for var in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'):
-        if not os.environ.get(var):
-            print(f"ERROR: Missing environment variable {var}", file=sys.stderr)
-            sys.exit(1)
-
-    try:
-        from google.oauth2.credentials import Credentials
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q',
-                               'google-api-python-client', 'google-auth'])
-        from google.oauth2.credentials import Credentials
-
-    return Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from google_auth import get_credentials as _get_creds
 
 
 def _get_service():
     from googleapiclient.discovery import build
     return build('gmail', 'v1', credentials=_get_creds())
+
+
+def _get_drive_service():
+    from googleapiclient.discovery import build
+    return build('drive', 'v3', credentials=_get_creds())
 
 
 def _clean_html(html):
@@ -78,6 +71,84 @@ def _header(headers, name):
         if h['name'].lower() == name.lower():
             return h['value']
     return ''
+
+
+def _resolve_attachment(path_or_id):
+    """Resolve an attachment source to (filename, content_bytes, mime_type).
+
+    Supports:
+      - Local file paths (absolute or /mnt/ virtual paths)
+      - Google Drive file IDs prefixed with 'drive:'
+    """
+    if path_or_id.startswith('drive:'):
+        # Download from Google Drive
+        file_id = path_or_id[6:]
+        drive = _get_drive_service()
+        try:
+            meta = drive.files().get(fileId=file_id, fields='name,mimeType').execute()
+        except Exception as e:
+            print(f"ERROR: Cannot access Drive file {file_id}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        filename = meta.get('name', 'attachment')
+        file_mime = meta.get('mimeType', '')
+
+        # Google Workspace types need export
+        export_map = {
+            'application/vnd.google-apps.spreadsheet': ('text/csv', '.csv'),
+            'application/vnd.google-apps.document': ('application/pdf', '.pdf'),
+            'application/vnd.google-apps.presentation': ('application/pdf', '.pdf'),
+        }
+
+        if file_mime in export_map:
+            export_mime, ext = export_map[file_mime]
+            content = drive.files().export(fileId=file_id, mimeType=export_mime).execute()
+            if not filename.endswith(ext):
+                filename += ext
+            return filename, content, export_mime
+        else:
+            content = drive.files().get_media(fileId=file_id).execute()
+            return filename, content, file_mime or 'application/octet-stream'
+    else:
+        # Local file
+        if not os.path.exists(path_or_id):
+            print(f"ERROR: File not found: {path_or_id}", file=sys.stderr)
+            sys.exit(1)
+        filename = os.path.basename(path_or_id)
+        with open(path_or_id, 'rb') as f:
+            content = f.read()
+        mime_type, _ = mimetypes.guess_type(filename)
+        return filename, content, mime_type or 'application/octet-stream'
+
+
+def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
+                in_reply_to=None, references=None):
+    """Build a MIME message, with attachments if provided."""
+    if attachments:
+        mime = MIMEMultipart('mixed')
+        mime.attach(MIMEText(body_text))
+
+        for att_source in attachments:
+            filename, content, content_type = _resolve_attachment(att_source)
+            maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+            part = MIMEBase(maintype, subtype)
+            part.set_payload(content)
+            from email.encoders import encode_base64
+            encode_base64(part)
+            part.add_header('Content-Disposition', 'attachment', filename=filename)
+            mime.attach(part)
+            print(f"  Attached: {filename} ({content_type}, {len(content) / 1024:.1f} KB)")
+    else:
+        mime = MIMEText(body_text)
+
+    mime['to'] = to_addr
+    mime['from'] = from_addr
+    mime['subject'] = subject
+    if in_reply_to:
+        mime['In-Reply-To'] = in_reply_to
+        mime['References'] = references or in_reply_to
+
+    return mime
 
 
 def cmd_search(query, max_results=10):
@@ -128,7 +199,7 @@ def cmd_read(message_id):
         print("(no text body found)")
 
 
-def cmd_draft_reply(message_id, body_text):
+def cmd_draft_reply(message_id, body_text, attachments=None):
     service = _get_service()
 
     # Get the original message for threading
@@ -143,18 +214,15 @@ def cmd_draft_reply(message_id, body_text):
         subject = f"Re: {subject}"
     orig_message_id = _header(orig_headers, 'Message-ID')
 
-    # Get authenticated user's email
     profile = service.users().getProfile(userId='me').execute()
     my_email = profile['emailAddress']
 
-    # Build the MIME message
-    mime = MIMEText(body_text)
-    mime['to'] = reply_to
-    mime['from'] = my_email
-    mime['subject'] = subject
-    if orig_message_id:
-        mime['In-Reply-To'] = orig_message_id
-        mime['References'] = orig_message_id
+    mime = _build_mime(
+        body_text, my_email, reply_to, subject,
+        attachments=attachments,
+        in_reply_to=orig_message_id,
+        references=orig_message_id,
+    )
 
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('utf-8')
 
@@ -173,19 +241,18 @@ def cmd_draft_reply(message_id, body_text):
     print(f"  Thread:   {thread_id}")
     print(f"  To:       {reply_to}")
     print(f"  Subject:  {subject}")
+    if attachments:
+        print(f"  Attachments: {len(attachments)}")
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
 
 
-def cmd_draft_new(to, subject, body_text):
+def cmd_draft_new(to, subject, body_text, attachments=None):
     service = _get_service()
 
     profile = service.users().getProfile(userId='me').execute()
     my_email = profile['emailAddress']
 
-    mime = MIMEText(body_text)
-    mime['to'] = to
-    mime['from'] = my_email
-    mime['subject'] = subject
+    mime = _build_mime(body_text, my_email, to, subject, attachments=attachments)
 
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('utf-8')
 
@@ -198,7 +265,24 @@ def cmd_draft_new(to, subject, body_text):
     print(f"  Draft ID: {draft['id']}")
     print(f"  To:       {to}")
     print(f"  Subject:  {subject}")
+    if attachments:
+        print(f"  Attachments: {len(attachments)}")
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
+
+
+def _parse_attachments(args):
+    """Extract --attach values from remaining args."""
+    attachments = []
+    i = 0
+    remaining = []
+    while i < len(args):
+        if args[i] == '--attach' and i + 1 < len(args):
+            attachments.append(args[i + 1])
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return remaining, attachments or None
 
 
 def main():
@@ -228,15 +312,17 @@ def main():
 
     elif command == 'draft':
         if len(sys.argv) < 4:
-            print("Usage: python gmail_tool.py draft <message_id> \"reply body\"", file=sys.stderr)
+            print('Usage: python gmail_tool.py draft <message_id> "reply body" [--attach file]', file=sys.stderr)
             sys.exit(1)
-        cmd_draft_reply(sys.argv[2], sys.argv[3])
+        _, attachments = _parse_attachments(sys.argv[4:])
+        cmd_draft_reply(sys.argv[2], sys.argv[3], attachments=attachments)
 
     elif command == 'draft-new':
         if len(sys.argv) < 5:
-            print("Usage: python gmail_tool.py draft-new \"to@email\" \"subject\" \"body\"", file=sys.stderr)
+            print('Usage: python gmail_tool.py draft-new "to" "subject" "body" [--attach file]', file=sys.stderr)
             sys.exit(1)
-        cmd_draft_new(sys.argv[2], sys.argv[3], sys.argv[4])
+        _, attachments = _parse_attachments(sys.argv[5:])
+        cmd_draft_new(sys.argv[2], sys.argv[3], sys.argv[4], attachments=attachments)
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

@@ -39,24 +39,17 @@ def _extract_id(url_or_id):
     raise ValueError(f"Cannot extract file ID from: {url_or_id}")
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(SCRIPT_DIR, '..', '_shared'))
+from google_auth import get_credentials
+
+
 def _download_template(drive_id):
     """Download an xlsx from Drive to a temp file."""
-    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    for var in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'):
-        if not os.environ.get(var):
-            print(f"ERROR: Missing env var {var}", file=sys.stderr)
-            sys.exit(1)
-
     file_id = _extract_id(drive_id)
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
+    creds = get_credentials()
     service = build('drive', 'v3', credentials=creds)
 
     meta = service.files().get(fileId=file_id, fields='name,mimeType').execute()
@@ -135,6 +128,7 @@ def main():
         # Open both workbooks
         print("Opening template (preserving formulas)...")
         template_wb = openpyxl.load_workbook(template_path)
+        original_tab_order = list(template_wb.sheetnames)  # capture before any modifications
 
         print("Opening data workbook...")
         data_wb = openpyxl.load_workbook(args.data_workbook)
@@ -148,7 +142,9 @@ def main():
 
         # Tabs that need a pandas index column (col A) to match the
         # original template structure.  elig_summary does not have one.
-        _TABS_WITH_INDEX = {'tape_start', 'tape_end', 'rollforward', 'tape', 'tape_combined'}
+        # NOTE: 'tape' (SOFOM) and 'tape_combined' do NOT get an index -
+        # the SOFOM template's tape tab starts with 'dt' in col A.
+        _TABS_WITH_INDEX = {'tape_start', 'tape_end', 'rollforward'}
 
         # Replace data tabs in-place (clear + rewrite) to preserve tab order.
         # If a data tab doesn't exist in the template yet, append it.
@@ -173,6 +169,17 @@ def main():
             output_dir = os.environ.get('OUTPUTS_PATH', '/mnt/user-data/outputs')
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, template_name)
+
+        # Restore original template tab order -- openpyxl shifts sheets to the front
+        # when clearing/rewriting them in-place. Re-apply the order captured before
+        # any modifications. Any sheets not in original_tab_order are appended at end.
+        sheet_map = {ws.title: ws for ws in template_wb._sheets}
+        ordered = [n for n in original_tab_order if n in sheet_map]
+        extras = [n for n in sheet_map if n not in original_tab_order]
+        try:
+            template_wb._sheets = [sheet_map[n] for n in ordered + extras]
+        except Exception:
+            pass
 
         print(f"Saving merged workbook: {output_path}")
         template_wb.save(output_path)

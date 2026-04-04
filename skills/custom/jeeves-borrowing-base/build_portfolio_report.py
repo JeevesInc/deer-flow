@@ -29,42 +29,18 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _ensure_deps():
-    try:
-        import psycopg2, pandas, openpyxl  # noqa: F401
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q',
-                               'psycopg2-binary', 'pandas', 'openpyxl'])
-
-
-def _connect():
-    import psycopg2
-    return psycopg2.connect(
-        host=os.environ['REDSHIFT_HOST'],
-        port=int(os.environ['REDSHIFT_PORT']),
-        dbname=os.environ['REDSHIFT_DB'],
-        user=os.environ['REDSHIFT_USER'],
-        password=os.environ['REDSHIFT_PASSWORD'],
-        sslmode='require',
-        sslrootcert='disable',
-    )
+from redshift_util import ensure_deps, connect
+sys.path.insert(0, os.path.join(SCRIPT_DIR, '..', '_shared'))
+from google_auth import get_credentials
 
 
 def _download_template(file_id: str, dest_path: str) -> None:
     """Download a file from Google Drive."""
-    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseDownload
     import io
 
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
+    creds = get_credentials()
     service = build('drive', 'v3', credentials=creds)
     request = service.files().get_media(fileId=file_id)
     fh = io.FileIO(dest_path, 'wb')
@@ -169,7 +145,7 @@ def main():
                         help='Google Drive file ID of the previous month\'s Portfolio Report')
     args = parser.parse_args()
 
-    _ensure_deps()
+    ensure_deps()
     import pandas as pd
     import openpyxl
 
@@ -200,7 +176,7 @@ def main():
     rf_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql')).read()
     mods_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'gwc_mods.sql')).read()
 
-    con = _connect()
+    con = connect()
 
     print(f"  Querying LOC tape for {date_end} (EOP)...")
     df_loc = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)

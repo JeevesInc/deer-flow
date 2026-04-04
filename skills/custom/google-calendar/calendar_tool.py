@@ -25,27 +25,8 @@ from datetime import datetime, timedelta, timezone
 TIMEZONE = "America/Los_Angeles"
 
 
-def _get_creds():
-    for var in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'):
-        if not os.environ.get(var):
-            print(f"ERROR: Missing environment variable {var}", file=sys.stderr)
-            sys.exit(1)
-
-    try:
-        from google.oauth2.credentials import Credentials
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q',
-                               'google-api-python-client', 'google-auth'])
-        from google.oauth2.credentials import Credentials
-
-    return Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from google_auth import get_credentials as _get_creds
 
 
 def _get_service():
@@ -82,10 +63,7 @@ def _format_event(event, show_date=True):
     summary = event.get('summary', '(No title)')
     lines = []
 
-    if show_date:
-        lines.append(f"{time_range}  {summary}")
-    else:
-        lines.append(f"{time_range}  {summary}")
+    lines.append(f"{time_range}  {summary}")
 
     # Location
     location = event.get('location')

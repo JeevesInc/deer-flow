@@ -4,13 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import mimetypes
 import time
 from collections.abc import Mapping
-from datetime import datetime
 from typing import Any
 
-from app.channels.message_bus import InboundMessage, InboundMessageType, MessageBus, OutboundMessage, ResolvedAttachment
+from app.channels.manager_helpers import (
+    accumulate_stream_text,
+    extract_artifacts,
+    extract_response_text,
+    extract_tool_call_name,
+    format_artifact_text,
+    format_progress_text,
+    is_tool_result,
+    prepare_artifact_delivery,
+    stamp_message,
+)
+from app.channels.message_bus import InboundMessage, InboundMessageType, MessageBus, OutboundMessage
 from app.channels.store import ChannelStore
 
 logger = logging.getLogger(__name__)
@@ -26,12 +35,6 @@ DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "subagent_enabled": False,
 }
 STREAM_UPDATE_MIN_INTERVAL_SECONDS = 0.35
-
-def _stamp_message(text: str) -> str:
-    """Prepend the current date/time to a user message so the agent always knows 'now'."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M, %A")
-    return f"<current_date>{now}</current_date>\n{text}"
-
 
 CHANNEL_CAPABILITIES = {
     "feishu": {"supports_streaming": True, "stream_update_interval": STREAM_UPDATE_MIN_INTERVAL_SECONDS},
@@ -51,340 +54,6 @@ def _merge_dicts(*layers: Any) -> dict[str, Any]:
             merged.update(layer)
     return merged
 
-
-def _extract_response_text(result: dict | list) -> str:
-    """Extract the last AI message text from a LangGraph runs.wait result.
-
-    ``runs.wait`` returns the final state dict which contains a ``messages``
-    list.  Each message is a dict with at least ``type`` and ``content``.
-
-    Handles special cases:
-    - Regular AI text responses
-    - Clarification interrupts (``ask_clarification`` tool messages)
-    - AI messages with tool_calls but no text content
-    """
-    if isinstance(result, list):
-        messages = result
-    elif isinstance(result, dict):
-        messages = result.get("messages", [])
-    else:
-        return ""
-
-    # Walk backwards to find usable response text, but stop at the last
-    # human message to avoid returning text from a previous turn.
-    for msg in reversed(messages):
-        if not isinstance(msg, dict):
-            continue
-
-        msg_type = msg.get("type")
-
-        # Stop at the last human message — anything before it is a previous turn
-        if msg_type == "human":
-            break
-
-        # Check for tool messages from ask_clarification (interrupt case)
-        if msg_type == "tool" and msg.get("name") == "ask_clarification":
-            content = msg.get("content", "")
-            if isinstance(content, str) and content:
-                return content
-
-        # Regular AI message with text content
-        if msg_type == "ai":
-            content = msg.get("content", "")
-            if isinstance(content, str) and content:
-                return content
-            # content can be a list of content blocks
-            if isinstance(content, list):
-                parts = []
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        parts.append(block.get("text", ""))
-                    elif isinstance(block, str):
-                        parts.append(block)
-                text = "".join(parts)
-                if text:
-                    return text
-    return ""
-
-
-def _extract_text_content(content: Any) -> str:
-    """Extract text from a streaming payload content field."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, Mapping):
-                text = block.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-                else:
-                    nested = block.get("content")
-                    if isinstance(nested, str):
-                        parts.append(nested)
-        return "".join(parts)
-    if isinstance(content, Mapping):
-        for key in ("text", "content"):
-            value = content.get(key)
-            if isinstance(value, str):
-                return value
-    return ""
-
-
-def _merge_stream_text(existing: str, chunk: str) -> str:
-    """Merge either delta text or cumulative text into a single snapshot."""
-    if not chunk:
-        return existing
-    if not existing or chunk == existing:
-        return chunk or existing
-    if chunk.startswith(existing):
-        return chunk
-    if existing.endswith(chunk):
-        return existing
-    return existing + chunk
-
-
-def _extract_stream_message_id(payload: Any, metadata: Any) -> str | None:
-    """Best-effort extraction of the streamed AI message identifier."""
-    candidates = [payload, metadata]
-    if isinstance(payload, Mapping):
-        candidates.append(payload.get("kwargs"))
-
-    for candidate in candidates:
-        if not isinstance(candidate, Mapping):
-            continue
-        for key in ("id", "message_id"):
-            value = candidate.get(key)
-            if isinstance(value, str) and value:
-                return value
-    return None
-
-
-def _accumulate_stream_text(
-    buffers: dict[str, str],
-    current_message_id: str | None,
-    event_data: Any,
-) -> tuple[str | None, str | None]:
-    """Convert a ``messages-tuple`` event into the latest displayable AI text."""
-    payload = event_data
-    metadata: Any = None
-    if isinstance(event_data, (list, tuple)):
-        if event_data:
-            payload = event_data[0]
-        if len(event_data) > 1:
-            metadata = event_data[1]
-
-    if isinstance(payload, str):
-        message_id = current_message_id or "__default__"
-        buffers[message_id] = _merge_stream_text(buffers.get(message_id, ""), payload)
-        return buffers[message_id], message_id
-
-    if not isinstance(payload, Mapping):
-        return None, current_message_id
-
-    payload_type = str(payload.get("type", "")).lower()
-    if "tool" in payload_type:
-        return None, current_message_id
-
-    text = _extract_text_content(payload.get("content"))
-    if not text and isinstance(payload.get("kwargs"), Mapping):
-        text = _extract_text_content(payload["kwargs"].get("content"))
-    if not text:
-        return None, current_message_id
-
-    message_id = _extract_stream_message_id(payload, metadata) or current_message_id or "__default__"
-    buffers[message_id] = _merge_stream_text(buffers.get(message_id, ""), text)
-    return buffers[message_id], message_id
-
-
-# -- Tool-call progress helpers --------------------------------------------
-
-# Human-readable labels for common tool names
-_TOOL_LABELS: dict[str, str] = {
-    "bash": "Running command",
-    "read_file": "Reading file",
-    "write_file": "Writing file",
-    "str_replace": "Editing file",
-    "ls": "Listing directory",
-    "present_files": "Preparing files",
-    "web_search": "Searching the web",
-    "web_fetch": "Fetching web page",
-    "task": "Delegating to subagent",
-    "ask_clarification": "Asking for clarification",
-}
-
-
-def _extract_tool_call_name(event_data: Any) -> str | None:
-    """Extract the tool name from a messages-tuple event if it's an AI tool-call."""
-    payload = event_data
-    if isinstance(event_data, (list, tuple)) and event_data:
-        payload = event_data[0]
-    if not isinstance(payload, Mapping):
-        return None
-    if str(payload.get("type", "")).lower() != "ai":
-        return None
-    tool_calls = payload.get("tool_calls") or []
-    if not tool_calls:
-        # Also check kwargs.tool_calls
-        kwargs = payload.get("kwargs")
-        if isinstance(kwargs, Mapping):
-            tool_calls = kwargs.get("tool_calls") or []
-    if tool_calls and isinstance(tool_calls, list):
-        first = tool_calls[0]
-        if isinstance(first, Mapping):
-            return first.get("name")
-    return None
-
-
-def _is_tool_result(event_data: Any) -> bool:
-    """Check if a messages-tuple event is a tool result (tool finished running)."""
-    payload = event_data
-    if isinstance(event_data, (list, tuple)) and event_data:
-        payload = event_data[0]
-    if not isinstance(payload, Mapping):
-        return False
-    return "tool" in str(payload.get("type", "")).lower()
-
-
-def _format_progress_text(tool_name: str, elapsed_seconds: int, tools_seen: list[str] | None = None) -> str:
-    """Format a human-readable progress line for the currently running tool."""
-    label = _TOOL_LABELS.get(tool_name, f"Using {tool_name}")
-    minutes, seconds = divmod(elapsed_seconds, 60)
-    if minutes > 0:
-        time_str = f"{minutes}m {seconds}s"
-    else:
-        time_str = f"{seconds}s"
-    line = f":hourglass_flowing_sand: {label}... ({time_str})"
-    # Show breadcrumb of tools used so far (compact)
-    if tools_seen and len(tools_seen) > 1:
-        prev = [_TOOL_LABELS.get(t, t) for t in tools_seen if t != tool_name]
-        if prev:
-            line += f"\n:footprints: Done: {', '.join(prev[-5:])}"
-    return line
-
-
-def _extract_artifacts(result: dict | list) -> list[str]:
-    """Extract artifact paths from the last AI response cycle only.
-
-    Instead of reading the full accumulated ``artifacts`` state (which contains
-    all artifacts ever produced in the thread), this inspects the messages after
-    the last human message and collects file paths from ``present_files`` tool
-    calls.  This ensures only newly-produced artifacts are returned.
-    """
-    if isinstance(result, list):
-        messages = result
-    elif isinstance(result, dict):
-        messages = result.get("messages", [])
-    else:
-        return []
-
-    artifacts: list[str] = []
-    for msg in reversed(messages):
-        if not isinstance(msg, dict):
-            continue
-        # Stop at the last human message — anything before it is a previous turn
-        if msg.get("type") == "human":
-            break
-        # Look for AI messages with present_files tool calls
-        if msg.get("type") == "ai":
-            for tc in msg.get("tool_calls", []):
-                if isinstance(tc, dict) and tc.get("name") == "present_files":
-                    args = tc.get("args", {})
-                    paths = args.get("filepaths", [])
-                    if isinstance(paths, list):
-                        artifacts.extend(p for p in paths if isinstance(p, str))
-    return artifacts
-
-
-def _format_artifact_text(artifacts: list[str]) -> str:
-    """Format artifact paths into a human-readable text block listing filenames."""
-    import posixpath
-
-    filenames = [posixpath.basename(p) for p in artifacts]
-    if len(filenames) == 1:
-        return f"Created File: 📎 {filenames[0]}"
-    return "Created Files: 📎 " + "、".join(filenames)
-
-
-_OUTPUTS_VIRTUAL_PREFIX = "/mnt/user-data/outputs/"
-
-
-def _resolve_attachments(thread_id: str, artifacts: list[str]) -> list[ResolvedAttachment]:
-    """Resolve virtual artifact paths to host filesystem paths with metadata.
-
-    Only paths under ``/mnt/user-data/outputs/`` are accepted; any other
-    virtual path is rejected with a warning to prevent exfiltrating uploads
-    or workspace files via IM channels.
-
-    Skips artifacts that cannot be resolved (missing files, invalid paths)
-    and logs warnings for them.
-    """
-    from deerflow.config.paths import get_paths
-
-    attachments: list[ResolvedAttachment] = []
-    paths = get_paths()
-    outputs_dir = paths.sandbox_outputs_dir(thread_id).resolve()
-    for virtual_path in artifacts:
-        # Security: only allow files from the agent outputs directory
-        if not virtual_path.startswith(_OUTPUTS_VIRTUAL_PREFIX):
-            logger.warning("[Manager] rejected non-outputs artifact path: %s", virtual_path)
-            continue
-        try:
-            actual = paths.resolve_virtual_path(thread_id, virtual_path)
-            # Verify the resolved path is actually under the outputs directory
-            # (guards against path-traversal even after prefix check)
-            try:
-                actual.resolve().relative_to(outputs_dir)
-            except ValueError:
-                logger.warning("[Manager] artifact path escapes outputs dir: %s -> %s", virtual_path, actual)
-                continue
-            if not actual.is_file():
-                logger.warning("[Manager] artifact not found on disk: %s -> %s", virtual_path, actual)
-                continue
-            mime, _ = mimetypes.guess_type(str(actual))
-            mime = mime or "application/octet-stream"
-            attachments.append(
-                ResolvedAttachment(
-                    virtual_path=virtual_path,
-                    actual_path=actual,
-                    filename=actual.name,
-                    mime_type=mime,
-                    size=actual.stat().st_size,
-                    is_image=mime.startswith("image/"),
-                )
-            )
-        except (ValueError, OSError) as exc:
-            logger.warning("[Manager] failed to resolve artifact %s: %s", virtual_path, exc)
-    return attachments
-
-
-def _prepare_artifact_delivery(
-    thread_id: str,
-    response_text: str,
-    artifacts: list[str],
-) -> tuple[str, list[ResolvedAttachment]]:
-    """Resolve attachments and append filename fallbacks to the text response."""
-    attachments: list[ResolvedAttachment] = []
-    if not artifacts:
-        return response_text, attachments
-
-    attachments = _resolve_attachments(thread_id, artifacts)
-    resolved_virtuals = {attachment.virtual_path for attachment in attachments}
-    unresolved = [path for path in artifacts if path not in resolved_virtuals]
-
-    if unresolved:
-        artifact_text = _format_artifact_text(unresolved)
-        response_text = (response_text + "\n\n" + artifact_text) if response_text else artifact_text
-
-    # Always include resolved attachment filenames as a text fallback so files
-    # remain discoverable even when the upload is skipped or fails.
-    if attachments:
-        resolved_text = _format_artifact_text([attachment.virtual_path for attachment in attachments])
-        response_text = (response_text + "\n\n" + resolved_text) if response_text else resolved_text
-
-    return response_text, attachments
 
 
 class ChannelManager:
@@ -592,7 +261,7 @@ class ChannelManager:
             )
             return
 
-        stamped_text = _stamp_message(msg.text)
+        stamped_text = stamp_message(msg.text)
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r)", thread_id, msg.text[:100])
         result = await client.runs.wait(
             thread_id,
@@ -602,8 +271,8 @@ class ChannelManager:
             context=run_context,
         )
 
-        response_text = _extract_response_text(result)
-        artifacts = _extract_artifacts(result)
+        response_text = extract_response_text(result)
+        artifacts = extract_artifacts(result)
 
         logger.info(
             "[Manager] agent response received: thread_id=%s, response_len=%d, artifacts=%d",
@@ -612,11 +281,11 @@ class ChannelManager:
             len(artifacts),
         )
 
-        response_text, attachments = _prepare_artifact_delivery(thread_id, response_text, artifacts)
+        response_text, attachments = prepare_artifact_delivery(thread_id, response_text, artifacts)
 
         if not response_text:
             if attachments:
-                response_text = _format_artifact_text([a.virtual_path for a in attachments])
+                response_text = format_artifact_text([a.virtual_path for a in attachments])
             else:
                 response_text = "(No response from agent)"
 
@@ -641,7 +310,7 @@ class ChannelManager:
         run_config: dict[str, Any],
         run_context: dict[str, Any],
     ) -> None:
-        stamped_text = _stamp_message(msg.text)
+        stamped_text = stamp_message(msg.text)
         logger.info("[Manager] invoking runs.stream(thread_id=%s, text=%r)", thread_id, msg.text[:100])
 
         last_values: dict[str, Any] | list | None = None
@@ -687,7 +356,7 @@ class ChannelManager:
                     break
                 if active_tool:
                     elapsed = int(time.monotonic() - tool_start_at)
-                    await _publish_progress(_format_progress_text(active_tool, elapsed, tools_seen))
+                    await _publish_progress(format_progress_text(active_tool, elapsed, tools_seen))
 
         heartbeat_task = asyncio.create_task(_heartbeat_loop())
 
@@ -705,25 +374,25 @@ class ChannelManager:
 
                 if event == "messages-tuple":
                     # Check for tool-call events (AI requesting a tool)
-                    tool_name = _extract_tool_call_name(data)
+                    tool_name = extract_tool_call_name(data)
                     if tool_name:
                         active_tool = tool_name
                         tool_start_at = time.monotonic()
                         if tool_name not in tools_seen:
                             tools_seen.append(tool_name)
                         # Immediately publish on tool transition
-                        await _publish_progress(_format_progress_text(active_tool, 0, tools_seen))
+                        await _publish_progress(format_progress_text(active_tool, 0, tools_seen))
 
                     # Check for tool-result events (tool finished)
-                    if _is_tool_result(data):
+                    if is_tool_result(data):
                         active_tool = None
 
-                    accumulated_text, current_message_id = _accumulate_stream_text(streamed_buffers, current_message_id, data)
+                    accumulated_text, current_message_id = accumulate_stream_text(streamed_buffers, current_message_id, data)
                     if accumulated_text:
                         latest_text = accumulated_text
                 elif event == "values" and isinstance(data, (dict, list)):
                     last_values = data
-                    snapshot_text = _extract_response_text(data)
+                    snapshot_text = extract_response_text(data)
                     if snapshot_text:
                         latest_text = snapshot_text
 
@@ -743,13 +412,13 @@ class ChannelManager:
                 pass
 
             result = last_values if last_values is not None else {"messages": [{"type": "ai", "content": latest_text}]}
-            response_text = _extract_response_text(result)
-            artifacts = _extract_artifacts(result)
-            response_text, attachments = _prepare_artifact_delivery(thread_id, response_text, artifacts)
+            response_text = extract_response_text(result)
+            artifacts = extract_artifacts(result)
+            response_text, attachments = prepare_artifact_delivery(thread_id, response_text, artifacts)
 
             if not response_text:
                 if attachments:
-                    response_text = _format_artifact_text([attachment.virtual_path for attachment in attachments])
+                    response_text = format_artifact_text([attachment.virtual_path for attachment in attachments])
                 elif stream_error:
                     response_text = "An error occurred while processing your request. Please try again."
                 else:

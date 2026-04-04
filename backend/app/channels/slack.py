@@ -303,7 +303,12 @@ class SlackChannel(Channel):
 
     @staticmethod
     def _extract_attachment_urls(event: dict) -> list[str]:
-        """Pull URLs from Slack attachments, files, and blocks that may not appear in text."""
+        """Pull URLs from Slack attachments and blocks that may not appear in text.
+
+        Excludes Slack-hosted file URLs (files.slack.com) because those require
+        bot-token authentication and are handled separately by _download_event_files
+        which inlines text content or notes binary files.
+        """
         urls: list[str] = []
         # Attachments (link unfurls, bot-posted rich content)
         for att in event.get("attachments", []):
@@ -311,12 +316,13 @@ class SlackChannel(Channel):
                 url = att.get(key)
                 if url and url not in urls:
                     urls.append(url)
-        # Shared files (Google Drive shares, uploaded docs)
+        # Shared files — only include external/public URLs, not Slack-hosted ones
+        # (Slack file URLs need bot token auth and are already handled by download+inline)
         for f in event.get("files", []):
-            for key in ("url_private", "permalink", "url_private_download"):
-                url = f.get(key)
-                if url and url not in urls:
-                    urls.append(url)
+            # permalink_public is the only publicly accessible file URL
+            url = f.get("permalink_public")
+            if url and url not in urls:
+                urls.append(url)
         return urls
 
     def _fetch_slack_message(self, channel_id: str, message_ts: str) -> str | None:
@@ -396,20 +402,19 @@ class SlackChannel(Channel):
 
     @staticmethod
     def _extract_forwarded_text(event: dict) -> str:
-        """Extract text content from forwarded messages and rich attachments.
+        """Extract text content from forwarded messages, emails, and rich attachments.
 
-        When a user forwards a Slack message, the original content appears in
+        When a user forwards a Slack message or email, the content appears in
         the ``attachments`` array with fields like ``text``, ``fallback``,
-        ``pretext``, and ``author_name``.  The parent message's ``text`` field
-        is often empty, so without this extraction the forwarded content is
-        silently lost.
+        ``pretext``, ``title``, and ``author_name``.  The parent message's
+        ``text`` field is often empty, so without this extraction the forwarded
+        content is silently lost.
         """
         parts: list[str] = []
         for att in event.get("attachments", []):
             # Skip link-unfurl attachments that only have a URL preview
             # (those are handled by _extract_attachment_urls)
             if att.get("is_app_unfurl") or att.get("service_name"):
-                # Still grab text if present (some unfurls have summaries)
                 att_text = att.get("text", "").strip()
                 if att_text:
                     parts.append(att_text)
@@ -419,6 +424,10 @@ class SlackChannel(Channel):
             author = att.get("author_name") or att.get("author_subname", "")
             if author:
                 lines.append(f"[From {author}]")
+            # Title (common in email forwards: subject line)
+            title = att.get("title", "").strip()
+            if title:
+                lines.append(f"Subject: {title}")
             pretext = att.get("pretext", "").strip()
             if pretext:
                 lines.append(pretext)
@@ -427,6 +436,10 @@ class SlackChannel(Channel):
                 att_text = att.get("fallback", "").strip()
             if att_text:
                 lines.append(att_text)
+            # Footer (email signatures, timestamps)
+            footer = att.get("footer", "").strip()
+            if footer:
+                lines.append(f"— {footer}")
             if lines:
                 parts.append("\n".join(lines))
         return "\n\n".join(parts)
@@ -435,26 +448,42 @@ class SlackChannel(Channel):
         """Download a Slack-hosted file using the bot token.
 
         Returns the local file path on success, None on failure.
-        Files are saved to ``.deer-flow/slack_downloads/`` so the agent
-        can access them via ``read_file`` or ``bash``.
+        Files are saved to ``.deer-flow/slack_downloads/``.
         """
         url = file_info.get("url_private_download") or file_info.get("url_private")
         if not url:
+            logger.warning("[Slack] File has no download URL: keys=%s", list(file_info.keys()))
             return None
 
         name = file_info.get("name", "file")
-        # Sanitize filename
         safe_name = re.sub(r'[^\w\-.]', '_', name)
-        # Prefix with timestamp to avoid collisions
         ts = time.strftime("%Y%m%d_%H%M%S")
         safe_name = f"{ts}_{safe_name}"
 
-        # Save to .deer-flow/slack_downloads/
         backend_dir = Path(__file__).resolve().parent.parent.parent
         dl_dir = backend_dir / ".deer-flow" / "slack_downloads"
         dl_dir.mkdir(parents=True, exist_ok=True)
         dest = dl_dir / safe_name
 
+        # Try Slack SDK first (handles auth automatically), fall back to urllib
+        if self._web_client:
+            try:
+                resp = self._web_client.api_call(
+                    api_method="",
+                    http_verb="GET",
+                    api_url=url,
+                )
+                if resp.status_code == 200:
+                    dest.write_bytes(resp.data)
+                    size_kb = len(resp.data) / 1024
+                    logger.info("[Slack] Downloaded file via SDK: %s (%.1f KB) -> %s", name, size_kb, dest)
+                    return str(dest)
+                else:
+                    logger.warning("[Slack] SDK download failed (status %d) for %s, trying urllib", resp.status_code, name)
+            except Exception as exc:
+                logger.warning("[Slack] SDK download failed for %s: %s, trying urllib", name, exc)
+
+        # Fallback: urllib with explicit Bearer token
         bot_token = self.config.get("bot_token", "")
         if not bot_token:
             logger.warning("[Slack] No bot_token for file download")
@@ -466,10 +495,10 @@ class SlackChannel(Channel):
                 data = resp.read()
             dest.write_bytes(data)
             size_kb = len(data) / 1024
-            logger.info("[Slack] Downloaded file: %s (%.1f KB) -> %s", name, size_kb, dest)
+            logger.info("[Slack] Downloaded file via urllib: %s (%.1f KB) -> %s", name, size_kb, dest)
             return str(dest)
         except Exception as exc:
-            logger.error("[Slack] Failed to download file %s: %s", name, exc)
+            logger.error("[Slack] Failed to download file %s from %s: %s", name, url[:100], exc)
             return None
 
     def _download_event_files(self, event: dict) -> list[dict]:
@@ -535,21 +564,28 @@ class SlackChannel(Channel):
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
             return
 
-        # Debug: log raw event keys for diagnosing forwarded message issues
+        # Debug: log raw event structure for diagnosing forwarded message/email issues
         att_count = len(event.get("attachments", []))
         file_count = len(event.get("files", []))
         block_count = len(event.get("blocks", []))
         if att_count or file_count or block_count:
             logger.info(
-                "[Slack] Event has attachments=%d files=%d blocks=%d subtype=%s",
+                "[Slack] Event has attachments=%d files=%d blocks=%d subtype=%s text_len=%d",
                 att_count, file_count, block_count, event.get("subtype", "(none)"),
+                len(event.get("text", "")),
             )
-            # Log attachment details for debugging
             for i, att in enumerate(event.get("attachments", [])):
                 logger.info(
                     "[Slack]   attachment[%d]: keys=%s, text_len=%d, fallback_len=%d, from_url=%s",
                     i, list(att.keys()), len(att.get("text", "")), len(att.get("fallback", "")),
                     att.get("from_url", "(none)")[:120],
+                )
+            for i, f in enumerate(event.get("files", [])):
+                logger.info(
+                    "[Slack]   file[%d]: name=%s, mimetype=%s, filetype=%s, mode=%s, size=%s, url_private=%s",
+                    i, f.get("name"), f.get("mimetype"), f.get("filetype"),
+                    f.get("mode"), f.get("size"),
+                    ("present" if f.get("url_private") or f.get("url_private_download") else "MISSING"),
                 )
 
         # Download any Slack-hosted files before processing text
@@ -580,14 +616,43 @@ class SlackChannel(Channel):
                     resolved_urls.append(url)
             text = text + "\n\nAttached links:\n" + "\n".join(resolved_urls) if text else "\n".join(resolved_urls)
 
-        # Append downloaded file paths so the agent can access them
+        # Inline text-based file contents so the agent can read them directly.
+        # The sandbox can only access /mnt/user-data/ paths, and the DeerFlow
+        # thread doesn't exist yet at this point, so we can't copy files into
+        # the thread's uploads dir.  For text files (HTML emails, .txt, .eml,
+        # .csv, .json, etc.) we read the content inline.  Binary files are
+        # noted but can't be accessed until a future upload integration.
+        _TEXT_MIMETYPES = {"text/", "application/json", "application/xml", "application/csv"}
+        _TEXT_EXTENSIONS = {".html", ".htm", ".txt", ".eml", ".csv", ".json", ".xml", ".md", ".log"}
         if downloaded_files:
-            file_lines = []
             for df in downloaded_files:
-                size_str = f"{df['size'] / 1024:.1f} KB" if df['size'] else "unknown size"
-                file_lines.append(f"- {df['name']} ({df['mimetype'] or df['filetype']}, {size_str}): {df['path']}")
-            file_block = "Attached files (downloaded to local disk):\n" + "\n".join(file_lines)
-            text = text + "\n\n" + file_block if text else file_block
+                mime = df.get("mimetype", "") or ""
+                name = df.get("name", "")
+                ext = os.path.splitext(name)[1].lower() if name else ""
+                is_text = any(mime.startswith(t) for t in _TEXT_MIMETYPES) or ext in _TEXT_EXTENSIONS
+
+                if is_text and df.get("path") and os.path.isfile(df["path"]):
+                    try:
+                        with open(df["path"], encoding="utf-8", errors="replace") as fh:
+                            content = fh.read(500_000)  # Cap at 500 KB of text
+                        # Strip HTML tags for cleaner agent consumption
+                        if ext in (".html", ".htm") or mime.startswith("text/html"):
+                            content = re.sub(r'<style[^>]*>.*?</style>', '', content, flags=re.DOTALL)
+                            content = re.sub(r'<script[^>]*>.*?</script>', '', content, flags=re.DOTALL)
+                            content = re.sub(r'<br\s*/?>', '\n', content, flags=re.IGNORECASE)
+                            content = re.sub(r'</?p[^>]*>', '\n', content, flags=re.IGNORECASE)
+                            content = re.sub(r'<[^>]+>', '', content)
+                            content = re.sub(r'\n{3,}', '\n\n', content).strip()
+                        label = f"Attached file: {name}"
+                        text = f"{text}\n\n{label}\n---\n{content}" if text else f"{label}\n---\n{content}"
+                        logger.info("[Slack] Inlined text file: %s (%d chars)", name, len(content))
+                    except Exception as exc:
+                        logger.error("[Slack] Failed to read text file %s: %s", df["path"], exc)
+                        text = f"{text}\n\n(Attached file {name} could not be read: {exc})" if text else f"(Attached file {name} could not be read: {exc})"
+                else:
+                    size_str = f"{df['size'] / 1024:.1f} KB" if df.get('size') else "unknown size"
+                    note = f"(Attached binary file: {name}, {mime or df.get('filetype', 'unknown')}, {size_str} — cannot be read directly, ask user to share via Google Drive)"
+                    text = f"{text}\n\n{note}" if text else note
 
         if not text:
             return

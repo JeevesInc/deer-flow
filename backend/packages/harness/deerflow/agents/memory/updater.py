@@ -7,6 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, Field, ValidationError
+
 from deerflow.agents.memory.prompt import (
     MEMORY_UPDATE_PROMPT,
     format_conversation_for_update,
@@ -14,6 +16,38 @@ from deerflow.agents.memory.prompt import (
 from deerflow.agents.memory.storage import get_memory_storage
 from deerflow.config.memory_config import get_memory_config
 from deerflow.models import create_chat_model
+from deerflow.utils.text import extract_text as _extract_text
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models for LLM memory update responses
+# ---------------------------------------------------------------------------
+
+class SectionUpdate(BaseModel):
+    shouldUpdate: bool = False
+    summary: str = ""
+
+class UserUpdate(BaseModel):
+    workContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    personalContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    topOfMind: SectionUpdate = Field(default_factory=SectionUpdate)
+
+class HistoryUpdate(BaseModel):
+    recentMonths: SectionUpdate = Field(default_factory=SectionUpdate)
+    earlierContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    longTermBackground: SectionUpdate = Field(default_factory=SectionUpdate)
+
+class NewFact(BaseModel):
+    content: str = ""
+    category: str = "context"
+    confidence: float = 0.5
+
+class MemoryUpdateResponse(BaseModel):
+    """Schema for the JSON the LLM returns when updating memory."""
+    user: UserUpdate = Field(default_factory=UserUpdate)
+    history: HistoryUpdate = Field(default_factory=HistoryUpdate)
+    newFacts: list[NewFact] = Field(default_factory=list)
+    factsToRemove: list[str] = Field(default_factory=list)
 
 logger = logging.getLogger(__name__)
 
@@ -25,42 +59,6 @@ def reload_memory_data(agent_name: str | None = None) -> dict[str, Any]:
     """Reload memory data via storage provider."""
     return get_memory_storage().reload(agent_name)
 
-
-def _extract_text(content: Any) -> str:
-    """Extract plain text from LLM response content (str or list of content blocks).
-
-    Modern LLMs may return structured content as a list of blocks instead of a
-    plain string, e.g. [{"type": "text", "text": "..."}]. Using str() on such
-    content produces Python repr instead of the actual text, breaking JSON
-    parsing downstream.
-
-    String chunks are concatenated without separators to avoid corrupting
-    chunked JSON/text payloads. Dict-based text blocks are treated as full text
-    blocks and joined with newlines for readability.
-    """
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        pieces: list[str] = []
-        pending_str_parts: list[str] = []
-
-        def flush_pending_str_parts() -> None:
-            if pending_str_parts:
-                pieces.append("".join(pending_str_parts))
-                pending_str_parts.clear()
-
-        for block in content:
-            if isinstance(block, str):
-                pending_str_parts.append(block)
-            elif isinstance(block, dict):
-                flush_pending_str_parts()
-                text_val = block.get("text")
-                if isinstance(text_val, str):
-                    pieces.append(text_val)
-
-        flush_pending_str_parts()
-        return "\n".join(pieces)
-    return str(content)
 
 
 # Matches sentences that describe a file-upload *event* rather than general
@@ -107,6 +105,91 @@ def _fact_content_key(content: Any) -> str | None:
     if not stripped:
         return None
     return stripped
+
+
+def _normalize_token(word: str) -> str:
+    """Basic normalization: lowercase, strip trailing 's'/'ing'/'ed' for fuzzy matching."""
+    w = word.lower().strip(".,;:!?\"'()")
+    if w.endswith("ing") and len(w) > 4:
+        w = w[:-3]
+    elif w.endswith("ed") and len(w) > 3:
+        w = w[:-2]
+    elif w.endswith("s") and not w.endswith("ss") and len(w) > 2:
+        w = w[:-1]
+    return w
+
+
+def _tokenize(text: str) -> set[str]:
+    """Normalized word tokens for similarity comparison."""
+    return {_normalize_token(w) for w in text.split() if len(w) > 1}
+
+
+def _is_similar_to_existing(new_content: str, existing_contents: list[str], threshold: float = 0.55) -> bool:
+    """Check if new_content is semantically similar to any existing fact.
+
+    Uses Jaccard similarity on normalized word tokens — lightweight, no deps.
+    Also checks if one fact is a substring of another (catches condensed rephrases).
+    """
+    new_lower = new_content.lower().strip()
+    new_tokens = _tokenize(new_content)
+    if not new_tokens:
+        return False
+    for existing in existing_contents:
+        existing_lower = existing.lower().strip()
+        # Substring check — one contains the other
+        if new_lower in existing_lower or existing_lower in new_lower:
+            return True
+        # Jaccard on normalized tokens
+        existing_tokens = _tokenize(existing)
+        if not existing_tokens:
+            continue
+        intersection = new_tokens & existing_tokens
+        union = new_tokens | existing_tokens
+        if len(intersection) / len(union) >= threshold:
+            return True
+    return False
+
+
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)```", re.DOTALL)
+_JSON_BRACE_RE = re.compile(r"\{.*\}", re.DOTALL)
+
+
+def _parse_memory_response(text: str) -> MemoryUpdateResponse:
+    """Parse and validate the LLM's memory update JSON response.
+
+    Tries multiple extraction strategies:
+      1. Strip markdown code fences and parse
+      2. Find JSON object via regex
+      3. On validation failure, return an empty (no-op) update
+    """
+    # Strategy 1: strip markdown code block
+    m = _JSON_BLOCK_RE.search(text)
+    raw = m.group(1).strip() if m else text.strip()
+
+    # If still wrapped in backticks (single-line), strip them
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+    for candidate in (raw, text):
+        try:
+            data = json.loads(candidate)
+            return MemoryUpdateResponse.model_validate(data)
+        except (json.JSONDecodeError, ValidationError):
+            pass
+
+    # Strategy 2: find first { ... } in text
+    m2 = _JSON_BRACE_RE.search(text)
+    if m2:
+        try:
+            data = json.loads(m2.group(0))
+            return MemoryUpdateResponse.model_validate(data)
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.warning("Memory update JSON found but failed validation: %s", e)
+
+    # Nothing parseable — return no-op
+    logger.warning("Could not parse memory update response, returning no-op. First 200 chars: %s", text[:200])
+    return MemoryUpdateResponse()
 
 
 class MemoryUpdater:
@@ -165,13 +248,8 @@ class MemoryUpdater:
             response = model.invoke(prompt)
             response_text = _extract_text(response.content).strip()
 
-            # Parse response
-            # Remove markdown code blocks if present
-            if response_text.startswith("```"):
-                lines = response_text.split("\n")
-                response_text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-
-            update_data = json.loads(response_text)
+            # Parse and validate the LLM response
+            update_data = _parse_memory_response(response_text)
 
             # Apply updates
             updated_memory = self._apply_updates(current_memory, update_data, thread_id)
@@ -185,9 +263,6 @@ class MemoryUpdater:
             # Save
             return get_memory_storage().save(updated_memory, agent_name)
 
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse LLM response for memory update: %s", e)
-            return False
         except Exception as e:
             logger.exception("Memory update failed: %s", e)
             return False
@@ -195,14 +270,14 @@ class MemoryUpdater:
     def _apply_updates(
         self,
         current_memory: dict[str, Any],
-        update_data: dict[str, Any],
+        update: MemoryUpdateResponse,
         thread_id: str | None = None,
     ) -> dict[str, Any]:
-        """Apply LLM-generated updates to memory.
+        """Apply validated LLM-generated updates to memory.
 
         Args:
             current_memory: Current memory data.
-            update_data: Updates from LLM.
+            update: Validated update from LLM.
             thread_id: Optional thread ID for tracking.
 
         Returns:
@@ -212,57 +287,62 @@ class MemoryUpdater:
         now = datetime.utcnow().isoformat() + "Z"
 
         # Update user sections
-        user_updates = update_data.get("user", {})
-        for section in ["workContext", "personalContext", "topOfMind"]:
-            section_data = user_updates.get(section, {})
-            if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["user"][section] = {
-                    "summary": section_data["summary"],
+        for section_name in ("workContext", "personalContext", "topOfMind"):
+            section: SectionUpdate = getattr(update.user, section_name)
+            if section.shouldUpdate and section.summary:
+                current_memory["user"][section_name] = {
+                    "summary": section.summary,
                     "updatedAt": now,
                 }
 
         # Update history sections
-        history_updates = update_data.get("history", {})
-        for section in ["recentMonths", "earlierContext", "longTermBackground"]:
-            section_data = history_updates.get(section, {})
-            if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["history"][section] = {
-                    "summary": section_data["summary"],
+        for section_name in ("recentMonths", "earlierContext", "longTermBackground"):
+            section = getattr(update.history, section_name)
+            if section.shouldUpdate and section.summary:
+                current_memory["history"][section_name] = {
+                    "summary": section.summary,
                     "updatedAt": now,
                 }
 
         # Remove facts
-        facts_to_remove = set(update_data.get("factsToRemove", []))
-        if facts_to_remove:
+        if update.factsToRemove:
+            facts_to_remove = set(update.factsToRemove)
             current_memory["facts"] = [f for f in current_memory.get("facts", []) if f.get("id") not in facts_to_remove]
 
-        # Add new facts
-        existing_fact_keys = {fact_key for fact_key in (_fact_content_key(fact.get("content")) for fact in current_memory.get("facts", [])) if fact_key is not None}
-        new_facts = update_data.get("newFacts", [])
-        for fact in new_facts:
-            confidence = fact.get("confidence", 0.5)
-            if confidence >= config.fact_confidence_threshold:
-                raw_content = fact.get("content", "")
-                normalized_content = raw_content.strip()
-                fact_key = _fact_content_key(normalized_content)
-                if fact_key is not None and fact_key in existing_fact_keys:
+        # Add new facts (dedup via exact match + similarity check)
+        existing_fact_contents = [
+            f.get("content", "").strip()
+            for f in current_memory.get("facts", [])
+            if f.get("content")
+        ]
+        for fact in update.newFacts:
+            if fact.confidence >= config.fact_confidence_threshold:
+                normalized_content = fact.content.strip()
+                if not normalized_content:
+                    continue
+
+                # Exact match
+                if normalized_content in existing_fact_contents:
+                    continue
+
+                # Similarity match (catches near-duplicates)
+                if _is_similar_to_existing(normalized_content, existing_fact_contents):
+                    logger.debug("Skipping near-duplicate fact: %s", normalized_content[:80])
                     continue
 
                 fact_entry = {
                     "id": f"fact_{uuid.uuid4().hex[:8]}",
                     "content": normalized_content,
-                    "category": fact.get("category", "context"),
-                    "confidence": confidence,
+                    "category": fact.category,
+                    "confidence": fact.confidence,
                     "createdAt": now,
                     "source": thread_id or "unknown",
                 }
                 current_memory["facts"].append(fact_entry)
-                if fact_key is not None:
-                    existing_fact_keys.add(fact_key)
+                existing_fact_contents.append(normalized_content)
 
         # Enforce max facts limit
         if len(current_memory["facts"]) > config.max_facts:
-            # Sort by confidence and keep top ones
             current_memory["facts"] = sorted(
                 current_memory["facts"],
                 key=lambda f: f.get("confidence", 0),

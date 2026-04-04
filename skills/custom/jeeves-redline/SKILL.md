@@ -18,11 +18,11 @@ allowed-tools:
 | "Compare these two docs" / "What changed between v1 and v2?" / "Show me the differences" | See what's different between two document versions | `compare --track-changes` |
 | "What did they change?" / "Review this redline" / "Read the tracked changes" | Understand edits someone else already made (doc has existing markup) | `read-changes` |
 | "Strike 15% and put 10%" / "Change the termination to 30 days" / "Push back on this clause" / "Redline this with my edits" | Make specific text edits as tracked changes (legal negotiation style) | `suggest` |
-| "Add a comment about the indemnity clause" / "Leave a note on section 3" | Add margin comments without changing text | `comment` |
+| "Add a comment about the indemnity clause" / "Leave a note on section 3" | Add margin comments without changing text | `drive-comment` (for Google Docs) or `comment` (for .docx files) |
 
 **Step 2: Key distinction — `compare` vs `suggest`**
 
-- **`compare`** = You have TWO documents and want to see what's different. The tool figures out the diffs automatically.
+- **`compare`** = You have TWO documents and want to see what's different. The tool **accepts all tracked changes in both docs first**, then compares the clean/net text. This means you can compare two "commented" versions and see only what actually changed between them — no need to find a clean version. Works with tables (term sheets, contracts).
 - **`suggest`** = You have ONE document and the user tells you what to change. YOU build the specific find/replace pairs and the tool applies them as tracked changes.
 
 ---
@@ -111,9 +111,33 @@ python /mnt/skills/custom/jeeves-redline/redline_tool.py suggest "<file>" "<chan
 - For insertions (adding new text where none exists), find the text immediately before and include it with the addition in `replace`
 - When the user says "strike X and put Y", that means: `find: "X", replace: "Y"`
 
-### 4. Add Comments
+### 4. Add Comments to a Google Doc (Preferred)
 
-Add margin comments without modifying the document text:
+**Use this when the document is a Google Doc.** Adds comments visible in the sidebar directly on the original doc — no download/re-upload needed. The `anchor_text` is included as a quote so readers know which text each comment refers to. Note: Google's API does not support highlighting/anchoring comments to specific text (known limitation since 2016) — only the Docs UI can do that. Tell the user the comments are on the doc with quoted context, and they can manually re-anchor them to highlighted text in ~2 minutes if needed.
+
+```bash
+python /mnt/skills/custom/jeeves-redline/redline_tool.py drive-comment "<google_doc_id_or_url>" "<comments.json>"
+```
+
+```json
+[
+  {
+    "anchor_text": "60-day notice period",
+    "comment": "We'd like to discuss this provision — the 60-day notice period is too long for our operations."
+  },
+  {
+    "anchor_text": "",
+    "comment": "General note: this agreement needs review by legal before signing."
+  }
+]
+```
+
+- `anchor_text`: exact text in the doc to attach the comment to. Leave empty for a file-level comment.
+- Comments appear in the Google Doc's comment sidebar immediately.
+
+### 4b. Add Comments to a Word File (.docx)
+
+Only use this for local .docx files (not Google Docs):
 
 ```bash
 python /mnt/skills/custom/jeeves-redline/redline_tool.py comment "<file>" "<comments.json>"

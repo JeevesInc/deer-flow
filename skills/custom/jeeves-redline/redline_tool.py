@@ -59,24 +59,16 @@ def _extract_id(url_or_id: str) -> str:
     raise ValueError(f"Cannot extract file ID from: {url_or_id}")
 
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from google_auth import get_credentials
+
+
 def _download_from_drive(file_ref: str) -> str:
     """Download a .docx from Google Drive to a temp file. Returns the local path."""
-    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
 
-    for var in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'):
-        if not os.environ.get(var):
-            print(f"ERROR: Missing environment variable {var}", file=sys.stderr)
-            sys.exit(1)
-
     file_id = _extract_id(file_ref)
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
+    creds = get_credentials()
     service = build('drive', 'v3', credentials=creds)
 
     meta = service.files().get(fileId=file_id, fields='name,mimeType').execute()
@@ -456,8 +448,78 @@ def suggest(file_path: str, changes_json_path: str, output_path: str):
 # compare: Paragraph-level diff (visual or tracked changes)
 # ---------------------------------------------------------------------------
 
+def _extract_accepted_text(element):
+    """Extract the 'accepted all changes' text from a docx XML element.
+
+    Walks the XML tree and:
+      - Skips <w:del> content entirely (deleted text is gone)
+      - Includes <w:ins> content as normal text (insertions are accepted)
+      - Includes normal <w:t> text as-is
+    This gives you the document as it would look after accepting all tracked changes.
+    """
+    from lxml import etree
+
+    parts = []
+    # Track which elements to skip (children of <w:del>)
+    skip_ancestors = set()
+
+    for event, elem in etree.iterwalk(element, events=('start', 'end')):
+        tag = etree.QName(elem.tag).localname if '}' in elem.tag else elem.tag
+
+        if event == 'start':
+            if tag == 'del':
+                skip_ancestors.add(id(elem))
+            elif tag == 'delText':
+                # Always skip deleted text
+                continue
+            elif tag == 't':
+                # Only include <w:t> text if we're not inside a <w:del>
+                in_del = False
+                parent = elem.getparent()
+                while parent is not None:
+                    ptag = etree.QName(parent.tag).localname if '}' in parent.tag else parent.tag
+                    if ptag == 'del':
+                        in_del = True
+                        break
+                    parent = parent.getparent()
+                if not in_del and elem.text:
+                    parts.append(elem.text)
+
+    return ''.join(parts)
+
+
+def _extract_all_accepted_blocks(doc):
+    """Extract accepted text from ALL content — paragraphs AND table cells.
+
+    Accepts all tracked changes (skips deletions, includes insertions).
+    Returns a list of strings, one per text block.
+    """
+    from lxml import etree
+
+    blocks = []
+    body = doc.element.body
+    for elem in body:
+        tag = etree.QName(elem.tag).localname if '}' in elem.tag else elem.tag
+        if tag == 'p':
+            blocks.append(_extract_accepted_text(elem))
+        elif tag == 'tbl':
+            for row in elem.iter(W_TAG('tr')):
+                row_texts = []
+                for cell in row.iter(W_TAG('tc')):
+                    cell_text = _extract_accepted_text(cell)
+                    row_texts.append(cell_text)
+                blocks.append('\t'.join(row_texts))
+    return blocks
+
+
 def compare(file1_path: str, file2_path: str, output_path: str, track_changes: bool = False):
-    """Compare two .docx files and produce a redlined document."""
+    """Compare two .docx files and produce a redlined document.
+
+    Both documents are read with all tracked changes accepted — deleted text
+    is dropped, insertions are treated as normal text.  This means you can
+    compare two 'commented' versions and see the net difference between them.
+    Table cell content is included (critical for term sheets).
+    """
     import docx
     from docx.shared import Pt, RGBColor
     from docx.enum.text import WD_UNDERLINE
@@ -468,8 +530,9 @@ def compare(file1_path: str, file2_path: str, output_path: str, track_changes: b
     doc1 = docx.Document(local1)
     doc2 = docx.Document(local2)
 
-    paras1 = [p.text or '' for p in doc1.paragraphs]
-    paras2 = [p.text or '' for p in doc2.paragraphs]
+    # Extract accepted (clean) text from both docs, including tables
+    paras1 = _extract_all_accepted_blocks(doc1)
+    paras2 = _extract_all_accepted_blocks(doc2)
 
     if track_changes:
         _compare_with_track_changes(doc1, paras1, paras2, output_path)
@@ -541,92 +604,199 @@ def _match_paragraphs(paras1, paras2, threshold=0.4):
     return matches, unmatched1, unmatched2
 
 
+def _get_body_elements(doc):
+    """Get top-level body elements (paragraphs and tables) in document order."""
+    from lxml import etree
+    elements = []
+    for child in doc.element.body:
+        tag = etree.QName(child.tag).localname if '}' in child.tag else child.tag
+        if tag in ('p', 'tbl'):
+            elements.append((tag, child))
+    return elements
+
+
+def _get_table_cell_texts(tbl_el):
+    """Extract accepted text from each cell in a table, preserving row/col structure.
+
+    Returns list of rows, each row is a list of cell texts (accepted, no tracked changes).
+    """
+    rows = []
+    for row_el in tbl_el.iter(W_TAG('tr')):
+        cells = []
+        for cell_el in row_el.iter(W_TAG('tc')):
+            cells.append(_extract_accepted_text(cell_el))
+        rows.append(cells)
+    return rows
+
+
+def _diff_table_cell(cell_el, old_text, new_text, rev_id, author, date):
+    """Apply word-level tracked changes to a single table cell.
+
+    Replaces the cell's paragraph content with del/ins markup.
+    Returns the updated rev_id.
+    """
+    from lxml import etree
+
+    if old_text == new_text:
+        return rev_id
+
+    # Find the first paragraph in the cell to apply the diff to
+    para_el = cell_el.find(W_TAG('p'))
+    if para_el is None:
+        return rev_id
+
+    return _inline_diff_paragraph(para_el, old_text, new_text, rev_id, author, date)
+
+
 def _compare_with_track_changes(base_doc, paras1, paras2, output_path):
     """Produce a document with proper Word track changes markup.
 
-    Uses similarity-based paragraph matching so that reordered sections
-    are compared inline (word-level diff) rather than shown as full
-    delete + insert.  The output follows doc2's paragraph order.
+    Walks both documents' structure (paragraphs AND tables) and diffs them.
+    For tables, diffs cell-by-cell to preserve table formatting.
+    For paragraphs, uses similarity-based matching with word-level diffs.
+    All text is read with tracked changes accepted first.
     """
+    import docx
     from lxml import etree
 
     now = _now_iso()
     author = 'Jeeves'
     rev_id = 100
-
-    body = base_doc.element.body
-    para_elements = list(body.iter(W_TAG('p')))
     changes = {'equal': 0, 'modified': 0, 'delete': 0, 'insert': 0}
 
-    # Preserve non-paragraph elements (like sectPr) at the end
-    non_para = []
-    for child in list(body):
-        tag = etree.QName(child.tag).localname if '}' in child.tag else child.tag
-        if tag != 'p':
-            non_para.append(child)
+    # Load doc2 to get its structure
+    # (base_doc is doc1, we need doc2 for table structure comparison)
+    # We get doc2 from the output_path context — but actually we need
+    # both docs' XML. The caller passes paras1/paras2 as flat text lists.
+    # We need to work with the XML directly.
 
-    # Match paragraphs by similarity (handles reordering)
-    matches, unmatched1, unmatched2 = _match_paragraphs(paras1, paras2)
+    body = base_doc.element.body
+    elems1 = _get_body_elements(base_doc)
 
-    # Build lookup: doc2 index → (doc1 index, ratio)
+    # For paragraph-only content, use the flat text matching approach
+    # For tables, we diff cell-by-cell in the base doc's table structure
+
+    # Separate paragraphs and tables
+    para_elements = []
+    para_texts = []
+    table_idx = 0
+
+    for tag, elem in elems1:
+        if tag == 'p':
+            para_elements.append(elem)
+            para_texts.append(_extract_accepted_text(elem))
+        elif tag == 'tbl':
+            # Tables stay in place — we'll diff their cells directly
+            pass
+
+    # Match the flat paragraph texts against paras2's paragraph-only entries
+    # But paras2 is a mixed list (paragraphs + table rows).
+    # We need to identify which entries in paras1/paras2 are table rows vs paragraphs.
+    # Since _extract_all_accepted_blocks uses \t to join table row cells,
+    # we can distinguish: entries with \t are table rows.
+
+    para_only_1 = [t for t in paras1 if '\t' not in t]
+    para_only_2 = [t for t in paras2 if '\t' not in t]
+    table_rows_1 = [t for t in paras1 if '\t' in t]
+    table_rows_2 = [t for t in paras2 if '\t' in t]
+
+    # --- Diff paragraphs (non-table content) ---
+    matches, unmatched1, unmatched2 = _match_paragraphs(para_only_1, para_only_2)
     j_to_match = {}
     for i, j, ratio in matches:
         j_to_match[j] = (i, ratio)
 
-    new_body_children = []
-
-    # Walk doc2's paragraph order — this is the "new" document structure
-    for j in range(len(paras2)):
-        if j in j_to_match:
-            i, ratio = j_to_match[j]
-            if i < len(para_elements):
-                p_el = para_elements[i]
-                if ratio >= 0.999:
-                    # Exact match — keep as-is
-                    new_body_children.append(p_el)
-                    changes['equal'] += 1
-                else:
-                    # Similar — inline word-level diff
-                    rev_id = _inline_diff_paragraph(p_el, paras1[i], paras2[j], rev_id, author, now)
-                    new_body_children.append(p_el)
+    # Apply paragraph diffs to the base doc's paragraph elements
+    para_idx = 0
+    for tag, elem in elems1:
+        if tag != 'p':
+            continue
+        old_text = _extract_accepted_text(elem)
+        # Find this paragraph's index in para_only_1
+        if para_idx < len(para_only_1):
+            # Check if it's matched to a different para_only_2 entry
+            matched_j = None
+            for j, (i, ratio) in j_to_match.items():
+                if i == para_idx:
+                    matched_j = (j, ratio)
+                    break
+            if matched_j:
+                j, ratio = matched_j
+                if ratio < 0.999 and j < len(para_only_2):
+                    rev_id = _inline_diff_paragraph(elem, old_text, para_only_2[j], rev_id, author, now)
                     changes['modified'] += 1
-            else:
-                # Index out of range (shouldn't happen) — treat as insert
-                p_el = _make_ins_paragraph(paras2[j], rev_id, author, now)
+                else:
+                    changes['equal'] += 1
+            elif para_idx in unmatched1 and old_text.strip():
+                _wrap_para_runs_in_del(elem, rev_id, author, now)
                 rev_id += 1
-                new_body_children.append(p_el)
-                changes['insert'] += 1
-        elif j in unmatched2:
-            # New paragraph with no match in doc1 — pure insertion
-            p_el = _make_ins_paragraph(paras2[j], rev_id, author, now)
-            rev_id += 1
-            new_body_children.append(p_el)
-            changes['insert'] += 1
-
-    # Append unmatched doc1 paragraphs as deletions at the end
-    for i in sorted(unmatched1):
-        if i < len(para_elements):
-            p_el = para_elements[i]
-            if paras1[i].strip():  # skip empty deleted paras
-                _wrap_para_runs_in_del(p_el, rev_id, author, now)
-                rev_id += 1
-                new_body_children.append(p_el)
                 changes['delete'] += 1
+            else:
+                changes['equal'] += 1
+        para_idx += 1
 
-    # Rebuild body
-    for child in list(body):
-        body.remove(child)
-    for child in new_body_children:
-        body.append(child)
-    for child in non_para:
-        body.append(child)
+    # --- Diff tables cell-by-cell ---
+    table_elements = [elem for tag, elem in elems1 if tag == 'tbl']
+
+    # Match table rows between doc1 and doc2 by content
+    for tbl_idx, tbl_el in enumerate(table_elements):
+        rows1 = _get_table_cell_texts(tbl_el)
+        # Get corresponding table rows from doc2's flat text
+        # Each row in table_rows_2 is tab-separated cell text
+        # We need to figure out which table_rows_2 entries correspond to this table
+
+        row_elements = list(tbl_el.iter(W_TAG('tr')))
+
+        for row_idx, row_el in enumerate(row_elements):
+            if row_idx >= len(rows1):
+                break
+            old_cells = rows1[row_idx]
+
+            # Find the matching row in table_rows_2
+            old_row_text = '\t'.join(old_cells)
+
+            # Search for the best matching row in table_rows_2
+            best_match = None
+            best_ratio = 0
+            for tr2_idx, tr2_text in enumerate(table_rows_2):
+                new_cells = tr2_text.split('\t')
+                ratio = difflib.SequenceMatcher(None, old_row_text.split(), tr2_text.split()).ratio()
+                if ratio > best_ratio:
+                    best_ratio = ratio
+                    best_match = (tr2_idx, new_cells)
+
+            if best_match and best_ratio > 0.3:
+                tr2_idx, new_cells = best_match
+                # Remove from available pool so we don't re-match
+                if tr2_idx < len(table_rows_2):
+                    table_rows_2[tr2_idx] = ''  # Mark as used
+
+                cell_elements = list(row_el.iter(W_TAG('tc')))
+                for c_idx in range(min(len(cell_elements), len(old_cells), len(new_cells))):
+                    old_c = old_cells[c_idx]
+                    new_c = new_cells[c_idx]
+                    if old_c != new_c:
+                        rev_id = _diff_table_cell(cell_elements[c_idx], old_c, new_c, rev_id, author, now)
+                        changes['modified'] += 1
+                    else:
+                        changes['equal'] += 1
+            else:
+                changes['equal'] += len(old_cells)
+
+    # Add new paragraphs from doc2 that don't exist in doc1
+    for j in sorted(unmatched2):
+        if j < len(para_only_2) and para_only_2[j].strip():
+            p_el = _make_ins_paragraph(para_only_2[j], rev_id, author, now)
+            rev_id += 1
+            body.append(p_el)
+            changes['insert'] += 1
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     base_doc.save(output_path)
 
     print(f"Redline (with track changes) saved to: {output_path}")
     print(f"Changes: {changes['equal']} unchanged, {changes['modified']} modified (inline diff), "
-          f"{changes['delete']} deleted, {changes['insert']} inserted paragraphs")
+          f"{changes['delete']} deleted, {changes['insert']} inserted")
     print("Open in Word and enable Review > Track Changes to see all revisions.")
 
 
@@ -928,6 +1098,74 @@ def comment(file_path: str, comments_json_path: str, output_path: str):
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# drive-comment: Add comments directly to a Google Doc via Drive API
+# ---------------------------------------------------------------------------
+
+def drive_comment(file_ref: str, comments_json_path: str):
+    """Add comments directly to a Google Doc using the Drive Comments API.
+
+    This adds real Google Doc comments (visible in the sidebar) anchored to
+    specific text — no download/re-upload needed.  The original doc is
+    modified in place.
+
+    The comments JSON should be an array of objects:
+    [
+      {
+        "anchor_text": "text to anchor the comment to",
+        "comment": "The comment content",
+        "author": "Jeeves"
+      }
+    ]
+
+    anchor_text is used to find the text in the doc and attach the comment
+    to that region.  If anchor_text is empty or omitted, the comment is
+    added as an unanchored (file-level) comment.
+    """
+    from googleapiclient.discovery import build
+
+    file_id = _extract_id(file_ref)
+    creds = get_credentials()
+    service = build('drive', 'v3', credentials=creds)
+
+    with open(comments_json_path, 'r', encoding='utf-8') as f:
+        comments_data = json.load(f)
+
+    added = 0
+    for entry in comments_data:
+        anchor_text = entry.get('anchor_text', '').strip()
+        comment_text = entry.get('comment', '').strip()
+        if not comment_text:
+            continue
+
+        body = {'content': comment_text}
+
+        # quotedFileContent anchors the comment to specific text in the doc.
+        # The value must be an EXACT substring of the document's plain text.
+        # mimeType must be text/plain for Google Docs.
+        if anchor_text:
+            body['quotedFileContent'] = {
+                'mimeType': 'text/plain',
+                'value': anchor_text,
+            }
+
+        try:
+            result = service.comments().create(
+                fileId=file_id,
+                body=body,
+                fields='id,content,quotedFileContent,anchor',
+            ).execute()
+            added += 1
+            anchored = "anchored" if result.get('anchor') else "file-level (text not found in doc)"
+            label = f' on "{anchor_text[:60]}"' if anchor_text else ''
+            print(f"  [{anchored}] Added comment{label}: {comment_text[:80]}")
+        except Exception as e:
+            print(f"  WARNING: Failed to add comment: {e}", file=sys.stderr)
+
+    print(f"\nDone — added {added} of {len(comments_data)} comment(s) to the Google Doc.")
+    print(f"View at: https://docs.google.com/document/d/{file_id}/edit")
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -941,6 +1179,7 @@ def main():
         print("  python redline_tool.py read-changes <file.docx>", file=sys.stderr)
         print("  python redline_tool.py suggest <file.docx> <changes.json> [--output suggested.docx]", file=sys.stderr)
         print("  python redline_tool.py comment <file.docx> <comments.json> [--output commented.docx]", file=sys.stderr)
+        print("  python redline_tool.py drive-comment <google_doc_id_or_url> <comments.json>", file=sys.stderr)
         sys.exit(1)
 
     _ensure_deps()
@@ -975,8 +1214,14 @@ def main():
         output = _get_output_path(args, 'commented_output.docx')
         comment(args[1], args[2], output)
 
+    elif command == 'drive-comment':
+        if len(args) < 3:
+            print("ERROR: drive-comment requires a Google Doc ID/URL and a comments JSON file", file=sys.stderr)
+            sys.exit(1)
+        drive_comment(args[1], args[2])
+
     else:
-        print(f"ERROR: Unknown command '{command}'. Use 'compare', 'read-changes', 'suggest', or 'comment'.", file=sys.stderr)
+        print(f"ERROR: Unknown command '{command}'. Use 'compare', 'read-changes', 'suggest', 'comment', or 'drive-comment'.", file=sys.stderr)
         sys.exit(1)
 
 

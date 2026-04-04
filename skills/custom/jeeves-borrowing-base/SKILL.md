@@ -9,19 +9,20 @@ allowed-tools:
 
 # Borrowing Base & Portfolio Report Pipeline
 
-## CRITICAL — Route the request correctly
+## Request Router
 
-**"Portfolio report" / "portfolio reporting" is NOT a borrowing base.** STOP and read this table:
+Match the user's keywords to the correct pipeline. These are three DIFFERENT products — never substitute one for another.
 
-| If the user says... | They want | Script | Upload to |
-|---------------------|-----------|--------|-----------|
-| "portfolio report", "portfolio reporting", "monthly report", "run reporting" | **Portfolio Report** → use `build_portfolio_report.py` | `build_portfolio_report.py` | `Portfolio Reporting/{YYYYMM}/` |
-| "borrowing base", "BB", "run the tape", "US BB" | **US Borrowing Base** | `build_us.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/US/` |
-| "SOFOM", "MX BB", "MX borrowing base" | **MX Borrowing Base** | `build_mx.py` + `merge_template.py` | `Debt/CIM/{YYYYMM}/MX/` |
+| Keywords (any match) | Pipeline | Script | Date param | Upload folder |
+|---|---|---|---|---|
+| portfolio report, portfolio reporting, monthly report, run reporting | **Portfolio Report** | `build_portfolio_report.py` | `--date YYYY-MM-01` (1st of month) | `Portfolio Reporting/{YYYYMM}/` |
+| borrowing base, BB, run the tape, US BB, bridge BB | **US Borrowing Base** | `build_us.py` → `merge_template.py` | `--date YYYY-MM-DD` (snapshot date, default yesterday) | `Debt/CIM/{YYYYMM}/US/` |
+| SOFOM, MX BB, MX borrowing base, mexico BB | **MX Borrowing Base** | `build_mx.py` → `merge_template.py` | `--end-date YYYY-MM-DD` (default yesterday) | `Debt/CIM/{YYYYMM}/MX/` |
 
-**A borrowing base is NEVER a substitute for a portfolio report.** They are completely different files with different structures, different data (portfolio report has a mods tab and Summary dashboards), and go in different Drive folders.
-
-**Date interpretation:** "4/1 portfolio reporting" → `--date 2026-04-01`. The report date is the 1st of the month. The script derives EOP (3/31) and BOP (2/28) automatically. File is named `Portfolio Report - 20260401.xlsx` and uploaded to `Portfolio Reporting/202604/`.
+**Date rules:**
+- Portfolio report: "4/1 portfolio reporting" → `--date 2026-04-01`. Script derives EOP (3/31) and BOP (2/28) automatically.
+- Borrowing base: "run the BB" with no date → use yesterday. "BB for 3/27" → `--date 2026-03-27`.
+- **Never use today's date.** Data only available through yesterday. Scripts hard-reject today/future.
 
 ---
 
@@ -142,10 +143,7 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves 
 
 ## Rules
 
-- **CRITICAL — "portfolio reporting" = `build_portfolio_report.py`. NEVER use `build_us.py` for a portfolio report.**
-- **CRITICAL — Never use today's date.** Data only available through yesterday. Scripts reject today/future.
-- **Date mapping for portfolio reports:** "N/1 portfolio reporting" → use last day of prior month as --date (e.g., "4/1" → `--date 2026-03-31`)
-- Always state the date range in your response
+- Always state the date range used in your response
 - Never modify existing files on Drive — create new dated copies
 - Remind user to open in Excel for formula recalculation
 - Follow naming: `Jeeves Bridge Borrowing Base - {YYYYMMDD}.xlsx` (US), `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx` (MX), `Portfolio Report - {YYYYMM}01.xlsx` (monthly)

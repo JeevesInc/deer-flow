@@ -202,7 +202,7 @@ class LocalSandbox(Sandbox):
     def read_file(self, path: str) -> str:
         resolved_path = self._resolve_path(path)
         try:
-            with open(resolved_path, encoding="utf-8") as f:
+            with open(resolved_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
         except OSError as e:
             # Re-raise with the original path for clearer error messages, hiding internal resolved paths

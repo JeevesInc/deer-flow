@@ -20,30 +20,13 @@ import sys
 FOLDER_NAME = "DeerFlow Output"
 
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from google_auth import get_credentials
+
+
 def _get_service():
-    for var in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'):
-        if not os.environ.get(var):
-            print(f"ERROR: Missing environment variable {var}", file=sys.stderr)
-            sys.exit(1)
-
-    try:
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q',
-                               'google-api-python-client', 'google-auth'])
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
-
-    creds = Credentials(
-        token=None,
-        refresh_token=os.environ['GOOGLE_REFRESH_TOKEN'],
-        token_uri='https://oauth2.googleapis.com/token',
-        client_id=os.environ['GOOGLE_CLIENT_ID'],
-        client_secret=os.environ['GOOGLE_CLIENT_SECRET'],
-    )
-    return build('drive', 'v3', credentials=creds)
+    from googleapiclient.discovery import build
+    return build('drive', 'v3', credentials=get_credentials())
 
 
 def _get_or_create_folder(service):

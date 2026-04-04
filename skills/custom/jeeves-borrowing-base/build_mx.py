@@ -18,26 +18,7 @@ import sys
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _ensure_deps():
-    try:
-        import psycopg2, pandas, openpyxl, xlsxwriter  # noqa: F401
-    except ImportError:
-        import subprocess
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q',
-                               'psycopg2-binary', 'pandas', 'openpyxl', 'xlsxwriter'])
-
-
-def _connect():
-    import psycopg2
-    return psycopg2.connect(
-        host=os.environ['REDSHIFT_HOST'],
-        port=int(os.environ['REDSHIFT_PORT']),
-        dbname=os.environ['REDSHIFT_DB'],
-        user=os.environ['REDSHIFT_USER'],
-        password=os.environ['REDSHIFT_PASSWORD'],
-        sslmode='require',
-        sslrootcert='disable',
-    )
+from redshift_util import ensure_deps, connect
 
 
 def main():
@@ -53,16 +34,24 @@ def main():
                         help='End date YYYY-MM-DD (default: yesterday)')
     args = parser.parse_args()
 
-    _ensure_deps()
+    ensure_deps('xlsxwriter')
     import pandas as pd
     sys.path.insert(0, SCRIPT_DIR)
     from eligibility import calculate_eligibility_fields_sofom
 
     # Compute dates
+    yesterday = dt.date.today() - dt.timedelta(days=1)
     if args.end_date:
         end_date = dt.datetime.strptime(args.end_date, '%Y-%m-%d').date()
     else:
-        end_date = dt.date.today() - dt.timedelta(days=1)
+        end_date = yesterday
+
+    # Guard: never run for today or future — data is not available yet
+    if end_date >= dt.date.today():
+        print(f"ERROR: end-date {end_date} is today or in the future. "
+              f"Redshift data is only available through yesterday ({yesterday}). "
+              f"Use --end-date {yesterday} or earlier.", file=sys.stderr)
+        sys.exit(1)
 
     if args.start_date:
         start_date = dt.datetime.strptime(args.start_date, '%Y-%m-%d').date()
@@ -81,7 +70,7 @@ def main():
     # Load SQL
     tape_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'data_tape_sofom.sql')).read()
 
-    con = _connect()
+    con = connect()
     dfs = []
 
     for i, date in enumerate(dates):

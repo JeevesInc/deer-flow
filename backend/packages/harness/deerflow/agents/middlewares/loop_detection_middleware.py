@@ -33,24 +33,41 @@ _DEFAULT_WINDOW_SIZE = 20  # track last N tool calls
 _DEFAULT_MAX_TRACKED_THREADS = 100  # LRU eviction limit
 
 
-def _hash_tool_calls(tool_calls: list[dict]) -> str:
-    """Deterministic hash of a set of tool calls (name + args).
+def _normalize_args(args: dict) -> dict:
+    """Normalize tool call arguments for consistent hashing.
 
-    This is intended to be order-independent: the same multiset of tool calls
-    should always produce the same hash, regardless of their input order.
+    Strips leading/trailing whitespace from string values and collapses
+    internal whitespace runs, so near-identical calls (e.g. with extra
+    spaces in SQL or file paths) hash the same.
     """
-    # First normalize each tool call to a minimal (name, args) structure.
+    normalized = {}
+    for k, v in sorted(args.items()):
+        if isinstance(v, str):
+            normalized[k] = " ".join(v.split())  # collapse whitespace
+        elif isinstance(v, dict):
+            normalized[k] = _normalize_args(v)
+        elif isinstance(v, list):
+            normalized[k] = [" ".join(i.split()) if isinstance(i, str) else i for i in v]
+        else:
+            normalized[k] = v
+    return normalized
+
+
+def _hash_tool_calls(tool_calls: list[dict]) -> str:
+    """Deterministic hash of a set of tool calls (name + normalized args).
+
+    Order-independent: the same multiset of tool calls always produces
+    the same hash, regardless of input order or trivial whitespace differences.
+    """
     normalized: list[dict] = []
     for tc in tool_calls:
         normalized.append(
             {
                 "name": tc.get("name", ""),
-                "args": tc.get("args", {}),
+                "args": _normalize_args(tc.get("args", {})),
             }
         )
 
-    # Sort by both name and a deterministic serialization of args so that
-    # permutations of the same multiset of calls yield the same ordering.
     normalized.sort(
         key=lambda tc: (
             tc["name"],

@@ -9,34 +9,37 @@ allowed-tools:
 
 # Jeeves Redshift Access
 
-## Setup
+**CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
-Before running any query, install the driver (once per session):
+## Running Queries
+
+Use the SQL runner — it handles connection, validation, and output formatting automatically:
 
 ```bash
-pip install psycopg2-binary
+# Inline query
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT SUM(balance_usd) FROM capital_markets_dm.loc_tape WHERE dt = '2026-04-02' AND charge_off_flag = false AND is_in_repayment = false"
+
+# Query from file
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --file /mnt/user-data/workspace/query.sql
+
+# Save large results to Excel
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.xlsx
+
+# Save as CSV
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.csv
+
+# Increase inline display limit (default 100 rows)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --limit 500
+
+# Generate SQL from natural language (uses DSPy + Claude)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the total portfolio balance by country?"
 ```
 
-## Connection
-
-```python
-import psycopg2, os
-
-conn = psycopg2.connect(
-    host=os.environ['REDSHIFT_HOST'],
-    port=int(os.environ['REDSHIFT_PORT']),
-    dbname=os.environ['REDSHIFT_DB'],
-    user=os.environ['REDSHIFT_USER'],
-    password=os.environ['REDSHIFT_PASSWORD'],
-    sslmode='require',
-    sslrootcert='disable'
-)
-cur = conn.cursor()
-cur.execute("<query>")
-columns = [desc[0] for desc in cur.description]
-rows = cur.fetchall()
-conn.close()
-```
+The runner automatically:
+- Validates SQL before executing (catches common mistakes, warns on missing filters)
+- Blocks non-SELECT queries
+- Formats small results inline, saves large results to files
+- Provides actionable error hints on failure
 
 ## Key Tables
 
@@ -222,13 +225,91 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Filter test companies:** `WHERE is_company_test = false` (transactions_ssot) or `WHERE is_test = false` (companies_dm)
 - **Filter by market:** Use `country_code` — 840=US, 484=MX, 170=CO, 124=CA, 76=BR
 - **Latest snapshot:** `WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)`
-- **Active portfolio:** `WHERE charge_off_flag = false` on loc_tape/gwc_tape
+- **Active portfolio:** `WHERE charge_off_flag = false AND is_in_repayment = false` on loc_tape (ALWAYS include both filters)
 - **DPD buckets:** current (0), 1-30, 31-60, 61-90, 90+
 - **Date filtering on loc_tape/gwc_tape:** Always use `dt` column with BETWEEN, never DATE_TRUNC
 - **NULL arithmetic:** When adding columns, wrap each in `COALESCE(col, 0)` — NULL + value = NULL
 - **Revenue vs spend:** `revenue_usd` from transactions_ssot = Jeeves revenue; `disbursement_amount_usd` from loc_tape = customer spend
 - **String matching:** Use `ILIKE '%pattern%'` for case-insensitive partial matches
 - **CTEs:** Fully supported and encouraged for complex queries
+
+## Query Examples by Intent
+
+Use these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+
+### Balance (portfolio snapshot)
+**Q:** "What's the total portfolio balance?"
+```sql
+SELECT SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+
+### Spend / disbursements
+**Q:** "How much did customers spend on cards in March?"
+```sql
+SELECT SUM(COALESCE(disbursement_amount_usd, 0)) AS card_spend
+FROM capital_markets_dm.loc_tape
+WHERE dt BETWEEN '2026-03-01' AND '2026-03-31'
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+⚠️ `disbursement_amount_usd` = customer card spend. Do NOT use `loan_allocation_amount` (internal accounting).
+
+### Delinquency / DPD
+**Q:** "What's our 90+ DPD rate by country?"
+```sql
+SELECT country_code,
+       SUM(CASE WHEN days_past_due > 90 THEN balance_usd ELSE 0 END)
+         / NULLIF(SUM(balance_usd), 0) AS dpd_90plus_rate,
+       SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+GROUP BY country_code
+```
+
+### Charge-offs
+**Q:** "What was the charge-off amount for company 456?"
+```sql
+SELECT company_id, balance_usd AS charge_off_amount, charge_off_dt
+FROM capital_markets_dm.loc_tape
+WHERE company_id = 456 AND dt = charge_off_dt
+```
+⚠️ Charge-off amount = `balance_usd` on the `charge_off_dt` date. Never use deprecated `v0_charge_off_amount_usd`.
+
+### Revenue
+**Q:** "Total revenue in Q1 2026?"
+```sql
+SELECT SUM(revenue_usd) AS total_revenue
+FROM master_transactions_dm.transactions_ssot
+WHERE posted_at BETWEEN '2026-01-01' AND '2026-03-31'
+  AND is_company_test = false
+```
+⚠️ Revenue is ONLY in `transactions_ssot.revenue_usd`. The `loc_tape` table has spend, not revenue.
+
+### Date ranges on loc_tape
+```sql
+-- CORRECT: use BETWEEN on dt
+WHERE dt BETWEEN '2025-10-01' AND '2025-10-31'
+
+-- WRONG: never DATE_TRUNC on dt
+-- WHERE DATE_TRUNC('month', dt) = '2025-10-01'  ← DO NOT DO THIS
+```
+
+### Company lookup with join
+**Q:** "Top 10 borrowers by balance with company names"
+```sql
+SELECT c.name, c.country_name, lt.balance_usd
+FROM capital_markets_dm.loc_tape lt
+JOIN master_customer_dm.companies_dm c ON c.company_id = lt.company_id
+WHERE lt.dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND lt.charge_off_flag = false AND lt.is_in_repayment = false
+  AND c.is_test = false
+ORDER BY lt.balance_usd DESC LIMIT 10
+```
+
+---
 
 ## Output Rules
 

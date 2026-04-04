@@ -43,7 +43,7 @@ SELECT country_code, COUNT(DISTINCT company_id) AS accounts,
        SUM(balance_usd) AS total_balance
 FROM capital_markets_dm.loc_tape
 WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
-  AND charge_off_flag = false
+  AND charge_off_flag = false AND is_in_repayment = false
 GROUP BY country_code
 ```
 
@@ -53,7 +53,7 @@ SELECT dq_bucket, COUNT(DISTINCT company_id) AS accounts,
        SUM(balance_usd) AS balance
 FROM capital_markets_dm.loc_tape
 WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
-  AND charge_off_flag = false
+  AND charge_off_flag = false AND is_in_repayment = false
 GROUP BY dq_bucket
 ORDER BY dq_bucket
 ```
@@ -85,7 +85,7 @@ ORDER BY total_revenue DESC
 
 - Always state the snapshot date in the response
 - MX balances are USD unless explicitly asked for MXN (default rate: 17.5)
-- "Active" accounts = balance_usd > 0 AND charge_off_flag = false
+- "Active" accounts = balance_usd > 0 AND charge_off_flag = false AND is_in_repayment = false
 - Revenue questions → use transactions_ssot.revenue_usd
 - Spend questions → use loc_tape.disbursement_amount_usd
 - Always exclude test companies

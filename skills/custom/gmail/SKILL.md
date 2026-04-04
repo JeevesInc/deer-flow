@@ -8,7 +8,7 @@ allowed-tools:
 
 # Gmail — Search, Read, and Draft Emails
 
-Access the user's Gmail to search messages, read email content, and create draft replies.
+Access the user's Gmail to search messages, read email content, and create draft replies with attachments.
 
 ## Commands
 
@@ -34,10 +34,31 @@ python /mnt/skills/custom/gmail/gmail_tool.py draft <message_id> "Your reply tex
 ```
 Creates a draft reply in Gmail's Drafts folder, properly threaded. The user must review and send manually.
 
+Add attachments with `--attach`:
+```bash
+python /mnt/skills/custom/gmail/gmail_tool.py draft <message_id> "See attached" \
+    --attach /mnt/user-data/outputs/report.xlsx \
+    --attach drive:1LocDOgKKjQ4xs9bBRtkq_VvBTiCqmcMj
+```
+
 ### Draft a new email
 ```bash
 python /mnt/skills/custom/gmail/gmail_tool.py draft-new "recipient@email.com" "Subject line" "Email body text"
 ```
+
+With attachments:
+```bash
+python /mnt/skills/custom/gmail/gmail_tool.py draft-new "recipient@email.com" "Q1 Report" "Please find attached." \
+    --attach /mnt/user-data/outputs/report.xlsx
+```
+
+## Attachments
+
+The `--attach` flag accepts two formats:
+- **Local files**: `/mnt/user-data/outputs/filename.xlsx` — any file the agent has generated or downloaded
+- **Google Drive files**: `drive:<FILE_ID>` — downloads the file from Drive and attaches it. Google Workspace files (Sheets, Docs, Slides) are exported as CSV/PDF automatically.
+
+Multiple `--attach` flags can be used to attach several files.
 
 ## Rules
 
@@ -46,3 +67,4 @@ python /mnt/skills/custom/gmail/gmail_tool.py draft-new "recipient@email.com" "S
 - When drafting, write professional and concise text appropriate for the context
 - Show the user what you drafted and confirm it's in their Drafts folder
 - If a search returns no results, suggest alternative search terms
+- When attaching files, prefer using `drive:<ID>` for files already on Drive rather than downloading and re-uploading

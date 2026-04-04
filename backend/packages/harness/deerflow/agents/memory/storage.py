@@ -54,10 +54,15 @@ class MemoryStorage(abc.ABC):
 
 
 class FileMemoryStorage(MemoryStorage):
-    """File-based memory storage provider."""
+    """File-based memory storage provider.
+
+    Thread-safe: all cache reads/writes are protected by a lock so that
+    concurrent Gateway and LangGraph requests don't race.
+    """
 
     def __init__(self):
         """Initialize the file memory storage."""
+        self._lock = threading.Lock()
         # Per-agent memory cache: keyed by agent_name (None = global)
         # Value: (memory_data, file_mtime)
         self._memory_cache: dict[str | None, tuple[dict[str, Any], float | None]] = {}
@@ -103,7 +108,12 @@ class FileMemoryStorage(MemoryStorage):
             return create_empty_memory()
 
     def load(self, agent_name: str | None = None) -> dict[str, Any]:
-        """Load memory data (cached with file modification time check)."""
+        """Load memory data (cached with file modification time check).
+
+        Thread-safe: checks file mtime on every call so that writes from
+        other processes (e.g. Gateway writing while LangGraph reads) are
+        picked up without a manual reload.
+        """
         file_path = self._get_memory_file_path(agent_name)
 
         try:
@@ -111,14 +121,15 @@ class FileMemoryStorage(MemoryStorage):
         except OSError:
             current_mtime = None
 
-        cached = self._memory_cache.get(agent_name)
+        with self._lock:
+            cached = self._memory_cache.get(agent_name)
 
-        if cached is None or cached[1] != current_mtime:
-            memory_data = self._load_memory_from_file(agent_name)
-            self._memory_cache[agent_name] = (memory_data, current_mtime)
-            return memory_data
+            if cached is None or cached[1] != current_mtime:
+                memory_data = self._load_memory_from_file(agent_name)
+                self._memory_cache[agent_name] = (memory_data, current_mtime)
+                return memory_data
 
-        return cached[0]
+            return cached[0]
 
     def reload(self, agent_name: str | None = None) -> dict[str, Any]:
         """Reload memory data from file, forcing cache invalidation."""
@@ -130,7 +141,8 @@ class FileMemoryStorage(MemoryStorage):
         except OSError:
             mtime = None
 
-        self._memory_cache[agent_name] = (memory_data, mtime)
+        with self._lock:
+            self._memory_cache[agent_name] = (memory_data, mtime)
         return memory_data
 
     def save(self, memory_data: dict[str, Any], agent_name: str | None = None) -> bool:
@@ -152,7 +164,8 @@ class FileMemoryStorage(MemoryStorage):
             except OSError:
                 mtime = None
 
-            self._memory_cache[agent_name] = (memory_data, mtime)
+            with self._lock:
+                self._memory_cache[agent_name] = (memory_data, mtime)
             logger.info("Memory saved to %s", file_path)
             return True
         except OSError as e:

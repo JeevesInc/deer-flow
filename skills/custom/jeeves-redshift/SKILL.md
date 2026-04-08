@@ -235,7 +235,7 @@ Vintage/cohort analysis data for LOC portfolio.
 
 ## Query Examples by Intent
 
-Use these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+## SQL Style\nALWAYS write SQL with leading commas, not trailing commas. Example:\n  SELECT\n      col1\n    , col2\n    , col3\n  FROM ...\n  ORDER BY\n      col1\n    , col2\n\n## RPP Data Model\nRPP accounts are LOC balances financed into GWC loans. Key facts:\n- Identify via: gwc_tape WHERE loan_reference_number ILIKE 'RPP%'\n- One row per installment = rows WHERE principal_amount_due_usd != 0\n- dt on those rows = the invoice due date\n- balance_usd = running unpaid balance at that point\n- days_past_due = days since that installment was due\n- delinquent_dt = date the current installment became overdue\n- 96 RPP loans as of 2026-04-07, 666 installment rows total\n- Do NOT use dms_mysql_jeeves_raw.instalments or company_statements for RPP — gwc_tape is the source of truth\n\nUse these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
 
 ### Balance (portfolio snapshot)
 **Q:** "What's the total portfolio balance?"
@@ -315,3 +315,140 @@ ORDER BY lt.balance_usd DESC LIMIT 10
 
 - Single metric or <10 rows: respond inline in Slack
 - Large dataset or multi-metric: write to .xlsx using openpyxl, present the file, and summarize inline
+
+---
+
+## dms_mysql_jeeves_raw Schema
+
+Raw MySQL replication of the Jeeves production database via AWS DMS. **209 tables, 3,530 columns.** Source-of-truth operational data — use for company/user/card/loan/transfer details not available in the DM layer.
+
+**Key differences from DM layer:**
+- Column names are camelCase (e.g. `companyid`, `createdat`, `deletedat`)
+- No `_usd` suffix — amounts are in native currency unless column ends in `usd`
+- Booleans stored as `smallint` (0/1), not boolean
+- Soft deletes: always add `WHERE deletedat IS NULL` for active records
+- `_dms_created` = DMS replication timestamp, not business creation time
+- Join to DM layer: `dms_mysql_jeeves_raw.companies.id` = `master_customer_dm.companies_dm.company_id`
+
+### Core Entity Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `companies` | 102 | Raw company records — EIN, business type, billing method, credit line, status, KYB/KYC, platform currency |
+| `users` | 72 | All users — role, email, spend limit, 2FA, status, login history |
+| `cards` | 48 | Physical/virtual cards — cardstatus, spendlimit, cardtype, processor IDs (Galileo, Stripe, Tutuka) |
+| `primary_account_owners` | 37 | KYB primary account owners — identity verification, TruNarrative |
+| `business_ownerships` | 39 | Beneficial owners — percentofownership, KYB status, isdirector |
+| `invite_users` | 39 | Invited users — role, spendlimit, department, location |
+| `waitlists` | 47 | Onboarding waitlist/leads — country, product interest, referral |
+
+### Transaction & Payment Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `transactions` | 65 | Raw card transactions — acttype, networkcode, transactionamount, merchantid, cardid, transactionstatus |
+| `transfers` | 51 | Jeeves Pay / wire transfers — beneficiaryid, transferamount, paymenttype, transferstatus, usdamount |
+| `loans` | 77 | GWC/JP loans — principal, interestrate, originationfeerate, VAT, term, disbursementtype, paymentstructure |
+| `loan_payments` | 17 | Loan payment records — loanid, paymentdate, paymentsource, transactionstatus |
+| `instalments` | 30 | Loan instalment schedule — duedate, paiddate, status, dayspastdue, usdcurrencyamount |
+| `statement_transactions` | 35 | Statement-level transactions — producttype, billingcycletag, usdcurrencyamount |
+| `reimbursements` | 31 | Employee reimbursements — amount, currency, merchantname, expensecategory, paymentstatus |
+
+### Billing & Statements
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_statements` | 52 | Monthly billing statements — month/year, invoicedamount, endingbalance, duedate, autodebit, settlementdatetime |
+| `company_billing_configurations` | 14 | Billing day, due date interval, billing interval per company |
+| `company_bank_accounts` | 61 | Linked bank accounts — ACH/Plaid details, autodebit status, verification status |
+| `bank_accounts` | 21 | Internal credit line ledger — cl (credit limit), ab (available balance), tb (total balance), bb (billing balance) |
+
+### Beneficiaries & Payments
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `beneficiaries` | 11 | Payment beneficiary master — companyid, beneficiaryname |
+| `beneficiary_payment_details` | 50 | Bank details — CLABE, SWIFT/BIC, routing, account number, currency, country |
+| `transfer_details` | 22 | Transfer detail records |
+| `transfer_approvals` | 12 | Approval workflow for transfers |
+
+### Credit & Collateral
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `collateral_records` | 24 | Collateral — type, local/USD amount, advancerate, effectivecollateralvalue, expiry, status |
+| `credit_product_requests` | 13 | Credit line requests |
+| `bank_accounts` | 21 | cl/ab/tb/bb/ar ledger columns (credit line accounting) |
+
+### KYB / Compliance / Tax
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_tax_status` | 20 | MX SAT tax status — RFC, regimens, obligations, economic activity |
+| `company_tax_returns` | 28 | MX SAT annual tax returns — ISR, deductions, declarations |
+| `sardine_audit_logs` | 10 | Sardine fraud/risk audit logs |
+| `sardine_transaction_risks` | 14 | Transaction-level risk scores from Sardine |
+| `device_fingerprints` | 27 | Device fingerprint records for fraud detection |
+
+### SAT / Mexico Invoicing
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `satws_invoices` | 43 | SAT invoices (CFDI) — issuer, receiver, total, tax, status, issuedat |
+| `satws_invoice_items` | 19 | Line items on SAT invoices |
+| `satws_invoice_payments` | 20 | Payment records against SAT invoices |
+| `satws_extractions` | 19 | SAT data extraction jobs |
+| `company_satws_accounts` | 18 | Company SAT account linkages |
+
+### Cards & Spend Controls
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `card_transaction_details` | 21 | Detailed card transaction metadata |
+| `temporary_spend_limits` | 19 | Temporary spend limit overrides |
+| `needs_attention_items` | 26 | Expense policy violations — missing receipts, notes, policy breaches |
+| `policies` | 17 | Spend policies |
+| `mcc_custom_categories` | 13 | Custom MCC category mappings |
+
+### Open Banking & FX
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `open_banking_balances` | 12 | Open banking balance snapshots |
+| `open_banking_transactions` | 28 | Open banking transaction feed |
+| `exchange_rates` | 11 | Exchange rate records |
+| `exchange_rate_logs` | 13 | Exchange rate change log |
+| `routefusion_entities` | 22 | Routefusion payment entity records |
+| `cross_border_fees` | 11 | Cross-border fee schedules |
+
+### Example Joins
+
+```sql
+-- Company name + credit limit from raw + DM
+SELECT r.id, r.name, r.ein, c.credit_limit_usd, c.activity_status
+FROM dms_mysql_jeeves_raw.companies r
+JOIN master_customer_dm.companies_dm c ON c.company_id = r.id
+WHERE r.deletedat IS NULL AND c.is_test = false
+
+-- Active cards for a company
+SELECT c.id, c.cardtype, c.cardstatus, c.spendlimit, u.email
+FROM dms_mysql_jeeves_raw.cards c
+JOIN dms_mysql_jeeves_raw.users u ON u.id = c.userid
+WHERE c.companyid = 12345 AND c.deletedat IS NULL
+
+-- Loan instalment schedule
+SELECT i.id, i.duedate, i.paiddate, i.usdcurrencyamount, i.status, i.dayspastdue
+FROM dms_mysql_jeeves_raw.instalments i
+JOIN dms_mysql_jeeves_raw.loans l ON l.id = i.loanid
+WHERE l.companyid = 12345 AND i.deletedat IS NULL
+ORDER BY i.duedate
+
+-- SAT invoices for a company
+SELECT s.invoiceid, s.total, s.tax, s.status, s.issuedat
+FROM dms_mysql_jeeves_raw.satws_invoices s
+WHERE s.companyid = 12345
+ORDER BY s.issuedat DESC
+```
+
+### Full Table List (209 tables)
+accounting_sync_cycles, activity_logs, admin_settings, admins, all_product_transactions, api_client_calendar_configurations, api_client_credentials, auto_debit_bank_accounts, autopay_logs, backend_dead_letters, bank_account_link_logs, bank_accounts, bank_histories, banks, beneficiaries, beneficiary_payment_details, bill_pay_billers, bulk_transfers, business_ownerships, card_digital_wallets, card_product_configurations, card_product_requests, card_requests, card_shipment_approvals, card_transaction_details, card_transaction_settlement, cards, cards_gateway_dead_letters, cities, collateral_records, companies, company_account_mappings, company_accounting_integration_settings, company_accounting_integrations, company_addresses, company_bank_accounts, company_bank_accounts_fallback, company_billing_configuration_logs, company_billing_configurations, company_business_leaderships, company_cardservices, company_contacts, company_investors, company_jp_credit_contact_details, company_mexico_credit_bureau_data, company_migrations, company_operating_cou

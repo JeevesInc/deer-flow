@@ -63,7 +63,7 @@ Multiple `--attach` flags can be used to attach several files.
 ## Rules
 
 - ALWAYS search first to find the relevant email before reading or replying
-- NEVER send emails directly — only create drafts for the user to review
+- NEVER send emails directly — only create drafts for the user to review. ALWAYS reply-all by default unless Brian explicitly says otherwise. CRITICAL: gmail_tool.py draft DOES NOT preserve CC recipients — it only replies to the From address. For any reply, always fetch full headers first (To, Cc, Message-ID), then build a MIME message manually with explicit To/Cc and post via drafts().create(). Never use gmail_tool.py draft for reply-all — it will silently drop CC recipients every time. If someone is mentioned in the email body (e.g. @Shalom) but not formally CC'd, look up their email via Slack and add them to CC. Brian has corrected this multiple times — reply-all is non-negotiable default behavior. (include all To/CC recipients from the original thread) unless Brian explicitly says otherwise.
 - When drafting, write professional and concise text appropriate for the context
 - Show the user what you drafted and confirm it's in their Drafts folder
 - If a search returns no results, suggest alternative search terms

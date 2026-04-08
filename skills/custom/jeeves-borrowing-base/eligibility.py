@@ -17,23 +17,45 @@ ELIGIBLE_UW_SCORES = ['A', 'B', 'C', 'D']
 
 
 def _add_common_elig_fields(df):
-    """Add the eligibility flag columns common to both US and SOFOM."""
+    """Add the eligibility flag columns common to both US and SOFOM.
+
+    Column order MUST match the template (alphabetical: h-z, aa-qq).
+    The template formula tabs reference tape columns by letter position.
+    """
     df['elig_juris'] = df['country_code'].isin(ELIGIBLE_COUNTRIES).astype(int)
     df['elig_a'] = df['country_code'].isin(ELIGIBLE_COUNTRIES).astype(int)
 
     # Placeholder eligibility flags (company_id not null)
-    for s in list('bcdefg') + list('mnopqrstuvwxyz') + ['aa','bb','cc','dd','gg','hh','ii','jj','kk','nn','oo','pp','qq']:
+    for s in list('bcdefg'):
         df[f'elig_{s}'] = df['company_id'].notna().astype(int)
 
+    # Real eligibility checks — inserted in alphabetical order to match template
     df['elig_f'] = df['currency'].isin(ELIGIBLE_CURRENCIES).astype(int)
+    df['elig_g'] = df['company_id'].notna().astype(int)  # placeholder
     df['elig_h'] = (~df['is_in_repayment']).astype(int)
     df['elig_i'] = 1
     df['elig_j'] = (df['days_past_due'] <= 30).astype(int)
     df['elig_k'] = (~df['charge_off_flag']).astype(int)
     df['elig_l'] = (df['max_dpd'] <= 45).astype(int)
+
+    # Remaining single-letter placeholders in order
+    for s in list('mnopqrstuvwxyz'):
+        df[f'elig_{s}'] = df['company_id'].notna().astype(int)
+
+    # Double-letter flags in alphabetical order
+    for s in ['aa', 'bb', 'cc', 'dd']:
+        df[f'elig_{s}'] = df['company_id'].notna().astype(int)
     df['elig_ee'] = (df['credit_limit_usd'] <= 5_000_000).astype(int)
+
+    # elig_ff is set by the caller (US vs SOFOM have different balance columns)
+
+    for s in ['gg', 'hh', 'ii', 'jj', 'kk']:
+        df[f'elig_{s}'] = df['company_id'].notna().astype(int)
     df['elig_ll'] = df['uw_score'].isin(ELIGIBLE_UW_SCORES).astype(int)
     df['elig_mm'] = 1
+    for s in ['nn', 'oo', 'pp', 'qq']:
+        df[f'elig_{s}'] = df['company_id'].notna().astype(int)
+
     return df
 
 

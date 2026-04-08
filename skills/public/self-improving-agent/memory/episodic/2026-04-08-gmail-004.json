@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-08-004",
+  "timestamp": "2026-04-08T21:42:53.252111+00:00",
+  "skill": "gmail",
+  "situation": "Draft created with threadId but not appearing in thread UI",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "Gmail threading requires correct In-Reply-To and References headers set to the original message Message-ID. threadId alone places the draft in the thread backend but it does not appear in the UI thread view. Always fetch the original message headers first, then set In-Reply-To = original Message-ID and References = original References + Message-ID.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

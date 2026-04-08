@@ -80,8 +80,8 @@ select
     , lt.credit_amount
     , lt.balance
     , coalesce(eb.jvs_remaining, 0) as jvs_remaining
-    , lt.balance - coalesce(eb.jvs_remaining, 0) as sofom_balance
-    , (lt.balance - coalesce(eb.jvs_remaining, 0)) * lt.spot_rate as sofom_balance_usd
+    , case when sofom_transfer.transfer_flag = 'on' then lt.balance - coalesce(eb.jvs_remaining, 0) else 0 end as sofom_balance
+    , case when sofom_transfer.transfer_flag = 'on' then (lt.balance - coalesce(eb.jvs_remaining, 0)) * lt.spot_rate else 0 end as sofom_balance_usd
     , sofom_transfer.transfer_flag
     , lt.card_balance
     , lt.jp_balance

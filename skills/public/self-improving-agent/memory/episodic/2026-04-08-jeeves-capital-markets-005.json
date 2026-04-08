@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-08-005",
+  "timestamp": "2026-04-08T21:42:53.551086+00:00",
+  "skill": "jeeves-capital-markets",
+  "situation": "Updating credit performance PPTX charts with new data",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "PowerPoint chart updates require modifying BOTH the chart XML cache AND the embedded Excel workbook blob. The XML cache (multiLvlStrCache/numCache) is ignored on open - PowerPoint re-reads from the embedded xlsx. Also: (1) noMultiLvlLbl val=1 on catAx forces integer axis labels - must set to 0; (2) TableStyleMedium9 in table1.xml overrides chart series spPr colors - use bare tableStyleInfo with no name attribute; (3) multiLvlStrRef must be converted to strRef for reliable string axis labels.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

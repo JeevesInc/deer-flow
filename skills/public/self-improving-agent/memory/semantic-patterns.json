@@ -1,0 +1,180 @@
+{
+  "patterns": {
+    "pat-2026-04-06-001": {
+      "id": "pat-2026-04-06-001",
+      "name": "When checking whether Brian sent something to Alex on Slack,",
+      "source": "ep-2026-04-06-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-06",
+      "last_applied": "2026-04-06T02:54:10.298800+00:00",
+      "category": "general",
+      "pattern": "When checking whether Brian sent something to Alex on Slack, look for short acknowledgment messages like Thanks, will take a look or Thanks Brian - will review as confirmation that Brian sent something immediately prior. Do not flag an item as open on Brian without first scanning for these receipt patterns in the DM thread. Brian corrected me twice on this - highest value signal.",
+      "problem": "Brian said he sent Fasanara v2 comments to Alex on Slack. I had flagged it as an open item on Brian twice, saying the gap was real. The evidence was there all along: Alex sent a 4:46 PM DM saying Thanks Brian - will take a look and come back, which is a clear receipt acknowledgment. I missed it both times and made Brian defend himself.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-04-06-002": {
+      "id": "pat-2026-04-06-002",
+      "name": "During meeting prep, whenever a Slack message has a file att",
+      "source": "ep-2026-04-06-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-06",
+      "last_applied": "2026-04-06T03:00:08.408311+00:00",
+      "category": "general",
+      "pattern": "During meeting prep, whenever a Slack message has a file attached (has:file), ALWAYS fetch and read the file using fetch_doc.py. Do not assume what the file contains based on the message text. Files attached to Slack messages are often the most important context for understanding what was communicated and whether a request was fulfilled. This applies to Drive links shared in Slack too.",
+      "problem": "During meeting prep, I identified that Brian sent Alex a file on Slack at 4:15 PM Apr 2. I noted the file was sent but did not fetch and read it. Brian had to explicitly tell me to check the file. When I finally read it, it turned out to be the 3-lender term sheet comparison doc (NB vs Gramercy vs Fasanara), not a Fasanara-specific markup as I had assumed. This changed the entire picture of what Alex was acknowledging and what the open item actually is.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-04-07-003": {
+      "id": "pat-2026-04-07-003",
+      "name": "Skill guidance updated based on experience",
+      "source": "ep-2026-04-07-001",
+      "confidence": 0.8500000000000001,
+      "applications": 4,
+      "created": "2026-04-07",
+      "last_applied": "2026-04-08T00:58:54.535922+00:00",
+      "category": "general",
+      "pattern": "Skill guidance updated based on experience",
+      "problem": "Patched skill guidance in gmail",
+      "solution": "Replaced: NEVER send emails directly \u2014 only create drafts for the user to review... -> NEVER send emails directly \u2014 only create drafts for the user to review. ALWAYS r...",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-07-004": {
+      "id": "pat-2026-04-07-004",
+      "name": "The default `draft` command is reply-to-sender only. For rep",
+      "source": "ep-2026-04-07-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-07",
+      "last_applied": "2026-04-07T15:30:10.757965+00:00",
+      "category": "general",
+      "pattern": "The default `draft` command is reply-to-sender only. For reply-all, use the patched tool at C:/redshift-bot/deer-flow/backend/.deer-flow/threads/2b2c44e3-f07d-42d0-ba3c-4d5226079bd5/user-data/workspace/gmail_tool_patched.py with --reply-all flag and PYTHONPATH=C:/redshift-bot/deer-flow/skills/custom/_shared prefix. Brian expects reply-all by default on all email drafts.",
+      "problem": "Brian asked for reply-all on an email thread. The built-in `draft` command only replies to the From address. Had to write a patched gmail_tool with --reply-all flag that collects From+To+CC, deduplicates, excludes my own address, and sets To=first recipient, CC=rest. Must run with PYTHONPATH=C:/redshift-bot/deer-flow/skills/custom/_shared.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-07-005": {
+      "id": "pat-2026-04-07-005",
+      "name": "present_files and upload_to_drive are not interchangeable \u2014 ",
+      "source": "ep-2026-04-07-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-07",
+      "last_applied": "2026-04-07T16:36:47.329910+00:00",
+      "category": "general",
+      "pattern": "present_files and upload_to_drive are not interchangeable \u2014 Drive upload is required for user access across sessions and devices. Never skip it.",
+      "problem": "Created a plan document and presented it locally but did not upload to Drive. User had to ask where it was.",
+      "solution": "Always upload to Drive immediately after writing any output file, before or alongside present_files",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-04-07-006": {
+      "id": "pat-2026-04-07-006",
+      "name": "To create a true reply-all draft, run a custom Python script",
+      "source": "ep-2026-04-07-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-07",
+      "last_applied": "2026-04-07T20:16:13.898869+00:00",
+      "category": "general",
+      "pattern": "To create a true reply-all draft, run a custom Python script from within C:/redshift-bot/deer-flow/skills/custom/gmail directory using: cd C:/redshift-bot/deer-flow/skills/custom/gmail && python3 -c with sys.path.insert(0, os.path.join(os.getcwd(), '..', '_shared')). Fetch original message headers (From, To, Cc, Message-ID), combine all recipients minus my_email into To field, set In-Reply-To and References headers, and call service.users().drafts().create(). Also: if someone is @mentioned in the email body but not formally on To/Cc, look them up via Slack and add them.",
+      "problem": "Reply-all draft needed with CC. The gmail_tool.py draft command only replies to the From address \u2014 it does not pull To/Cc from the original thread. The --cc flag does not exist in the tool.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-08-007": {
+      "id": "pat-2026-04-08-007",
+      "name": "When user says they just received something, check Gmail FIR",
+      "source": "ep-2026-04-08-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-08",
+      "last_applied": "2026-04-08T00:58:46.989437+00:00",
+      "category": "general",
+      "pattern": "When user says they just received something, check Gmail FIRST before Drive. Drive may have older drafts that are not the current version. Search email with sender name + subject keywords to find the latest attachment.",
+      "problem": "User asked to compare Spanish vs English Covalto term sheet. Agent searched Drive first and found an old March 17 draft, producing a misleading analysis flagging major discrepancies. The actual final documents were email attachments sent same day by Pablo Demederos.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-08-008": {
+      "id": "pat-2026-04-08-008",
+      "name": "gmail_tool.py draft does NOT preserve CC recipients \u2014 it onl",
+      "source": "ep-2026-04-08-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-08",
+      "last_applied": "2026-04-08T00:58:47.189787+00:00",
+      "category": "general",
+      "pattern": "gmail_tool.py draft does NOT preserve CC recipients \u2014 it only replies to the From address. For reply-all, always pull full headers manually (To, Cc, Message-ID), then build a MIME message with explicit To/Cc fields and post via drafts().create(). This is non-negotiable \u2014 reply-all is Brian s default.",
+      "problem": "Used gmail_tool.py draft command to reply to an email with CC recipients (Isabel, Shalom). The tool only replied to the sender (Alex), dropping the CC recipients entirely. Brian corrected this.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-08-009": {
+      "id": "pat-2026-04-08-009",
+      "name": "Gmail threading requires correct In-Reply-To and References ",
+      "source": "ep-2026-04-08-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-08",
+      "last_applied": "2026-04-08T21:42:53.267740+00:00",
+      "category": "general",
+      "pattern": "Gmail threading requires correct In-Reply-To and References headers set to the original message Message-ID. threadId alone places the draft in the thread backend but it does not appear in the UI thread view. Always fetch the original message headers first, then set In-Reply-To = original Message-ID and References = original References + Message-ID.",
+      "problem": "Draft created with threadId but not appearing in thread UI",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-08-010": {
+      "id": "pat-2026-04-08-010",
+      "name": "PowerPoint chart updates require modifying BOTH the chart XM",
+      "source": "ep-2026-04-08-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-08",
+      "last_applied": "2026-04-08T21:42:53.551086+00:00",
+      "category": "general",
+      "pattern": "PowerPoint chart updates require modifying BOTH the chart XML cache AND the embedded Excel workbook blob. The XML cache (multiLvlStrCache/numCache) is ignored on open - PowerPoint re-reads from the embedded xlsx. Also: (1) noMultiLvlLbl val=1 on catAx forces integer axis labels - must set to 0; (2) TableStyleMedium9 in table1.xml overrides chart series spPr colors - use bare tableStyleInfo with no name attribute; (3) multiLvlStrRef must be converted to strRef for reliable string axis labels.",
+      "problem": "Updating credit performance PPTX charts with new data",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-04-08-011": {
+      "id": "pat-2026-04-08-011",
+      "name": "Always find the source SQL before writing your own. The temp",
+      "source": "ep-2026-04-08-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-08",
+      "last_applied": "2026-04-08T21:42:53.788327+00:00",
+      "category": "general",
+      "pattern": "Always find the source SQL before writing your own. The template used: (1) DQ = ADB methodology (avg daily balance of dq_bucket=2 / avg daily total balance), not EOM snapshot; (2) C/O = rollforward methodology where charge-off amount is balance on min(charge_off_dt)-1 (day before flag flips), not dt=charge_off_dt; (3) dq_bucket=2 is the 30-59 DPD bucket code. Source SQL: ds_dq30_historical.sql and loc_acct_rollforward.sql in .github/sql/.",
+      "problem": "Rebuilding credit performance slides - DQ and C/O numbers did not match template",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    }
+  }
+}

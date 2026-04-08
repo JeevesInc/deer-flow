@@ -853,10 +853,14 @@ def write_file_tool(
 ) -> str:
     """Write text content to a file.
 
+    IMPORTANT: You MUST provide all three required parameters: description, path, AND content.
+    Calling this tool without content will always fail — if your script is long, write it in
+    sections or use bash with an inline heredoc (python3 << 'EOF' ... EOF) instead.
+
     Args:
         description: Explain why you are writing to this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         path: The **absolute** path to the file to write to. ALWAYS PROVIDE THIS PARAMETER SECOND.
-        content: The content to write to the file. ALWAYS PROVIDE THIS PARAMETER THIRD.
+        content: The FULL text content to write to the file. ALWAYS PROVIDE THIS PARAMETER THIRD. This field is REQUIRED — never omit it.
     """
     try:
         sandbox = ensure_sandbox_initialized(runtime)

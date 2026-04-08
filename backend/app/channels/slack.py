@@ -401,6 +401,39 @@ class SlackChannel(Channel):
         return text
 
     @staticmethod
+    def _extract_quoted_blocks_text(event: dict) -> str:
+        """Extract text from rich_text_quote elements in Slack blocks.
+
+        When a user forwards/shares a Slack message, the quoted content
+        often appears in top-level ``blocks`` as ``rich_text_quote`` elements
+        rather than in ``attachments``.  This is common in newer Slack clients.
+        We only extract ``rich_text_quote`` elements here — ``rich_text_section``
+        elements duplicate what is already in ``event["text"]``.
+        """
+        parts: list[str] = []
+        for block in event.get("blocks", []):
+            if block.get("type") != "rich_text":
+                continue
+            for element in block.get("elements", []):
+                if element.get("type") != "rich_text_quote":
+                    continue
+                text_parts: list[str] = []
+                for child in element.get("elements", []):
+                    child_type = child.get("type", "")
+                    if child_type == "text":
+                        text_parts.append(child.get("text", ""))
+                    elif child_type == "link":
+                        text_parts.append(child.get("text", "") or child.get("url", ""))
+                    elif child_type == "user":
+                        text_parts.append(f"<@{child.get('user_id', '')}>")
+                    elif child_type == "channel":
+                        text_parts.append(f"<#{child.get('channel_id', '')}>")
+                chunk = "".join(text_parts).strip()
+                if chunk:
+                    parts.append(chunk)
+        return "\n\n".join(parts)
+
+    @staticmethod
     def _extract_forwarded_text(event: dict) -> str:
         """Extract text content from forwarded messages, emails, and rich attachments.
 
@@ -481,6 +514,14 @@ class SlackChannel(Channel):
                 else:
                     logger.warning("[Slack] SDK download failed (status %d) for %s, trying urllib", resp.status_code, name)
             except Exception as exc:
+                exc_str = str(exc)
+                if "missing_scope" in exc_str or "files:read" in exc_str:
+                    logger.error(
+                        "[Slack] Cannot download file '%s': bot token is missing the 'files:read' scope. "
+                        "Add it at api.slack.com/apps → OAuth & Permissions → Bot Token Scopes, then reinstall the app.",
+                        name,
+                    )
+                    return None
                 logger.warning("[Slack] SDK download failed for %s: %s, trying urllib", name, exc)
 
         # Fallback: urllib with explicit Bearer token
@@ -492,6 +533,16 @@ class SlackChannel(Channel):
         try:
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {bot_token}"})
             with urllib.request.urlopen(req, timeout=60) as resp:
+                content_type = resp.headers.get("Content-Type", "")
+                if "text/html" in content_type:
+                    # Slack redirects to a login/error page when auth fails (missing scope or invalid token)
+                    logger.error(
+                        "[Slack] Cannot download file '%s': Slack returned an HTML page instead of the file. "
+                        "The bot token likely lacks the 'files:read' scope. "
+                        "Add it at api.slack.com/apps → OAuth & Permissions → Bot Token Scopes, then reinstall the app.",
+                        name,
+                    )
+                    return None
                 data = resp.read()
             dest.write_bytes(data)
             size_kb = len(data) / 1024
@@ -599,6 +650,13 @@ class SlackChannel(Channel):
             logger.info("[Slack] Extracted forwarded content (%d chars) from attachments", len(forwarded_text))
             text = text + "\n\nForwarded message:\n" + forwarded_text if text else "Forwarded message:\n" + forwarded_text
 
+        # Extract quoted content from blocks (modern Slack message forwarding embeds the
+        # forwarded message as a rich_text_quote block rather than in attachments)
+        quoted_text = self._extract_quoted_blocks_text(event)
+        if quoted_text:
+            logger.info("[Slack] Extracted quoted content (%d chars) from blocks", len(quoted_text))
+            text = text + "\n\nForwarded message:\n" + quoted_text if text else "Forwarded message:\n" + quoted_text
+
         # Resolve Slack archive URLs to actual message content
         # Pattern: https://WORKSPACE.slack.com/archives/CHANNEL_ID/pTIMESTAMP
         text = self._resolve_slack_archive_urls(text)
@@ -655,6 +713,13 @@ class SlackChannel(Channel):
                     text = f"{text}\n\n{note}" if text else note
 
         if not text:
+            logger.warning(
+                "[Slack] No text extracted from event (attachments=%d, files=%d, blocks=%d, subtype=%s) — ignoring",
+                len(event.get("attachments", [])),
+                len(event.get("files", [])),
+                len(event.get("blocks", [])),
+                event.get("subtype", "(none)"),
+            )
             return
 
         channel_id = event.get("channel", "")

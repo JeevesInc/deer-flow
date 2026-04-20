@@ -1,6 +1,6 @@
 ---
 name: gmail
-description: Use this skill when the user asks about emails, wants to search their inbox, read an email, or draft a reply. Also use when the user says "email", "inbox", "draft", "reply to", or references a specific email thread.
+description: Use this skill when the user asks about emails, wants to search their inbox, read an email, download attachments, or draft a reply. Also use when the user says "email", "inbox", "draft", "reply to", "attachment", "download", or references a specific email thread.
 allowed-tools:
   - bash
   - read_file
@@ -27,6 +27,17 @@ Uses Gmail search syntax — same as the Gmail search bar. Examples:
 python /mnt/skills/custom/gmail/gmail_tool.py read <message_id>
 ```
 Returns full email content (headers + body). Use message IDs from search results.
+
+### Download attachments from an email
+```bash
+python /mnt/skills/custom/gmail/gmail_tool.py download <message_id>
+```
+Downloads all attachments from the message to the workspace directory. Inline signature images are skipped.
+
+Save to a custom directory with `--output-dir`:
+```bash
+python /mnt/skills/custom/gmail/gmail_tool.py download <message_id> --output-dir /mnt/user-data/outputs
+```
 
 ### Draft a reply to an email
 ```bash

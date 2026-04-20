@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
 
 from app.channels.manager_helpers import (
@@ -88,6 +89,7 @@ class ChannelManager:
         self._semaphore: asyncio.Semaphore | None = None
         self._running = False
         self._task: asyncio.Task | None = None
+        self._monitor_task: asyncio.Task | None = None
 
     @staticmethod
     def _channel_supports_streaming(channel_name: str) -> bool:
@@ -149,21 +151,125 @@ class ChannelManager:
         """Start the dispatch loop."""
         if self._running:
             return
+        await self._cancel_zombie_runs()
         self._running = True
         self._semaphore = asyncio.Semaphore(self._max_concurrency)
         self._task = asyncio.create_task(self._dispatch_loop())
+        self._monitor_task = asyncio.create_task(self._stuck_run_monitor())
         logger.info("ChannelManager started (max_concurrency=%d)", self._max_concurrency)
+
+    async def _cancel_zombie_runs(self) -> None:
+        """Cancel any runs left in 'running' state from a previous process.
+
+        On restart, the in-memory LangGraph queue may resume orphaned runs
+        that will never complete, blocking the per-thread enqueue strategy.
+        """
+        try:
+            client = self._get_client()
+            busy_threads = await client.threads.search(status="busy", limit=100)
+            if not busy_threads:
+                logger.info("[Manager] no zombie runs found on startup")
+                return
+            cancelled = 0
+            for thread in busy_threads:
+                tid = thread["thread_id"]
+                try:
+                    runs = await client.runs.list(tid)
+                    for run in runs:
+                        if run["status"] in ("running", "pending"):
+                            try:
+                                await client.runs.cancel(tid, run["run_id"])
+                                cancelled += 1
+                                logger.info(
+                                    "[Manager] cancelled zombie run %s on thread %s (was %s)",
+                                    run["run_id"], tid, run["status"],
+                                )
+                            except Exception:
+                                logger.warning("[Manager] failed to cancel run %s on thread %s", run["run_id"], tid, exc_info=True)
+                except Exception:
+                    logger.warning("[Manager] failed to list runs for thread %s", tid, exc_info=True)
+            logger.info("[Manager] zombie cleanup complete: cancelled %d run(s) across %d busy thread(s)", cancelled, len(busy_threads))
+        except Exception:
+            logger.warning("[Manager] zombie cleanup failed (non-fatal, continuing startup)", exc_info=True)
+
+    async def _stuck_run_monitor(self) -> None:
+        """Periodically cancel runs that have been stuck for too long.
+
+        Checks every 60 seconds for threads in ``busy`` status where the most
+        recent run hasn't been updated in over 10 minutes.  This covers the
+        case where a run completes from the LLM's perspective but the
+        LangGraph runtime never transitions it to ``success``.
+        """
+        POLL_INTERVAL = 60  # seconds between checks
+        STUCK_THRESHOLD = 600  # 10 minutes with no state update → stuck
+
+        while self._running:
+            try:
+                await asyncio.sleep(POLL_INTERVAL)
+            except asyncio.CancelledError:
+                return
+
+            try:
+                client = self._get_client()
+                busy_threads = await client.threads.search(status="busy", limit=100)
+                if not busy_threads:
+                    continue
+
+                now = datetime.now(timezone.utc)
+                cancelled = 0
+                for thread in busy_threads:
+                    tid = thread["thread_id"]
+                    updated_raw = thread.get("state_updated_at") or thread.get("updated_at")
+                    if not updated_raw:
+                        continue
+                    if isinstance(updated_raw, str):
+                        updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+                    else:
+                        updated_at = updated_raw
+                    age = (now - updated_at).total_seconds()
+                    if age < STUCK_THRESHOLD:
+                        continue
+
+                    # Thread state hasn't changed in >10 min — cancel active runs.
+                    try:
+                        runs = await client.runs.list(tid)
+                        for run in runs:
+                            if run["status"] in ("running", "pending"):
+                                try:
+                                    await client.runs.cancel(tid, run["run_id"])
+                                    cancelled += 1
+                                    logger.warning(
+                                        "[Monitor] cancelled stuck run %s on thread %s "
+                                        "(status=%s, idle %.0fs)",
+                                        run["run_id"], tid, run["status"], age,
+                                    )
+                                except Exception:
+                                    logger.warning(
+                                        "[Monitor] failed to cancel run %s on thread %s",
+                                        run["run_id"], tid, exc_info=True,
+                                    )
+                    except Exception:
+                        logger.warning("[Monitor] failed to list runs for thread %s", tid, exc_info=True)
+
+                if cancelled:
+                    logger.info("[Monitor] stuck-run sweep: cancelled %d run(s)", cancelled)
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                logger.warning("[Monitor] stuck-run check failed (will retry)", exc_info=True)
 
     async def stop(self) -> None:
         """Stop the dispatch loop."""
         self._running = False
-        if self._task:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        for task_attr in ("_task", "_monitor_task"):
+            t = getattr(self, task_attr, None)
+            if t:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, task_attr, None)
         logger.info("ChannelManager stopped")
 
     # -- dispatch loop -----------------------------------------------------
@@ -211,8 +317,14 @@ class ChannelManager:
                     msg.chat_id,
                 )
                 import httpx
+                err_str = str(exc).lower()
                 if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, TimeoutError)):
                     error_text = "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
+                elif "recursion" in err_str or "recursion_limit" in err_str:
+                    error_text = (
+                        "I hit my step limit before finishing. "
+                        "Reply **continue** in this thread and I'll pick up where I left off."
+                    )
                 else:
                     error_text = "An internal error occurred. Please try again."
                 await self._send_error(msg, error_text)
@@ -241,7 +353,14 @@ class ChannelManager:
         # handles this by using the "channel:chat_id" key without a topic suffix.
         thread_id = self.store.get_thread_id(msg.channel_name, msg.chat_id, topic_id=msg.topic_id)
         if thread_id:
-            logger.info("[Manager] reusing thread: thread_id=%s for topic_id=%s", thread_id, msg.topic_id)
+            # Verify the thread still exists on LangGraph (it uses an in-memory
+            # thread registry that is lost on restart).
+            try:
+                await client.threads.get(thread_id)
+                logger.info("[Manager] reusing thread: thread_id=%s for topic_id=%s", thread_id, msg.topic_id)
+            except Exception:
+                logger.warning("[Manager] stored thread %s no longer exists on LangGraph, creating new thread", thread_id)
+                thread_id = None
 
         # No existing thread found — create a new one
         if thread_id is None:
@@ -420,7 +539,14 @@ class ChannelManager:
                 if attachments:
                     response_text = format_artifact_text([attachment.virtual_path for attachment in attachments])
                 elif stream_error:
-                    response_text = "An error occurred while processing your request. Please try again."
+                    err_str = str(stream_error).lower()
+                    if "recursion" in err_str or "recursion_limit" in err_str:
+                        response_text = (
+                            "I hit my step limit before finishing. "
+                            "Reply **continue** in this thread and I'll pick up where I left off."
+                        )
+                    else:
+                        response_text = "An error occurred while processing your request. Please try again."
                 else:
                     response_text = latest_text or "(No response from agent)"
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Gmail tool: search emails, read messages, and create draft replies with attachments.
+"""Gmail tool: search emails, read messages, download attachments, and create draft replies.
 
 Usage:
     python gmail_tool.py search "query"           # Search emails
     python gmail_tool.py read <message_id>         # Read a specific email
+    python gmail_tool.py download <message_id> [--output-dir /path]  # Download attachments
     python gmail_tool.py draft <message_id> "body" [--attach file1 [--attach file2]]
     python gmail_tool.py draft-new "to" "subject" "body" [--attach file1 [--attach file2]]
 
@@ -270,6 +271,52 @@ def cmd_draft_new(to, subject, body_text, attachments=None):
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
 
 
+def cmd_download(message_id, output_dir=None):
+    if output_dir is None:
+        output_dir = os.environ.get('WORKSPACE_PATH', '/mnt/user-data/workspace')
+    os.makedirs(output_dir, exist_ok=True)
+
+    service = _get_service()
+    msg = service.users().messages().get(userId='me', id=message_id, format='full').execute()
+    payload = msg.get('payload', {})
+
+    def _find_attachments(part):
+        """Recursively find parts that have an attachmentId."""
+        found = []
+        body = part.get('body', {})
+        if body.get('attachmentId'):
+            headers = {h['name'].lower(): h['value'] for h in part.get('headers', [])}
+            disposition = headers.get('content-disposition', '')
+            content_id = headers.get('content-id', '')
+            # Skip inline images with a Content-ID (signature images, etc.)
+            if 'inline' in disposition and content_id:
+                return found
+            found.append(part)
+        for sub in part.get('parts', []):
+            found.extend(_find_attachments(sub))
+        return found
+
+    parts = _find_attachments(payload)
+
+    if not parts:
+        print(f"No attachments found in message {message_id}")
+        return
+
+    for part in parts:
+        filename = part.get('filename') or 'attachment'
+        att_id = part['body']['attachmentId']
+        att = service.users().messages().attachments().get(
+            userId='me', id=att_id, messageId=message_id
+        ).execute()
+        data = base64.urlsafe_b64decode(att['data'])
+        dest = os.path.join(output_dir, filename)
+        with open(dest, 'wb') as f:
+            f.write(data)
+        print(f"Saved: {dest} ({len(data)} bytes)")
+
+    print(f"\nDownloaded {len(parts)} attachment(s) from message {message_id}")
+
+
 def _parse_attachments(args):
     """Extract --attach values from remaining args."""
     attachments = []
@@ -293,7 +340,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python gmail_tool.py <command> [args]")
-        print("Commands: search, read, draft, draft-new")
+        print("Commands: search, read, draft, draft-new, download")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -323,6 +370,18 @@ def main():
             sys.exit(1)
         _, attachments = _parse_attachments(sys.argv[5:])
         cmd_draft_new(sys.argv[2], sys.argv[3], sys.argv[4], attachments=attachments)
+
+    elif command == 'download':
+        if len(sys.argv) < 3:
+            print("Usage: python gmail_tool.py download <message_id> [--output-dir /path/to/dir]", file=sys.stderr)
+            sys.exit(1)
+        msg_id = sys.argv[2]
+        out_dir = None
+        if '--output-dir' in sys.argv:
+            idx = sys.argv.index('--output-dir')
+            if idx + 1 < len(sys.argv):
+                out_dir = sys.argv[idx + 1]
+        cmd_download(msg_id, output_dir=out_dir)
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

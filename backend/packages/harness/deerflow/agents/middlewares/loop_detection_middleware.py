@@ -6,10 +6,16 @@ arguments indefinitely until the recursion limit kills the run.
 Detection strategy:
   1. After each model response, hash the tool calls (name + args).
   2. Track recent hashes in a sliding window.
-  3. If the same hash appears >= warn_threshold times, inject a
-     "you are repeating yourself — wrap up" system message (once per hash).
-  4. If it appears >= hard_limit times, strip all tool_calls from the
+  3. If the same hash appears >= warn_threshold times, queue a warning
+     for the next ``before_model`` cycle (once per hash). Deferring to
+     ``before_model`` ensures the warning HumanMessage lands AFTER the
+     tool_result for the offending call — Anthropic's API requires every
+     tool_use to be immediately followed by its tool_result, so injecting
+     the warning right after ``after_model`` would split that pair.
+  4. If a hash appears >= hard_limit times, strip all tool_calls from the
      response so the agent is forced to produce a final text answer.
+     Hard-stop happens in ``after_model`` because it removes the tool_use
+     entirely, so there is no adjacency pair to preserve.
 """
 
 import hashlib
@@ -113,6 +119,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         # Per-thread tracking using OrderedDict for LRU eviction
         self._history: OrderedDict[str, list[str]] = OrderedDict()
         self._warned: dict[str, set[str]] = defaultdict(set)
+        # Pending warnings queued in after_model, drained in before_model
+        self._pending_warning: dict[str, str] = {}
 
     def _get_thread_id(self, runtime: Runtime) -> str:
         """Extract thread_id from runtime context for per-thread tracking."""
@@ -129,6 +137,7 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         while len(self._history) > self.max_tracked_threads:
             evicted_id, _ = self._history.popitem(last=False)
             self._warned.pop(evicted_id, None)
+            self._pending_warning.pop(evicted_id, None)
             logger.debug("Evicted loop tracking for thread %s (LRU)", evicted_id)
 
     def _track_and_check(self, state: AgentState, runtime: Runtime) -> tuple[str | None, bool]:
@@ -199,11 +208,14 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
 
         return None, False
 
-    def _apply(self, state: AgentState, runtime: Runtime) -> dict | None:
+    def _after(self, state: AgentState, runtime: Runtime) -> dict | None:
+        """Track tool calls; hard-stop immediately, queue warnings for next ``before_model``."""
         warning, hard_stop = self._track_and_check(state, runtime)
 
         if hard_stop:
-            # Strip tool_calls from the last AIMessage to force text output
+            # Strip tool_calls from the last AIMessage to force text output.
+            # Safe to mutate now: no tool will run, so no tool_use/tool_result
+            # adjacency pair to preserve.
             messages = state.get("messages", [])
             last_msg = messages[-1]
             stripped_msg = last_msg.model_copy(
@@ -215,23 +227,43 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             return {"messages": [stripped_msg]}
 
         if warning:
-            # Inject as HumanMessage instead of SystemMessage to avoid
-            # Anthropic's "multiple non-consecutive system messages" error.
-            # Anthropic models require system messages only at the start of
-            # the conversation; injecting one mid-conversation crashes
-            # langchain_anthropic's _format_messages(). HumanMessage works
-            # with all providers. See #1299.
-            return {"messages": [HumanMessage(content=warning)]}
+            # Defer to before_model so the warning HumanMessage lands AFTER
+            # the tool_result for the offending tool_use. Injecting here
+            # would split the tool_use/tool_result pair and Anthropic would
+            # reject every subsequent request with a 400.
+            thread_id = self._get_thread_id(runtime)
+            with self._lock:
+                self._pending_warning[thread_id] = warning
 
         return None
 
+    def _before(self, state: AgentState, runtime: Runtime) -> dict | None:
+        """Drain any queued warning from a prior ``after_model`` cycle."""
+        thread_id = self._get_thread_id(runtime)
+        with self._lock:
+            warning = self._pending_warning.pop(thread_id, None)
+        if warning is None:
+            return None
+        # HumanMessage (not SystemMessage) — Anthropic only accepts system
+        # messages at the start of the conversation; mid-stream system
+        # messages crash langchain_anthropic's _format_messages(). See #1299.
+        return {"messages": [HumanMessage(content=warning)]}
+
     @override
     def after_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return self._apply(state, runtime)
+        return self._after(state, runtime)
 
     @override
     async def aafter_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return self._apply(state, runtime)
+        return self._after(state, runtime)
+
+    @override
+    def before_model(self, state: AgentState, runtime: Runtime) -> dict | None:
+        return self._before(state, runtime)
+
+    @override
+    async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict | None:
+        return self._before(state, runtime)
 
     def reset(self, thread_id: str | None = None) -> None:
         """Clear tracking state. If thread_id given, clear only that thread."""
@@ -239,6 +271,8 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
             if thread_id:
                 self._history.pop(thread_id, None)
                 self._warned.pop(thread_id, None)
+                self._pending_warning.pop(thread_id, None)
             else:
                 self._history.clear()
                 self._warned.clear()
+                self._pending_warning.clear()

@@ -1,24 +1,24 @@
 {
   "version": "1.0",
-  "lastUpdated": "2026-03-27T22:53:57.332756Z",
+  "lastUpdated": "2026-04-20T19:22:21.477758Z",
   "user": {
     "workContext": {
-      "summary": "User works at Jeeves Financial Technology (jeeves-org.slack.com) in underwriting (UW) operations, reviewing credit line decisions, onboarding scores, and account statuses. Their work involves tools such as Taktile (onboarding scoring), Redshift (data warehouse), and internal UW workflows. They are involved with structured credit products including receivables-backed revolving facilities for business clients, and engage with external partners including Accial Capital, Lendable, CBIZ, and CIM.",
-      "updatedAt": "2026-03-27T22:22:03.549527Z"
+      "summary": "User works at Jeeves Financial Technology (jeeves-org.slack.com) in underwriting (UW) operations, reviewing credit line decisions, onboarding scores, and account statuses. Their work involves tools such as Taktile (onboarding scoring), Redshift (data warehouse), Metabase (internal BI/SQL queries), python-pptx, and internal UW workflows including build_us.py, build_mx.py, merge_template.py, and data_tape.sql for borrowing base construction. They are involved with structured credit products including receivables-backed revolving facilities and line-of-credit facilities for business clients, and engage with external capital partners including Accial Capital, Lendable, CBIZ, CIM, Neuberger, Fasanara, Gramercy, Covalto, BBVA, and Vista Credit Partners.",
+      "updatedAt": "2026-04-17T23:54:01.362060Z"
     },
     "personalContext": {
-      "summary": "",
-      "updatedAt": ""
+      "summary": "User tends to favor pragmatic, lightweight solutions over over-engineered ones. They prefer simpler no-code or low-code alternatives where appropriate, are skeptical of self-hosted tooling, and prefer Reply All as the default behavior when drafting email responses. User expects the AI to remember established context without re-asking for clarification. User is privacy-conscious and receptive to honest pushback from the AI. User actively monitors stakeholder accountability and enforces exact structural alignment between trackers and folder structures. User is interested in AI tooling adoption across their team and is planning recurring internal knowledge-share sessions on AI tools including Claude Code. User enforces strict file hygiene in shared Drive folders — old/superseded versions of files must be deleted when a new version is dropped. User enforces source-citation discipline on all diligence deliverables — no claim may appear in a document without a verified source. User enforces precise language in diligence sitreps — documents must reflect current status only, with no forward-looking 'being prepared' language, and must distinguish between what a counterparty already has access to vs. what is available but not yet shared. User requires verbatim source questions in response documents rather than AI-summarized versions. User maintains a living `jeeves-diligence` skill that encodes all learned rules from BBVA, Vista, and future diligence processes — this skill is updated as new patterns are discovered. User requires all Drive deliverables to be Google Docs (not .md or other formats) unless a specific format is requested. User demands proof of data integrity when AI claims data ties to source — they will challenge the AI to verify and demonstrate exact matches. User expects the AI to actually open and inspect files before claiming it cannot verify them — failing to open a file before declaring it unreadable is considered an error. The correct reference for Jeeves investor presentation format is the 2026.02 Company Overview Google Slides deck — the Macropay PPTX is a single-slide balance chart and must never be used as a format reference for investor or diligence presentations. User requires a persistent skill be created that encodes the exact Jeeves slide format so every future deck is built to that spec without needing to re-specify it. The Jeeves slide format skill has been created at /mnt/skills/custom/jeeves-slides/SKILL.md and is now live — all future decks must load this skill first.",
+      "updatedAt": "2026-04-20T17:52:58.148246Z"
     },
     "topOfMind": {
-      "summary": "User is actively working on receivables-backed credit facility operations, including a pilot program for Easytech involving R$30M (~$5.76M USD) in Mercado Livre/Mercado Pago card receivables pledged via CERC, with Jeeves advancing 85% (~$4.89M USD) at a 2.1% transaction fee. The facility follows a monthly revolving cycle with three phases: Cycle Opening (Days 1–3), Active Monitoring (Days 4–30), and Cycle Closing (Day 30+). User is also actively monitoring credit exposure across accounts, including Macropay (Celulares y accesorios del sureste SA de CV) in Mexico — a confirmed and memory-corrected fact: Macropay's balance column in loc_tape and current_balance in companies_dm are in MXN (not USD), and the true USD balance from loc_tape.balance_usd is approximately $1.86M as of Mar 26, 2026 (most recent available), well within their credit limit of $6,257,865.60 USD. Today's (Mar 27) balance_usd is NULL because FX rates have not yet been applied. User has expressed frustration that this correction was not properly committed to memory in a prior session and expects the system to retain confirmed data corrections going forward. Key internal stakeholders in these workflows include Matheus, Leti, Isabel, William, and Pablo. User has an upcoming Jeeves Advance Request Discussion meeting on Mon Mar 30 at 11am PDT, accepted by both Camila Fernandez and Isabel Diaz Miranda. User is engaged with external capital and credit partners including Accial Capital (Alejandro Martín Schwartz, Ricardo Martinez), Lendable (Agustin De Luca), and CBIZ (Vincent McAndress). A draft reply to Vincent McAndress has been composed and saved to Gmail Drafts, requesting to reschedule the CBIZ call to next week with open availability — user should review and send when ready. User has established a data convention for Redshift queries: most tables have a USD column and figures should always be quoted in USD by default; if no USD column exists, values are in local currency.",
-      "updatedAt": "2026-03-27T22:53:57.315756Z"
+      "summary": "User is actively engaged in BBVA due diligence, which escalated on April 20 when BBVA sent an updated tracker (David García, 1:13 AM email) with 40 items total: 22 complete, 9 in progress, 9 outstanding. Key new development: BBVA added a brand new Section 8 item (8.01) — PA Master flow explanation with avg inflows/outflows for last 6 months, marked prioritized and outstanding. The updated tracker was downloaded and uploaded to the BBVA DD folder in Drive; a tracker summary Google Doc was also created (Due Diligence - BBVA Tracker Summary - 20260420). User is also actively engaged in CIM amendment negotiations with Alexander Melikian, focused on finalizing commercial terms including max credit limit, concentration limits, hedging requirements for Colombia and Brazil assets, and Mastercard liability ramp. A new Vista Credit Partners due diligence process is ongoing (4/24 IC deadline). User has set up a weekly recurring 'Agent Office Hours' meeting starting Tuesday April 21, 1:00–2:00 PM PT, focused on AI tool knowledge sharing. A Neuberger Berman diligence call is scheduled for Thursday (week of April 20); Jay at NB sent an agenda and a slide deck shell was prepared to address the agenda points, saved to Debt/Neuberger Berman/Diligence/. The NB deck was initially built using the wrong format reference (Macropay PPTX) and had to be redone to match the actual 2026.02 Company Overview Google Slides deck format (near-black background #08080A, Urbanist font, gold #C7B06C accents, widescreen 10\"×5.625\"). A persistent Jeeves slide format skill has been created at /mnt/skills/custom/jeeves-slides/SKILL.md encoding the full format spec with explicit guardrails against using Calibri, navy blue, or the Macropay PPTX as a reference — this skill is now live and must be loaded for all future deck builds. The Ever DQ chart definition remains unresolved — reverse-engineered query produced wrong numbers (82% vs. expected 62% for H1 2021 at MOB 36). User ran the MX SOFOM Borrowing Base for April 19 on April 20, 2026: total SOFOM balance $65,200,884.56, eligible balance $58,679,490.31, tape 732 rows (Apr 17–19 range), uploaded to Debt/CIM/202604/MX/.",
+      "updatedAt": "2026-04-20T18:31:50.518539Z"
     }
   },
   "history": {
     "recentMonths": {
-      "summary": "User has been engaged in underwriting operations work at Jeeves, reviewing credit decisions and onboarding scores using Taktile and Redshift. Recently, they have been working with structured credit product documentation, specifically a pilot operational guide for Easytech's card receivables facility — a monthly revolving structure backed by Mercado Livre/Mercado Pago receivables registered through CERC. The facility involves a waterfall payment structure (Fees → Principal → Excess) and multi-team coordination across cycle phases. User is also actively monitoring credit exposure across their portfolio, including Macropay in Mexico. A critical and confirmed data correction has been made and re-confirmed across multiple sessions: Macropay's `current_balance` field in `companies_dm` (33,321,112.06) is denominated in MXN, not USD — it was previously misread as a USD figure implying a massive overage. The true USD balance, sourced from `loc_tape.balance_usd`, is approximately $1,859,784.55 USD as of Mar 26, 2026, which is well within Macropay's credit limit of $6,257,865.60 USD. The `balance_usd` column in `loc_tape` represents only the USD-denominated portion of spend and may be NULL on the current day if FX rates haven't been applied yet (confirmed NULL on Mar 27, 2026). User expressed frustration that this correction was not retained from a prior session, underscoring the importance of persisting confirmed data corrections in memory. User is coordinating with external partners including Accial Capital, Lendable, CBIZ, and CIM, and has recurring touchpoints such as an Additional Credit Committee meeting and a Jeeves Advance Request Discussion scheduled for late March/early April 2026. The CBIZ touchpoint involves a Teams meeting invite from Vincent McAndress about open items; user decided to reschedule this call to the following week with open availability, and a draft reply was saved to Gmail Drafts for review and sending. User has also codified a Redshift data convention: most tables include a USD column and all figures should default to USD unless local currency is explicitly requested.",
-      "updatedAt": "2026-03-27T22:53:57.315756Z"
+      "summary": "User has been engaged in underwriting operations work at Jeeves, reviewing credit decisions and onboarding scores using Taktile and Redshift. They have been working with structured credit product documentation, monitoring credit exposure across their portfolio including Macropay in Mexico, and completed a polished PowerPoint deliverable for Macropay using python-pptx. User is engaged in capital markets term sheet negotiations with multiple external lenders: Fasanara (Timos Kouzelis) sent indicative terms on Mar 27, 2026, which user compared against Neuberger's fully negotiated and accepted counter-terms as a benchmark; on April 2, 2026, Fasanara sent updated terms (v2) via email, which were saved to Debt/Fasanara/ and redlined against the Jeeves comments version. User then produced a new Jeeves Comments turn on the Fasanara v2 terms with tracked-change pushbacks focused exclusively on commercial/fee terms. User completed the Gramercy term sheet redline task from Brian Mauck on April 1, 2026, and the Covalto Jeeves Comments turn (Term Sheet - Covalto-Jeeves - Jeeves Comments - 20260404.docx) — the Covalto item is now fully closed. User built a portfolio-level delinquency bucket breakdown chart, completed the Brian Mauck DQ30-59 DPD slide deliverable, and ran the MX SOFOM Borrowing Base daily using build_mx.py for March 27–31, 2026. On April 3 at approximately 20:45 PM, user completed a Colombia billing cycle migration analysis. On April 3, user also produced a Virtual Data Room facility overview summary document and completed the 2026 Credit Team OKRs comment workflow. On April 15, 2026, user investigated a post-charge-off account anomaly (Company 5937, Miss Tariffa, Italy). Also on April 15, user ran both the US Bridge Borrowing Base and MX SOFOM Borrowing Base for the April 14 reporting date. User completed a full rebuild of portfolio DQ and loss charts on April 15, producing three separate vintage DQ charts combined into a single 10-slide combined deck (5 global + 5 LATAM). On April 15–16, user conducted an intensive BBVA due diligence document collection and tracker update session. On April 16, Sateesh's tech infrastructure document was received and converted from HTML to PDF. Thiago submitted a large batch of BBVA diligence documents closing items 2.04, 6.02, 7.03, and 7.04. The BBVA Drive folder structure was reorganized into a new 'Due Diligence' parent folder reconciled to exactly 21 folders. On April 17, 2026, a new Vista Credit Partners due diligence process was initiated with a 4/24 IC deadline. On April 17 at 18:42, user set up a weekly recurring 'Agent Office Hours' meeting starting Tuesday April 21, 1:00–2:00 PM PT. On April 18, user explicitly delegated the task of sending the email to Melissa (MSchwabWright@goodwinlaw.com at Goodwin Law) about NB legal kickoff times to the AI. On April 20, 2026, BBVA sent an updated diligence tracker with 40 items total including a brand new Section 8 item (8.01) for PA Master flow explanation. Also on April 20, user challenged the AI to prove the DQ vintage deck raw data ties exactly to the charts — the AI verified 290/290 cohort × MOB combinations matched with zero mismatches. Also on April 20, Jay at Neuberger Berman sent a due diligence call agenda for a Thursday session; a Diligence subfolder was created under Debt/Neuberger Berman/ and a deck shell was prepared. During the NB deck session, the AI incorrectly used the Macropay PPTX as a format reference instead of the 2026.02 Company Overview Google Slides deck — user flagged this as an error and the deck was redone to match the correct format (near-black background #08080A, Urbanist font, gold #C7B06C accents, widescreen 10\"×5.625\"). The Macropay file is a single-slide balance chart and is explicitly not representative of the Jeeves investor presentation format. User subsequently requested a persistent skill be created encoding the Jeeves slide format spec — this skill was created at /mnt/skills/custom/jeeves-slides/SKILL.md with explicit guardrails against using Calibri, navy blue, light backgrounds, or the Macropay PPTX as a reference, and is now live for all future deck builds. On April 20, 2026 at 11:27 AM, user ran the MX SOFOM Borrowing Base for the April 19 reporting date: total SOFOM balance $65,200,884.56, eligible balance $58,679,490.31, tape 732 rows (Apr 17–19 range), file saved to Debt/CIM/202604/MX/.",
+      "updatedAt": "2026-04-20T18:31:50.518539Z"
     },
     "earlierContext": {
       "summary": "",
@@ -31,236 +31,804 @@
   },
   "facts": [
     {
-      "id": "fact_28612805",
-      "content": "User works in a Slack workspace called 'Jeeves' (jeeves-org.slack.com)",
-      "category": "context",
-      "confidence": 0.8,
-      "createdAt": "2026-03-27T19:33:36.445639Z",
-      "source": "manual"
-    },
-    {
-      "id": "fact_0b0fc714",
-      "content": "User performs underwriting (UW) operations work, reviewing credit line decisions and onboarding scores for business clients",
-      "category": "context",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T21:09:25.028450Z",
-      "source": "manual"
-    },
-    {
-      "id": "fact_792e865c",
-      "content": "User works with Taktile for onboarding scoring and Redshift as a data warehouse in their UW workflow",
-      "category": "knowledge",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T21:09:25.028450Z",
-      "source": "manual"
-    },
-    {
-      "id": "fact_dc6baae2",
-      "content": "User is working with a receivables-backed revolving credit facility pilot for Easytech, involving R$30M (~$5.76M USD) in Mercado Livre/Mercado Pago card receivables pledged via CERC",
-      "category": "context",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:11:52.015119Z",
-      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
-    },
-    {
-      "id": "fact_6ac11d74",
-      "content": "Jeeves advances 85% of pledged receivables (~$4.89M USD) under the Easytech pilot facility, with a 2.1% transaction fee pro-rated by days remaining in the cycle",
-      "category": "knowledge",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:11:52.015119Z",
-      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
-    },
-    {
-      "id": "fact_43a33239",
-      "content": "The Easytech receivables facility follows a three-phase monthly cycle: Cycle Opening (Days 1–3), Active Monitoring (Days 4–30), and Cycle Closing (Day 30+), with a waterfall of Fees → Principal → Excess",
-      "category": "knowledge",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:11:52.015119Z",
-      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
-    },
-    {
-      "id": "fact_454339ed",
-      "content": "Key operational stakeholders in the Easytech pilot include Matheus, Leti, Isabel, William, and Pablo",
-      "category": "context",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:11:52.015119Z",
-      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
-    },
-    {
-      "id": "fact_8cb3c0f4",
-      "content": "User's UW work at Jeeves includes structured credit products backed by card receivables in Brazilian markets (Mercado Livre/Mercado Pago), involving CERC pledge registration",
-      "category": "context",
-      "confidence": 0.85,
-      "createdAt": "2026-03-27T22:11:52.015119Z",
-      "source": "3957a1ed-29af-44ba-a3f5-a2d8bdf6a468"
-    },
-    {
-      "id": "fact_754e808d",
-      "content": "User has a Jeeves Advance Request Discussion meeting scheduled for Mon Mar 30 at 11am PDT, accepted by Camila Fernandez and Isabel Diaz Miranda",
-      "category": "context",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:22:03.549527Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_fdb63633",
-      "content": "User works with external capital partners including Accial Capital (Alejandro Martín Schwartz, Ricardo Martinez) and Lendable (Agustin De Luca)",
-      "category": "context",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:22:03.549527Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_4dae2564",
-      "content": "User has a recurring CIM <> Jeeves Weekly Touch Base meeting (Elena Amato from CIM), which was canceled on Mar 24",
-      "category": "context",
-      "confidence": 0.85,
-      "createdAt": "2026-03-27T22:22:03.549527Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_b5e9f8c6",
-      "content": "User has recurring one-on-one meetings with Shalom Hassan (Brian / Shalom)",
-      "category": "context",
-      "confidence": 0.8,
-      "createdAt": "2026-03-27T22:22:03.549527Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_fabb4046",
-      "content": "User participates in Additional Credit Committee meetings at Jeeves, with AI-generated notes captured via Gemini",
-      "category": "context",
-      "confidence": 0.85,
-      "createdAt": "2026-03-27T22:22:03.549527Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_af0acf66",
-      "content": "Vincent McAndress (CBIZ) sent a Microsoft Teams meeting invite titled 'CBIZ Call (other open items)' with no specific agenda, offering to adjust timing if needed; Teams dial-in: +1 872-240-8796, Conference ID: 261 804 73#",
-      "category": "context",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:23:02.265080Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_342a8e2f",
-      "content": "User requested to reschedule the CBIZ call with Vincent McAndress to next week and asked for a draft reply to be composed on their behalf",
-      "category": "behavior",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:26:43.588811Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_91e8d787",
-      "content": "User prefers to keep scheduling replies open-ended (e.g., 'happy to work around your availability') rather than proposing specific times when rescheduling meetings",
+      "id": "fact_902be641",
+      "content": "User prefers Reply All as the default behavior when drafting email responses â€” all original recipients (To and CC) should be included unless the user explicitly instructs otherwise",
       "category": "preference",
-      "confidence": 0.75,
-      "createdAt": "2026-03-27T22:27:36.583000Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
+      "confidence": 1.0,
+      "createdAt": "2026-03-29T17:43:17.608732Z",
+      "source": "ad8752e4-7b32-4ae1-a3bc-e6f8ea6b6206"
     },
     {
-      "id": "fact_bc282426",
-      "content": "A Gmail draft reply to Vincent McAndress (CBIZ) was composed requesting to reschedule the CBIZ call to next week with open availability; draft is pending user review and sending",
-      "category": "behavior",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:27:36.583000Z",
-      "source": "eb9dc4f9-b63a-4cb8-8076-6e4b93b27a60"
-    },
-    {
-      "id": "fact_57664bb1",
-      "content": "User monitors credit exposure and balance-vs-limit overages as part of their UW operations work at Jeeves",
-      "category": "behavior",
-      "confidence": 0.8,
-      "createdAt": "2026-03-27T22:45:29.578742Z",
-      "source": "60314bbe-adaa-408a-a666-0b100ad7c75e"
-    },
-    {
-      "id": "fact_61309b6e",
-      "content": "Macropay's last transaction date was Mar 25, 2026",
-      "category": "context",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:48:41.541551Z",
-      "source": "24294e2e-edc3-4123-a0cd-31143a41df14"
-    },
-    {
-      "id": "fact_77609aef",
-      "content": "In Redshift, most tables have a USD column; if no USD column exists, values should be treated as local currency",
-      "category": "knowledge",
-      "confidence": 0.99,
-      "createdAt": "2026-03-27T22:50:02.527283Z",
-      "source": "ae0f8a0c-ea72-4027-9fd9-fe452cb4e391"
-    },
-    {
-      "id": "fact_f5ca3e03",
-      "content": "User prefers all monetary figures to be quoted in USD by default unless they explicitly request local currency",
+      "id": "fact_e2a48f98",
+      "content": "User requires confirmation of proposed meeting times before any calendar event is booked â€” the AI must never book without explicit user approval",
       "category": "preference",
-      "confidence": 0.99,
-      "createdAt": "2026-03-27T22:50:02.527283Z",
-      "source": "ae0f8a0c-ea72-4027-9fd9-fe452cb4e391"
+      "confidence": 1.0,
+      "createdAt": "2026-03-30T03:21:53.480686Z",
+      "source": "0cb3a016-b917-4f63-8def-8d48fd9c3545"
     },
     {
-      "id": "fact_9dee4de5",
-      "content": "Macropay's `current_balance` field in `companies_dm` (33,321,112.06) is denominated in MXN, not USD — it was previously misread as a USD figure",
+      "id": "fact_d34f994f",
+      "content": "User explicitly reinforced (a second time) that the AI should never ask which Alex they mean â€” Alexander Melikian (alexander@tryjeeves.com) is the established contact and this should be recalled from memory without prompting",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-03-30T03:24:24.441314Z",
+      "source": "0cb3a016-b917-4f63-8def-8d48fd9c3545"
+    },
+    {
+      "id": "fact_50dc68e2",
+      "content": "The CIM recycling request distribution list is: To: jeeves@cim-llc.com, gvillarreal@cxc.com.mx, imendez@cxc.com.mx, rcuem@monex.com.mx, lcaballero@monex.com.mx â€” confirmed from the 17th recycling request (message ID: 19d3fdb92b412925)",
       "category": "knowledge",
-      "confidence": 0.97,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-03-31T14:12:07.386196Z",
+      "source": "74d2e1c0-5396-429c-827e-36da8392c86e"
     },
     {
-      "id": "fact_451ae926",
-      "content": "Macropay's true USD balance from `loc_tape.balance_usd` is approximately $1,859,784.55 USD as of Mar 26, 2026 (most recent available), well within their credit limit of $6,257,865.60 USD",
+      "id": "fact_81dfad6e",
+      "content": "Gmail's API does not support attaching Google Drive files directly via the draft tool â€” Drive file attachments must be added manually by opening the draft in Gmail",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-03-31T14:12:07.386196Z",
+      "source": "74d2e1c0-5396-429c-827e-36da8392c86e"
+    },
+    {
+      "id": "fact_1a511226",
+      "content": "User requested and reviewed the exact verbatim contractual language from the CIM MX Loan Agreement (November 2025) defining the 'Advance Rate' and 'Advance Rate Increase Event' â€” indicating active use of the precise contract text for amendment negotiation purposes",
       "category": "context",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-04-01T16:54:49.441009Z",
+      "source": "c41738d9-6fd1-4bb9-be8e-df2f8b70ce0a"
     },
     {
-      "id": "fact_5e0dc950",
-      "content": "In `capital_markets_dm.loc_tape`, the `balance` column is in local currency (MXN for Macropay) and `balance_usd` is the correct USD figure; `balance_usd` may be NULL on the current day if FX rates have not yet been applied",
+      "id": "fact_559987e1",
+      "content": "User expects all AI-produced deliverable files to be uploaded to Google Drive â€” files left only in local outputs (OUTPUTS_PATH) are considered incomplete deliveries",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T16:55:41.624539Z",
+      "source": "bd946f1b-087f-461e-afe1-0a8975d2b381"
+    },
+    {
+      "id": "fact_3e52ff21",
+      "content": "User expects format fidelity on deliverables â€” if a task calls for an Excel file, the output must be an Excel file, not a written report or table in a different format",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T16:55:41.624539Z",
+      "source": "bd946f1b-087f-461e-afe1-0a8975d2b381"
+    },
+    {
+      "id": "fact_ac657d46",
+      "content": "Alexander Melikian is the CFO at Jeeves and direct manager of Brian Mauck (Head of Capital Markets); user collaborates with him daily on credit committee, capital markets negotiations, borrowing base, and CIM operations",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
+    },
+    {
+      "id": "fact_fe588660",
+      "content": "Alexander Melikian's relationship health score is 8/10 (stable, strong and collaborative) as of April 2, 2026 dossier analysis",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
+    },
+    {
+      "id": "fact_114ecfc2",
+      "content": "Alexander Melikian's communication style: short action-oriented emails (1-2 sentences with clear ask), uses '@' tagging to assign tasks in group threads, informal in 1:1s, professional externally, opens meetings with brief social check-in, probes assumptions in credit committee",
       "category": "knowledge",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
     },
     {
-      "id": "fact_621caf94",
-      "content": "The `balance_usd` column in `loc_tape` represents only the USD-denominated portion of card spend, not a full FX conversion of the local currency balance",
+      "id": "fact_084acd10",
+      "content": "Open CIM amendment items as of April 2, 2026: (1) commercial terms finalization session was expected April 1 â€” now past due; (2) Alex owns solving cash funding/collateral fungibility for bridge structure; (3) Alex preparing 9-month timeline proposal for Brazil MC liability (vs CIM's 5-month position)",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
+    },
+    {
+      "id": "fact_4644a66e",
+      "content": "MX SPV advance rate step-up alignment (92.5% tier definition/measurement) between Brian and Pablo had a deadline of April 4, 2026",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
+    },
+    {
+      "id": "fact_ace6d580",
+      "content": "Brian Mauck's top 5 correspondents identified in April 2 dossier analysis are: Alexander Melikian (78 meetings in 30 days), Max Fernandez (Neuberger Berman), Eric Schwartz (Yardline/Covalto), Vincent McAndress, and Dan Uttaro",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T17:59:48.423146Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
+    },
+    {
+      "id": "fact_90cee67b",
+      "content": "Alexander Melikian's dossier contained an org structure error that was corrected: his title was previously recorded as 'head of Capital Markets / Credit' but the correct title is CFO; Brian Mauck is the Head of Capital Markets and reports directly to Alex",
       "category": "knowledge",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T18:10:56.496934Z",
+      "source": "f3bd9a05-d3b2-4f9d-baf4-6eacf529fb50"
     },
     {
-      "id": "fact_ef7857e1",
-      "content": "Redshift connection uses psycopg2 with credentials from environment variables (REDSHIFT_HOST, REDSHIFT_PORT, REDSHIFT_DB, REDSHIFT_USER, REDSHIFT_PASSWORD), sslmode='require', sslrootcert='disable'; system uses `python` not `python3`",
+      "id": "fact_fe7ac1dc",
+      "content": "The April 2026 Portfolio Report (Portfolio Report - 20260401.xlsx) was completed on April 2, 2026 using build_portfolio_report.py --date 2026-04-01: report date 4/1, EOP=3/31, BOP=2/28, template was Portfolio Report - 20260301.xlsx (March report, 4.4 MB), LOC tape 6,537 accounts at 3/31, rollforward 6,548 accounts (2/28→3/31), 96 GWC mods (RPP%), uploaded to Portfolio Reporting/202604/ (new folder created). Summary, Summary (2), Country, and loans tabs are formula-driven and require Excel recalculation; loc, rollforward, and mods tabs are fully populated.",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T21:42:19.846017Z",
+      "source": "dd12f1d3-40e5-42a7-92fa-ba8bc31751b5"
+    },
+    {
+      "id": "fact_4e793d7c",
+      "content": "In Fasanara term sheet negotiations, the interest rate was already negotiated down from 850 bps to 800 bps (SOFR + 800 bps) in a prior round — this term should not be pushed back on again in subsequent Jeeves Comments turns",
       "category": "knowledge",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T23:11:58.196410Z",
+      "source": "07943a86-baff-49ff-a757-bb4579b11caf"
     },
     {
-      "id": "fact_ec6e65f7",
-      "content": "Key Redshift tables for balance queries: `capital_markets_dm.loc_tape` (LOC daily snapshots, balance_usd, filter dt=MAX(dt)), `capital_markets_dm.gwc_tape` (GWC daily snapshots, balance_usd), `master_customer_dm.companies_dm` (company lookup with name, legal_name, company_id, current_balance in local currency)",
-      "category": "knowledge",
-      "confidence": 0.95,
-      "createdAt": "2026-03-27T22:52:51.343136Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "id": "fact_e2992787",
+      "content": "The final Fasanara v2 Jeeves Comments turn (v20260402) contains 4 tracked-change pushbacks: (1) unlock threshold >90% → >75%, (2) commitment fee deleted (Jeeves had already pushed for removal; Fasanara moved 75→50 bps but Jeeves maintains deletion position), (3) Tech Service Provider fee deleted (brand new non-standard fee), (4) LOI expiry deleted (brand new artificial deadline)",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T23:11:58.196410Z",
+      "source": "07943a86-baff-49ff-a757-bb4579b11caf"
     },
     {
-      "id": "fact_ccb2522d",
-      "content": "User confirmed and re-emphasized that Macropay's balance_usd in loc_tape was NULL on Mar 27, 2026 because FX rates had not yet been applied for that day",
-      "category": "knowledge",
-      "confidence": 0.97,
-      "createdAt": "2026-03-27T22:53:57.315756Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
-    },
-    {
-      "id": "fact_657329aa",
-      "content": "User expressed frustration that a previously discussed data correction (Macropay MXN vs USD balance) was not properly retained in memory, indicating strong expectation that confirmed corrections persist across sessions",
+      "id": "fact_6c0ebbdf",
+      "content": "User expects the AI to review the full negotiation history before deciding what to push back on in a Jeeves Comments turn — pushing back on a term already negotiated and accepted in a prior round is considered an error",
       "category": "behavior",
-      "confidence": 0.9,
-      "createdAt": "2026-03-27T22:53:57.315756Z",
-      "source": "89c585c6-0baf-45b4-9644-1f836b975ba3"
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T23:11:58.196410Z",
+      "source": "07943a86-baff-49ff-a757-bb4579b11caf"
+    },
+    {
+      "id": "fact_152af828",
+      "content": "The Fasanara structuring fee of 1.5% (150 bps) was accepted by Jeeves in a prior comments round and should not be pushed back on in subsequent turns",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T23:11:58.196410Z",
+      "source": "07943a86-baff-49ff-a757-bb4579b11caf"
+    },
+    {
+      "id": "fact_aaf191a1",
+      "content": "A written summary email draft of the Fasanara v2 Jeeves Comments turn (v20260402) was prepared in Gmail Drafts on April 2, 2026, summarizing accepted terms and 4 pushbacks, with a link to the Jeeves Comments doc, intended for forwarding to Timos Kouzelis at Fasanara",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-02T23:13:46.803295Z",
+      "source": "07943a86-baff-49ff-a757-bb4579b11caf"
+    },
+    {
+      "id": "fact_59ff37b7",
+      "content": "User explicitly stated they want to build dossiers on remaining internal Jeeves coworkers before external contacts — when the AI suggested building dossiers for Max Fernandez, Eric Schwartz, Vincent McAndress, and Dan Uttaro (all external), user redirected to internal colleagues first",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:43:24.874550Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_7f8677d1",
+      "content": "The AI made an error on April 2, 2026 by proceeding to look up external contacts (Max Fernandez, Eric Schwartz, Vincent McAndress, Dan Uttaro) after the user explicitly said to start with coworkers first — this was a failure to follow a clear user instruction",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:43:24.874550Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_2b73c514",
+      "content": "The AI made a repeated instruction-following failure on April 2, 2026: after the user said 'start with coworkers first,' the AI ignored this and asked for emails for external contacts (Max Fernandez, Eric Schwartz, Vincent McAndress, Dan Uttaro) — this is a documented error pattern to avoid",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:44:59.328063Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_75eca9bf",
+      "content": "User confirmed they want dossiers built for Shalom Hassan and Isabel Diaz Miranda as the next internal colleagues after the existing 4 (Alexander Melikian, Pablo Cortina, Chin Tan, William Lam)",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:48:27.010110Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_c5a5a7bc",
+      "content": "The AI made a repeated instruction-following failure on April 2, 2026 at 18:42: after the user said 'start with coworkers first,' the AI ignored this and asked for emails for external contacts (Max Fernandez, Eric Schwartz, Vincent McAndress, Dan Uttaro) — user had to explicitly point out these are not coworkers before the AI corrected course",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:48:27.010110Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_c353ff14",
+      "content": "Shalom Hassan's dossier health score is 7/10 (stable) as of April 2, 2026; role is Finance Org lead, direct report to Alexander Melikian, effectively acting CFO-adjacent without a controller; stretched thin across stablecoins, BBVA, MX SPV, and CBIZ audit workstreams simultaneously",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_6f83c917",
+      "content": "Shalom Hassan's email is shalom@tryjeeves.com",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_4f4043e6",
+      "content": "Isabel Diaz Miranda's dossier health score is 7/10 (stable) as of April 2, 2026; role is FinOps / Treasury operations; active on the CIM transaction thread",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_54a0f3ca",
+      "content": "Isabel Diaz Miranda's email is isabel@tryjeeves.com",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_a1313951",
+      "content": "User makes manual adjustments to portfolio report Excel files before finalizing — when requesting a rerun, they may specify their own modified version as the template rather than the original build output",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_d465c2fd",
+      "content": "The April 1 portfolio report was rerun on April 2, 2026 using the user's manually modified Portfolio Report - 20260401.xlsx as the template; uploaded to Portfolio Reporting/202604/",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:56:05.387228Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_2ce03eaf",
+      "content": "Shalom Hassan's dossier key detail: stretched thin with no controller, simultaneously managing stablecoins, BBVA, MX SPV, and CBIZ audit workstreams; relationship pattern with user is warm but mostly reactive — Shalom pulls user in when needed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:57:42.079978Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_9086531c",
+      "content": "Isabel Diaz Miranda's dossier key detail: FinOps / Treasury operations role, active on CIM transaction thread; dossier health score 7/10 stable as of April 2, 2026",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:57:42.079978Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_45991777",
+      "content": "The April 1 portfolio report rerun on April 2, 2026 used the user's manually modified Portfolio Report - 20260401.xlsx as the template; data: LOC tape 6,537 accounts, rollforward 6,548 accounts, 96 GWC mods (RPP%) as of 3/31; uploaded to Portfolio Reporting/202604/",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:57:42.079978Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_cbc29c37",
+      "content": "When the AI offered to build dossiers for Max Fernandez, Eric Schwartz, Vincent McAndress, and Dan Uttaro after the user said 'start with coworkers first,' the user had to explicitly point out these are not coworkers — the AI failed to follow the instruction twice before correcting course",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T01:57:42.079978Z",
+      "source": "2c905d14-68ae-4bdf-b126-f82329423e96"
+    },
+    {
+      "id": "fact_52d42819",
+      "content": "User replied to Debbie's Slack DM about the March portfolio reporting file at 4:07 PM on April 2, 2026, saying 'hi debbie, it's done and in the folder' — this item is closed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:03:47.101557Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_a13426bb",
+      "content": "User corrects the AI when it presents stale or already-completed open items — the AI must check for user-confirmed completions before re-surfacing items as open",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:03:47.101557Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_328c06e2",
+      "content": "User replied to Alex's forwarded Pinheiro Neto email at 11:24 AM on April 2, 2026, saying 'This makes sense to me. I would like a clear explanation of the reporting reqs...' — this item is closed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_8adea1db",
+      "content": "User replied to Alejandra Granados (CIM) in the 'Re: Updated Concentration Limits' thread at 8:52 AM on April 2, 2026, with Jeeves' counter-comments on the credit limit formula — this item is closed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_bb243c17",
+      "content": "User acknowledged Timos Kouzelis's (Fasanara) full LOI at 1:22 PM on April 2, 2026, saying 'Thanks Timos, appreciate the quick turnaround. Let us discuss and be back shortly.' — acknowledgment sent but substantive response still pending",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_59519f60",
+      "content": "User sent Jeeves comments on the Gramercy term sheet to Tomas Serantes on March 31, 2026; Tomas acknowledged saying 'let us take a look and get back...' — the Gramercy Jeeves comments turn is closed from user's side",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_16709a8a",
+      "content": "User emailed Max Fernandez (Neuberger Berman) at 7:35 AM and 12:28 AM on April 2, 2026 suggesting times and sharing their number for NB scheduling; also sent NB comments to Lu at 10:44 AM — NB scheduling was partially addressed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_ea985582",
+      "content": "User proactively corrects the AI's open-item lists by referencing sent mail and Slack history — the AI must search sent mail before surfacing items as open, not just inbound messages",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_44330595",
+      "content": "The AI has a documented failure pattern of surfacing already-completed open items without checking sent mail first — user had to correct the AI twice in the April 2 evening session (at 19:01 and 19:22) by pointing to sent replies the AI had missed",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:24:52.859708Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_76033a15",
+      "content": "Chin Tan's repayment rate DM (April 1 at 9:57 AM) was resolved — user replied via Slack sharing the definition and clarifying it's the MX facility metric, not the US one; this item is closed",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:27:20.228175Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_f773de5e",
+      "content": "Alexander sent a Slack DM to user around 3:00 PM on April 2, 2026 asking for feedback/markup on the Fasanara LOI — user has not yet forwarded the Jeeves Comments turn to Alex; this item is open",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:27:20.228175Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_368d4972",
+      "content": "User deconflicts open items by referencing both Gmail sent mail AND Slack DMs — the AI must check both channels before surfacing any item as open, not just inbound messages or Gmail alone",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:27:20.228175Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_58b21fe4",
+      "content": "The AI made a repeated failure pattern on April 2 evening (19:01, 19:03, 19:22, 19:24) of surfacing already-completed open items without checking sent mail or Slack DMs first — user had to correct the AI four times across the session",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T02:27:20.228175Z",
+      "source": "35b644e6-64ad-49d9-9b9b-93251f9d511f"
+    },
+    {
+      "id": "fact_28b4f74e",
+      "content": "User requested and received an honest, data-driven assessment of their internal communication style on April 2, 2026 at 22:12 — synthesized across all 6 internal dossiers (Alexander, Pablo, Chin, Shalom, Isabel, William); identified strengths include technical credibility, crisp async communication with Alex, and generosity with tooling/access",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:15:51.971710Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_ed7adb3c",
+      "content": "User is receptive to honest, critical feedback about their own communication style and professional behavior — they proactively sought this analysis rather than waiting for a performance review",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:15:51.971710Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_4d1e8f02",
+      "content": "Pradeep Manoharan's relationship dossier health score is 4/10 (stable but asymmetric) as of April 2, 2026 — the most complicated internal relationship; cordial on the surface but with underlying friction",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:28:02.393876Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_f091f5e6",
+      "content": "User wrote critical peer review feedback about Pradeep Manoharan describing him as inflexible, behind schedule, and resource-inefficient; Alex followed up with the user to understand the feedback",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:28:02.393876Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_3adbf361",
+      "content": "User has privately vented that interactions with Pradeep Manoharan are exhausting and has expressed frustration about his organizational influence",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:28:02.393876Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_30772389",
+      "content": "The defining feature of the user's relationship with Pradeep Manoharan is the gap between how Pradeep perceives the relationship (positively, as he is warm and appreciative in direct exchanges) and how the user actually experiences it (with frustration and friction)",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:28:02.393876Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_1e90b544",
+      "content": "User now has dossiers on 7 internal Jeeves colleagues as of April 2, 2026: Alexander Melikian (8/10), Pablo Cortina (8/10), Chin Tan (7/10), William Lam (6/10), Shalom Hassan (7/10), Isabel Diaz Miranda (7/10), and Pradeep Manoharan (4/10)",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T05:28:02.393876Z",
+      "source": "10f135fc-446e-4021-a558-d6d1709dc5d2"
+    },
+    {
+      "id": "fact_93c51c22",
+      "content": "Dossier-building is a required part of the standard meeting prep workflow — the AI skipped this step during the April 3 10:30 AM Portfolio Reporting Review prep and the user had to explicitly remind the AI to do it",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T17:40:47.068621Z",
+      "source": "36dd47f0-1466-4735-b628-6f5654eb2dea"
+    },
+    {
+      "id": "fact_c2da6c35",
+      "content": "A CIM collateral audit (CBIZ) item was flagged by Alexander Melikian at 7:13 AM on April 3, 2026 with Shalom needing to close it out ASAP; Shalom replied at 10:27 AM that they are still working on it — this item is open as of the April 3 Portfolio Reporting Review",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T17:40:47.068621Z",
+      "source": "36dd47f0-1466-4735-b628-6f5654eb2dea"
+    },
+    {
+      "id": "fact_8783c773",
+      "content": "The April 3 Portfolio Reporting Review attendees are: Alexander Melikian, Shalom Hassan, Pablo Cortina, Chin Tan, Debbie, and Pedro",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T17:40:47.068621Z",
+      "source": "36dd47f0-1466-4735-b628-6f5654eb2dea"
+    },
+    {
+      "id": "fact_65d2793d",
+      "content": "User expects dossiers to be built as part of the standard meeting prep workflow without being asked — skipping this step is considered an error by the AI",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T17:40:47.068621Z",
+      "source": "36dd47f0-1466-4735-b628-6f5654eb2dea"
+    },
+    {
+      "id": "fact_837dc0fc",
+      "content": "The 2026 Credit Team OKRs document (Google Doc ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) was shared with the user via Slack on April 3, 2026 and reviewed for feedback",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:05:04.990284Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_046a9e64",
+      "content": "The 2026 Credit Team OKRs document has a typo in Objective 2 KR1: missing 'to' before 'influence' in the phrase 'Leverage new customer-level profitability framework influence underwriting decisions'",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:05:04.990284Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_07dfb02d",
+      "content": "The 2026 Credit Team OKRs document has unfilled placeholder values ([X]%) in at least three KRs: KR2 in Objective 2 (concentration eligibility target), KR2 in Objective 3 (charge-off rate), and KR3 in Objective 3 (insurance coverage %)",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:05:04.990284Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_e19b1de2",
+      "content": "The 2026 Credit Team OKRs Objective 1 KR2 targets 'proactive and reactive CLIs of >$10M/month' — ambiguity flagged around whether this is net new CL granted or gross approvals, and how partial CLIs are counted",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:05:04.990284Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_e3344c10",
+      "content": "The 2026 Credit Team OKRs Objective 1 KR4 has two data-sharing targets (10% Brazil, 15% Colombia) but lacks a baseline — flagged as needing current state context to assess ambition level",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:05:04.990284Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_dfa69abd",
+      "content": "The AI cannot access files on the user's local Windows filesystem (e.g., C:\\Jeeves\\... paths) — files downloaded to local disk from Slack or other sources must be pasted into the conversation or uploaded through the chat interface to be readable",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:16:30.722692Z",
+      "source": "910260ba-b143-4d8b-829c-82af2053b21e"
+    },
+    {
+      "id": "fact_0ce6b1dc",
+      "content": "The AI cannot access Slack file download URLs (files.slack.com/files-pri/...) even when a direct download link is provided — authentication is still required and the content is not accessible without the user pasting or uploading it directly",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:33:17.565811Z",
+      "source": "8dcf1a27-0b01-4aa7-8132-3e9acf196e69"
+    },
+    {
+      "id": "fact_e567c189",
+      "content": "A Virtual Data Room facility overview summary document (Summary - Facility Overview VDR - 20260403.docx) was produced on April 3, 2026 and uploaded to Google Drive at Debt/Data Room - 202602/; Google Doc link: https://docs.google.com/document/d/1F679PRRCErHMiUKzL_Dwt2b5mSONy-ex/edit?usp=drivesdk",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:53:43.681005Z",
+      "source": "3a63c0e5-2b33-41aa-b7d0-6756e81b49cf"
+    },
+    {
+      "id": "fact_f8dbd3e2",
+      "content": "The VDR facility overview document covers: §1 Executive Summary (3-paragraph overview of both CIM facilities + contemplated third), §2 CIM Bridge Facility (US) with 14-row key terms table and structure diagram, §3 CIM Mexico SOFOM Facility with 14-row key terms table and structural features (fideicomiso, RUG, DACAs, FX swap) and structure diagram, §4 Combined Summary (11-row side-by-side comparison), and Appendix A covering the contemplated new CO/BR facility with background, indicative terms (12-row table), and parallel lender process context",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:53:43.681005Z",
+      "source": "3a63c0e5-2b33-41aa-b7d0-6756e81b49cf"
+    },
+    {
+      "id": "fact_b4425933",
+      "content": "The VDR Data Room folder in Google Drive is located at Debt/Data Room - 202602/ — this is where facility overview and data room documents are stored",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:53:43.681005Z",
+      "source": "3a63c0e5-2b33-41aa-b7d0-6756e81b49cf"
+    },
+    {
+      "id": "fact_3bcf4d46",
+      "content": "12 of 13 inline comments were successfully added to the 2026 Credit Team OKRs Google Doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) on April 3, 2026; the missed comment was on O4-KR4 ('>1 AI project per person per month') due to an apostrophe in 'team's' causing paragraph match failure",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:55:06.893345Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_0eb95e80",
+      "content": "The missed O4-KR4 comment text is: '>1 AI project per person per month = 12+ per year — worth pressure-testing whether per quarter is more appropriate'",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T18:55:06.893345Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_b6af8c70",
+      "content": "After receiving AI-generated inline comments on a Google Doc, user may selectively remove unwanted comments and then ask the AI to re-apply only the retained comments to the original document — this is a documented workflow pattern",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T19:00:09.004930Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_75d8c82a",
+      "content": "The 5 comments retained by the user from the 2026 Credit Team OKRs review and re-applied to the original doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) are: (1) O1-KR2 — CLI measurement clarity (net vs. gross), (2) O1-KR4 — missing baseline for data-sharing targets, (3) O2-KR1 — typo fix ('to influence'), (4) O3-KR1 — spend-doubling qualifier as standalone KR, (5) O3-KR4 — qualitative KR needs a concrete metric",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T19:00:09.004930Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_5a8a0491",
+      "content": "The 2026 Credit Team OKRs document was shared with the user by Pablo (Pablo Cortina) via Slack — the original file is Google Doc ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T19:02:04.045623Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_39a1bf74",
+      "content": "As of April 3 at 12:57 PM, the user updated the AI's skills to support writing comments directly into existing Google Docs — the AI can now apply comments to a specific Google Doc by file ID without creating a new copy",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T19:59:57.741992Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_02dde8f7",
+      "content": "The 2026 Credit Team OKRs comment workflow was completed successfully on April 3, 2026 at 12:57 PM — all 5 retained comments were applied directly to the original Google Doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) after the user updated the AI's skills to enable direct Google Doc comment writing",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T19:59:57.741992Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_c5aa5cba",
+      "content": "The Google Drive Comments API v3 does not support creating text-anchored (highlighted) comments on Google Docs via API — comments added programmatically appear in the sidebar with quoted text but are not linked to specific text selections; true text anchoring requires a user to manually select text in the Google Docs UI",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:05:07.739887Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_04e5093a",
+      "content": "The 2026 Credit Team OKRs comment workflow completed on April 3, 2026: all 5 retained comments were applied to the original Google Doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) via the updated skill, but comments appear sidebar-only without text anchoring due to Drive API limitations",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:05:07.739887Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_6934dc16",
+      "content": "The Drive Comments API v3 text-anchoring limitation is confirmed as a hard ceiling — even after the user updated the AI's skills at 13:10 PM on April 3, 2026, the API still cannot create text-anchored comments on Google Docs; anchoring requires a user to manually select text in the Google Docs UI and cannot be replicated programmatically",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:13:37.618276Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_17fcc51d",
+      "content": "The 2026 Credit Team OKRs comment workflow is fully complete as of April 3, 2026 at approximately 13:10 PM — all 5 retained comments are on the original Google Doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) in the sidebar without text anchoring, which is the maximum achievable via the Drive API",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:13:37.618276Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_543847cb",
+      "content": "A 'CBIZ / Jeeves Accounting' meeting was booked for Thursday April 9, 2026, 10:30–11:30 AM, with attendees Shalom Hassan, Debbie, and Vincent McAndress at CBIZ (vmcandress@cbiz.com); Google Meet link: https://meet.google.com/uvn-ebrb-cet",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:16:44.231007Z",
+      "source": "e814e25c-91ad-4407-a954-0588f5e7f088"
+    },
+    {
+      "id": "fact_fd1d7bd4",
+      "content": "Vincent McAndress at CBIZ has email vmcandress@cbiz.com — confirmed when user requested he be added to the CBIZ / Jeeves Accounting calendar invite",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:16:44.231007Z",
+      "source": "e814e25c-91ad-4407-a954-0588f5e7f088"
+    },
+    {
+      "id": "fact_3f774b80",
+      "content": "Covalto's Eric Schwartz submitted a revised clean term sheet on 4/3 with two key changes vs. Jeeves clean 4/1: (1) make-whole provision fully drafted — replaced vague 'TBD – 75% of expected credit return' with a 1.25x MOIC minimum return premium calculated as (1.25x × original principal) minus all prior principal and interest payments, applicable on any voluntary or involuntary prepayment; (2) equity covenant conforming language added to the Jan 31, 2027 equity/EBITDA covenant",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:27:20.054602Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_6985a0dc",
+      "content": "The Covalto term sheet redline (Jeeves clean 4/1 vs. Covalto clean 4/3) was run on April 3, 2026 at 13:23 PM — 75 tracked changes total, most from Jeeves 4/1; Eric Schwartz's new changes on 4/2–4/3 were the make-whole MOIC provision and equity covenant conforming language",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:27:20.054602Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_3ead789c",
+      "content": "Covalto's make-whole / minimum return provision specifies a 1.25x MOIC floor — upon any voluntary or involuntary prepayment, Borrower pays a Minimum Return Premium such that total proceeds result in MOIC of at least 1.25x, calculated as (1.25x × original principal) minus all prior principal and interest payments",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:27:20.054602Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_821681d4",
+      "content": "The AI made an error on the first Covalto redline attempt on April 3 at 13:23 PM — it did not properly read the files, the output lacked a summary of changes, and the output file name did not follow naming conventions; user had to explicitly correct this before a proper output was produced",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_c6c1c883",
+      "content": "User enforces output file naming conventions on all deliverables — when the AI produces a redline or any deliverable file, the file name must follow established conventions and the output must include a proper summary of changes",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_4ec57c3d",
+      "content": "Covalto's Eric Schwartz removed all $18M/$30M accordion/second tranche intent language from the term sheet in the 4/3 clean version — the facility amount is now $12M only",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_ab83ec12",
+      "content": "Covalto's 4/3 clean version changed the named borrower entity from Jeeves Intermediate HoldCo to JVS México Soluciones, S.A. de C.V., SOFOM, E.N.R ('Jeeves')",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_8231562e",
+      "content": "Covalto's 4/3 clean version tightened the joint & several obligors timing from 90 days post-closing to at closing, and changed the anchor entity from Jeeves Intermediate HoldCo + subsidiaries (excl. JVS Mexico) to Jeeves Inc. USA (holding co) + all subsidiaries",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_561ff95d",
+      "content": "The Covalto redline (Jeeves clean 4/1 vs. Covalto clean 4/3) produced on April 3 identified the following Covalto changes: (1) make-whole 1.25x MOIC provision fully drafted, (2) equity covenant conforming language added, (3) $18M/$30M accordion removed, (4) borrower entity changed to JVS México SOFOM, (5) joint & several obligor timing tightened to at closing with US HoldCo as anchor",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:34:19.253966Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_3aef7fa0",
+      "content": "User expects a true tracked-changes redline document when requesting a redline — the output must be a Word/Docs file with red strikethrough for deletions and blue for insertions, not just a summary table or plain document",
+      "category": "preference",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:39:13.959524Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_3e5a4713",
+      "content": "The AI made a second error on the Covalto redline task on April 3 at 13:28 PM — after the first attempt failed, the second attempt produced a summary table but not a true tracked-changes redline document; user had to explicitly point out 'this is just a doc, how is this a redline?' before the AI produced the correct format",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:39:13.959524Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_31cabba0",
+      "content": "A proper redline in the user's workflow means a Word/Docs file with tracked changes applied — red strikethrough for deletions, blue text for insertions — viewable via Review → Track Changes in Word; a summary table alone does not constitute a redline",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:39:13.959524Z",
+      "source": "4d45902f-adc8-4fe4-ac4f-d70e162519ad"
+    },
+    {
+      "id": "fact_3d69c170",
+      "content": "At 13:51 PM on April 3, 2026, user requested the Covalto redline again using the typo 'Conalto' — the AI correctly interpreted this as the Covalto term sheet redline (Jeeves clean 4/1 vs. Covalto clean 4/3) and produced Redline - Covalto Term Sheet - 20260403.docx with a summary of Covalto's changes",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T20:55:25.640531Z",
+      "source": "5787fa6c-124b-42dd-a678-eb21425bb18b"
+    },
+    {
+      "id": "fact_ba83c338",
+      "content": "Covalto's 4/3 clean version removed the explicit exclusion of JVS Mexico Soluciones, SA de CV from the collateral/guarantor scope — the prior version carved out the MX SOFOM entity, but the 4/3 version simply reads 'subsidiaries.' with no carve-outs, expanding Covalto's collateral ask",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T21:13:33.838630Z",
+      "source": "26beaf76-dea4-45bc-b055-ddc338206550"
+    },
+    {
+      "id": "fact_4e776704",
+      "content": "At 14:09 PM on April 3, 2026, user requested the Covalto redline again (typo: 'Conalto') — the AI identified 6 substantive edits across 5 areas: (1) named borrower entity change, (2) collateral/guarantor scope expansion (MX SOFOM carve-out removed), (3) joint & several obligor timing tightened to closing, (4) make-whole 1.25x MOIC provision, (5) equity covenant conforming language, (6) $18M/$30M accordion removal",
+      "category": "context",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T21:13:33.838630Z",
+      "source": "26beaf76-dea4-45bc-b055-ddc338206550"
+    },
+    {
+      "id": "fact_7eae5830",
+      "content": "The Drive Comments API v3 text-anchoring limitation was confirmed as a hard ceiling through multiple retry attempts on April 3, 2026 — even after the user updated the AI's skills at 12:57 PM and again at 14:14 PM, the API still cannot create text-anchored comments; the `anchor` field (kix.* value) is generated only by the Google Docs frontend when a user selects text and cannot be passed via API",
+      "category": "knowledge",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T21:18:02.541287Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
+    },
+    {
+      "id": "fact_12d712f5",
+      "content": "The AI made an error on April 3 at 11:37 AM by creating a new Google Doc copy instead of writing comments to the original doc (ID: 1DIRUusSkg3IXL_fEHkLVhh7qJJcRuA-HEg7rjAKkMCE) — user had to explicitly correct this by saying 'that's not the original document'",
+      "category": "behavior",
+      "confidence": 1.0,
+      "createdAt": "2026-04-03T21:18:02.541287Z",
+      "source": "0d8b877e-e7b2-4abb-b4c3-7eb576c3e0b6"
     }
   ]
 }

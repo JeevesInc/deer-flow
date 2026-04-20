@@ -226,6 +226,7 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Filter by market:** Use `country_code` — 840=US, 484=MX, 170=CO, 124=CA, 76=BR
 - **Latest snapshot:** `WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)`
 - **Active portfolio:** `WHERE charge_off_flag = false AND is_in_repayment = false` on loc_tape (ALWAYS include both filters)
+**CRITICAL: is_in_repayment = false must be applied to ALL loc_tape queries without exception** — repayment plan accounts are tracked separately in the mods/GWC rollforward and must never be mixed into standard portfolio, DQ, charge-off, or loss calculations. This applies even when querying charged-off accounts (e.g. recoveries, charge-off amounts).
 - **DPD buckets:** current (0), 1-30, 31-60, 61-90, 90+
 - **Date filtering on loc_tape/gwc_tape:** Always use `dt` column with BETWEEN, never DATE_TRUNC
 - **NULL arithmetic:** When adding columns, wrap each in `COALESCE(col, 0)` — NULL + value = NULL

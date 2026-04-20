@@ -39,7 +39,7 @@ STREAM_UPDATE_MIN_INTERVAL_SECONDS = 0.35
 
 CHANNEL_CAPABILITIES = {
     "feishu": {"supports_streaming": True, "stream_update_interval": STREAM_UPDATE_MIN_INTERVAL_SECONDS},
-    "slack": {"supports_streaming": True, "stream_update_interval": 10.0},
+    "slack": {"supports_streaming": False},
     "telegram": {"supports_streaming": False},
 }
 

@@ -204,7 +204,7 @@ class ChannelManager:
             import asyncio as _aio
 
             POLL_INTERVAL = 60   # seconds between checks
-            STUCK_THRESHOLD = 600  # 10 min with no state update → stuck
+            STUCK_THRESHOLD = 1800  # 30 min with no state update → stuck
 
             async def _run():
                 import httpx

@@ -241,8 +241,9 @@ class ChannelManager:
 
                             try:
                                 runs = await client.runs.list(tid)
-                                for run in runs:
-                                    if run["status"] in ("running", "pending"):
+                                active_runs = [r for r in runs if r["status"] in ("running", "pending")]
+                                if active_runs:
+                                    for run in active_runs:
                                         try:
                                             await client.runs.cancel(tid, run["run_id"])
                                             cancelled += 1
@@ -253,11 +254,23 @@ class ChannelManager:
                                             )
                                         except Exception:
                                             logger.warning("[Monitor] failed to cancel run %s on thread %s", run["run_id"], tid, exc_info=True)
+                                else:
+                                    # Thread is busy but has no active runs — zombie state.
+                                    # Unstick by writing empty state update.
+                                    try:
+                                        await client.threads.update_state(tid, values={"messages": []})
+                                        cancelled += 1
+                                        logger.warning(
+                                            "[Monitor] unstuck zombie busy thread %s (no active runs, idle %.0fs)",
+                                            tid, age,
+                                        )
+                                    except Exception:
+                                        logger.warning("[Monitor] failed to unstick thread %s", tid, exc_info=True)
                             except Exception:
                                 logger.warning("[Monitor] failed to list runs for thread %s", tid, exc_info=True)
 
                         if cancelled:
-                            logger.info("[Monitor] stuck-run sweep: cancelled %d run(s)", cancelled)
+                            logger.info("[Monitor] stuck-run sweep: cancelled/unstuck %d thread(s)", cancelled)
                     except Exception:
                         logger.warning("[Monitor] stuck-run check failed (will retry)", exc_info=True)
 

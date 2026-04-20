@@ -89,7 +89,6 @@ class ChannelManager:
         self._semaphore: asyncio.Semaphore | None = None
         self._running = False
         self._task: asyncio.Task | None = None
-        self._monitor_task: asyncio.Task | None = None
 
     @staticmethod
     def _channel_supports_streaming(channel_name: str) -> bool:
@@ -155,8 +154,7 @@ class ChannelManager:
         self._running = True
         self._semaphore = asyncio.Semaphore(self._max_concurrency)
         self._task = asyncio.create_task(self._dispatch_loop())
-        self._monitor_task = asyncio.create_task(self._stuck_run_monitor())
-        self._monitor_task.add_done_callback(self._log_task_error)
+        self._start_stuck_run_monitor()
         logger.info("ChannelManager started (max_concurrency=%d)", self._max_concurrency)
 
     async def _cancel_zombie_runs(self) -> None:
@@ -193,87 +191,95 @@ class ChannelManager:
         except Exception:
             logger.warning("[Manager] zombie cleanup failed (non-fatal, continuing startup)", exc_info=True)
 
-    async def _stuck_run_monitor(self) -> None:
-        """Periodically cancel runs that have been stuck for too long.
+    def _start_stuck_run_monitor(self) -> None:
+        """Launch the stuck-run monitor in a dedicated daemon thread.
 
-        Checks every 60 seconds for threads in ``busy`` status where the most
-        recent run hasn't been updated in over 10 minutes.  This covers the
-        case where a run completes from the LLM's perspective but the
-        LangGraph runtime never transitions it to ``success``.
+        Runs its own asyncio event loop and HTTP client so it cannot be
+        blocked by the gateway's main event loop (which may be saturated
+        by long-running ``runs.stream`` calls).
         """
-        POLL_INTERVAL = 60  # seconds between checks
-        STUCK_THRESHOLD = 600  # 10 minutes with no state update → stuck
+        import threading
 
-        logger.info("[Monitor] stuck-run monitor started (poll=%ds, threshold=%ds)", POLL_INTERVAL, STUCK_THRESHOLD)
-        while self._running:
-            try:
-                await asyncio.sleep(POLL_INTERVAL)
-            except asyncio.CancelledError:
-                logger.info("[Monitor] stuck-run monitor cancelled")
-                return
+        def _monitor_loop():
+            import asyncio as _aio
 
-            try:
-                client = self._get_client()
-                busy_threads = await client.threads.search(status="busy", limit=100)
-                if not busy_threads:
-                    continue
-                logger.info("[Monitor] found %d busy thread(s), checking ages", len(busy_threads))
+            POLL_INTERVAL = 60   # seconds between checks
+            STUCK_THRESHOLD = 600  # 10 min with no state update → stuck
 
-                now = datetime.now(timezone.utc)
-                cancelled = 0
-                for thread in busy_threads:
-                    tid = thread["thread_id"]
-                    updated_raw = thread.get("state_updated_at") or thread.get("updated_at")
-                    if not updated_raw:
-                        continue
-                    if isinstance(updated_raw, str):
-                        updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
-                    else:
-                        updated_at = updated_raw
-                    age = (now - updated_at).total_seconds()
-                    if age < STUCK_THRESHOLD:
-                        continue
+            async def _run():
+                import httpx
+                from langgraph_sdk import get_client
 
-                    # Thread state hasn't changed in >10 min — cancel active runs.
+                client = get_client(
+                    url=self._langgraph_url,
+                    timeout=httpx.Timeout(connect=5, read=30, write=30, pool=5),
+                )
+                logger.info("[Monitor] stuck-run monitor started (poll=%ds, threshold=%ds)", POLL_INTERVAL, STUCK_THRESHOLD)
+
+                while self._running:
+                    await _aio.sleep(POLL_INTERVAL)
                     try:
-                        runs = await client.runs.list(tid)
-                        for run in runs:
-                            if run["status"] in ("running", "pending"):
-                                try:
-                                    await client.runs.cancel(tid, run["run_id"])
-                                    cancelled += 1
-                                    logger.warning(
-                                        "[Monitor] cancelled stuck run %s on thread %s "
-                                        "(status=%s, idle %.0fs)",
-                                        run["run_id"], tid, run["status"], age,
-                                    )
-                                except Exception:
-                                    logger.warning(
-                                        "[Monitor] failed to cancel run %s on thread %s",
-                                        run["run_id"], tid, exc_info=True,
-                                    )
-                    except Exception:
-                        logger.warning("[Monitor] failed to list runs for thread %s", tid, exc_info=True)
+                        busy_threads = await client.threads.search(status="busy", limit=100)
+                        if not busy_threads:
+                            continue
+                        logger.info("[Monitor] found %d busy thread(s), checking ages", len(busy_threads))
 
-                if cancelled:
-                    logger.info("[Monitor] stuck-run sweep: cancelled %d run(s)", cancelled)
-            except asyncio.CancelledError:
-                return
-            except Exception:
-                logger.warning("[Monitor] stuck-run check failed (will retry)", exc_info=True)
+                        now = datetime.now(timezone.utc)
+                        cancelled = 0
+                        for thread in busy_threads:
+                            tid = thread["thread_id"]
+                            updated_raw = thread.get("state_updated_at") or thread.get("updated_at")
+                            if not updated_raw:
+                                continue
+                            if isinstance(updated_raw, str):
+                                updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+                            else:
+                                updated_at = updated_raw
+                            age = (now - updated_at).total_seconds()
+                            if age < STUCK_THRESHOLD:
+                                continue
+
+                            try:
+                                runs = await client.runs.list(tid)
+                                for run in runs:
+                                    if run["status"] in ("running", "pending"):
+                                        try:
+                                            await client.runs.cancel(tid, run["run_id"])
+                                            cancelled += 1
+                                            logger.warning(
+                                                "[Monitor] cancelled stuck run %s on thread %s "
+                                                "(status=%s, idle %.0fs)",
+                                                run["run_id"], tid, run["status"], age,
+                                            )
+                                        except Exception:
+                                            logger.warning("[Monitor] failed to cancel run %s on thread %s", run["run_id"], tid, exc_info=True)
+                            except Exception:
+                                logger.warning("[Monitor] failed to list runs for thread %s", tid, exc_info=True)
+
+                        if cancelled:
+                            logger.info("[Monitor] stuck-run sweep: cancelled %d run(s)", cancelled)
+                    except Exception:
+                        logger.warning("[Monitor] stuck-run check failed (will retry)", exc_info=True)
+
+                logger.info("[Monitor] stuck-run monitor stopped")
+
+            _aio.run(_run())
+
+        t = threading.Thread(target=_monitor_loop, name="stuck-run-monitor", daemon=True)
+        t.start()
+        logger.info("[Monitor] monitor thread launched")
 
     async def stop(self) -> None:
         """Stop the dispatch loop."""
         self._running = False
-        for task_attr in ("_task", "_monitor_task"):
-            t = getattr(self, task_attr, None)
-            if t:
-                t.cancel()
-                try:
-                    await t
-                except asyncio.CancelledError:
-                    pass
-                setattr(self, task_attr, None)
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        # Monitor thread is a daemon — dies automatically with the process
         logger.info("ChannelManager stopped")
 
     # -- dispatch loop -----------------------------------------------------

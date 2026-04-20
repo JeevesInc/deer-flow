@@ -605,12 +605,15 @@ class ChannelManager:
             reply = await self._fetch_gateway("/api/models", "models")
         elif command == "memory":
             reply = await self._fetch_gateway("/api/memory", "memory")
+        elif command == "btw":
+            reply = await self._btw_status(msg)
         elif command == "help":
             reply = (
                 "Available commands:\n"
                 "/bootstrap — Start a bootstrap session (enables agent setup)\n"
                 "/new — Start a new conversation\n"
                 "/status — Show current thread info\n"
+                "/btw — Quick system health check\n"
                 "/models — List available models\n"
                 "/memory — Show memory status\n"
                 "/help — Show this help"
@@ -647,6 +650,56 @@ class ChannelManager:
             facts = data.get("facts", [])
             return f"Memory contains {len(facts)} fact(s)."
         return str(data)
+
+    async def _btw_status(self, msg: InboundMessage) -> str:
+        """Quick system health check: this thread, busy threads, recent errors."""
+        lines: list[str] = []
+        try:
+            client = self._get_client()
+
+            # This thread
+            thread_id = self.store.get_thread_id(msg.channel_name, msg.chat_id, topic_id=msg.topic_id)
+            if thread_id:
+                try:
+                    t = await client.threads.get(thread_id)
+                    status = t.get("status", "?")
+                    msg_count = len(t.get("values", {}).get("messages", []))
+                    lines.append(f"*This thread:* `{status}` ({msg_count} msgs)")
+                except Exception:
+                    lines.append("*This thread:* not found on server (stale)")
+            else:
+                lines.append("*This thread:* no active conversation")
+
+            # Busy threads (system-wide)
+            busy = await client.threads.search(status="busy", limit=10)
+            if busy:
+                lines.append(f"\n*Busy threads:* {len(busy)}")
+                now = datetime.now(timezone.utc)
+                for bt in busy[:5]:
+                    updated_raw = bt.get("state_updated_at") or bt.get("updated_at", "")
+                    if isinstance(updated_raw, str) and updated_raw:
+                        updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+                        age = int((now - updated_at).total_seconds())
+                        age_str = f"{age // 60}m{age % 60}s" if age >= 60 else f"{age}s"
+                    else:
+                        age_str = "?"
+                    bt_msgs = len(bt.get("values", {}).get("messages", []))
+                    lines.append(f"  • `{bt['thread_id'][:8]}…` — {bt_msgs} msgs, idle {age_str}")
+            else:
+                lines.append("\n*Busy threads:* none")
+
+            # Recent errors
+            errored = await client.threads.search(status="error", limit=5)
+            if errored:
+                lines.append(f"*Errored threads:* {len(errored)}")
+            else:
+                lines.append("*Errored threads:* none")
+
+        except Exception:
+            logger.exception("[Manager] /btw status check failed")
+            return "Failed to fetch status."
+
+        return "\n".join(lines)
 
     # -- error helper ------------------------------------------------------
 

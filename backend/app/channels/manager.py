@@ -156,6 +156,7 @@ class ChannelManager:
         self._semaphore = asyncio.Semaphore(self._max_concurrency)
         self._task = asyncio.create_task(self._dispatch_loop())
         self._monitor_task = asyncio.create_task(self._stuck_run_monitor())
+        self._monitor_task.add_done_callback(self._log_task_error)
         logger.info("ChannelManager started (max_concurrency=%d)", self._max_concurrency)
 
     async def _cancel_zombie_runs(self) -> None:
@@ -203,10 +204,12 @@ class ChannelManager:
         POLL_INTERVAL = 60  # seconds between checks
         STUCK_THRESHOLD = 600  # 10 minutes with no state update → stuck
 
+        logger.info("[Monitor] stuck-run monitor started (poll=%ds, threshold=%ds)", POLL_INTERVAL, STUCK_THRESHOLD)
         while self._running:
             try:
                 await asyncio.sleep(POLL_INTERVAL)
             except asyncio.CancelledError:
+                logger.info("[Monitor] stuck-run monitor cancelled")
                 return
 
             try:
@@ -214,6 +217,7 @@ class ChannelManager:
                 busy_threads = await client.threads.search(status="busy", limit=100)
                 if not busy_threads:
                     continue
+                logger.info("[Monitor] found %d busy thread(s), checking ages", len(busy_threads))
 
                 now = datetime.now(timezone.utc)
                 cancelled = 0

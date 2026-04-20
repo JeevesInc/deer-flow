@@ -725,7 +725,11 @@ class SlackChannel(Channel):
         channel_id = event.get("channel", "")
         thread_ts = event.get("thread_ts") or event.get("ts", "")
 
+        # Detect commands: /cmd or bare keywords like "btw", "status"
+        _BARE_COMMANDS = {"btw", "status", "new", "help", "models", "memory"}
         if text.startswith("/"):
+            msg_type = InboundMessageType.COMMAND
+        elif text.strip().lower() in _BARE_COMMANDS:
             msg_type = InboundMessageType.COMMAND
         else:
             msg_type = InboundMessageType.CHAT

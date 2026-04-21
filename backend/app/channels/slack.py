@@ -727,10 +727,12 @@ class SlackChannel(Channel):
 
         # Detect commands: /cmd or bare keywords like "btw", "status"
         _BARE_COMMANDS = {"btw", "status", "new", "help", "models", "memory"}
-        if text.startswith("/"):
+        text_lower = text.strip().lower()
+        if text_lower.startswith("/"):
             msg_type = InboundMessageType.COMMAND
-        elif text.strip().lower() in _BARE_COMMANDS:
+        elif text_lower in _BARE_COMMANDS:
             msg_type = InboundMessageType.COMMAND
+            logger.info("[Slack] bare command detected: %r", text_lower)
         else:
             msg_type = InboundMessageType.CHAT
 

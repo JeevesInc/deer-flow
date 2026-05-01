@@ -9,6 +9,9 @@ allowed-tools:
 
 # Jeeves Redshift Access
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
 ## Workflow: Always Check Repo First

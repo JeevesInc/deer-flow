@@ -9,6 +9,9 @@ allowed-tools:
 
 # Document Redlining — Compare, Track Changes, Negotiate
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 ## Decision Tree — Which Command to Use
 
 **Step 1: What is the user asking?**

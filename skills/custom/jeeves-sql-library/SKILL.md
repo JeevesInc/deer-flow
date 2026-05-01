@@ -8,6 +8,9 @@ allowed-tools:
 
 # Jeeves SQL Library
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 The team maintains a library of ~56 SQL files in the `.github/sql/` directory of the Capital Markets Google Drive workspace. These are production-tested query templates for capital markets analytics.
 
 **Drive location:** `.github/` folder ID `1Vs2emp9jbSF3AbTqn6jkdqIHNIOy50yK`, then navigate to `sql/` subfolder.

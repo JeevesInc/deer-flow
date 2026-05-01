@@ -9,6 +9,9 @@ allowed-tools:
 
 # Contact Dossiers — Relationship Intelligence
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 Build and maintain contact dossiers that track relationship health, communication patterns, sentiment, coaching notes, and open topics. Dossiers persist as JSON files and evolve over time.
 
 **The user is Brian Mauck (brian.mauck@tryjeeves.com).** All dossiers are from Brian's perspective. When prepping for meetings, **never create a dossier for Brian himself** — only for the other attendees. The `prep` command already excludes Brian's email from the attendee list.

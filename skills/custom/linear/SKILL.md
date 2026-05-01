@@ -7,6 +7,9 @@ allowed-tools:
 
 # Linear — Issue Tracking
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 Search, read, create, and update Linear issues.
 
 ## Commands

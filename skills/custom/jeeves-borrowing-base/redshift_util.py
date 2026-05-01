@@ -27,6 +27,10 @@ def ensure_deps(*extras):
 def connect():
     """Return a psycopg2 connection to Redshift using REDSHIFT_* env vars."""
     import psycopg2
+    missing = [k for k in ('REDSHIFT_HOST', 'REDSHIFT_PORT', 'REDSHIFT_DB', 'REDSHIFT_USER', 'REDSHIFT_PASSWORD')
+               if not os.environ.get(k)]
+    if missing:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
     return psycopg2.connect(
         host=os.environ['REDSHIFT_HOST'],
         port=int(os.environ['REDSHIFT_PORT']),

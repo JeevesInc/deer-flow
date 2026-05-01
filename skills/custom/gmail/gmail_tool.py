@@ -226,9 +226,10 @@ def cmd_draft_reply(message_id, body_text, attachments=None):
     # To = original From (always reply to sender)
     # Cc = everyone else on original To + Cc, minus ourselves
     def _parse_addrs(field):
+        """Parse an RFC 2822 address list, handling quoted names with commas."""
         if not field:
             return []
-        return [addr.strip() for addr in field.split(',') if addr.strip()]
+        return [email.utils.formataddr(pair) for pair in email.utils.getaddresses([field]) if pair[1]]
 
     all_recipients = _parse_addrs(orig_to) + _parse_addrs(orig_cc)
     cc_addrs = [a for a in all_recipients

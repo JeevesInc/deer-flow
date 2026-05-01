@@ -42,10 +42,11 @@ def main():
 
     # Compute dates
     yesterday = dt.date.today() - dt.timedelta(days=1)
-    if args.end_date:
-        end_date = dt.datetime.strptime(args.end_date, '%Y-%m-%d').date()
-    else:
-        end_date = yesterday
+    try:
+        end_date = dt.datetime.strptime(args.end_date, '%Y-%m-%d').date() if args.end_date else yesterday
+    except ValueError:
+        print(f"ERROR: Invalid end-date format '{args.end_date}'. Expected YYYY-MM-DD.", file=sys.stderr)
+        sys.exit(1)
 
     # Guard: never run for today or future — data is not available yet
     if end_date >= dt.date.today():
@@ -54,10 +55,15 @@ def main():
               f"Use --end-date {yesterday} or earlier.", file=sys.stderr)
         sys.exit(1)
 
-    if args.start_date:
-        start_date = dt.datetime.strptime(args.start_date, '%Y-%m-%d').date()
-    else:
-        start_date = end_date - dt.timedelta(days=2)  # 3-day range
+    try:
+        start_date = dt.datetime.strptime(args.start_date, '%Y-%m-%d').date() if args.start_date else end_date - dt.timedelta(days=2)
+    except ValueError:
+        print(f"ERROR: Invalid start-date format '{args.start_date}'. Expected YYYY-MM-DD.", file=sys.stderr)
+        sys.exit(1)
+
+    if start_date > end_date:
+        print(f"ERROR: start-date {start_date} is after end-date {end_date}.", file=sys.stderr)
+        sys.exit(1)
 
     # Generate date list
     dates = []

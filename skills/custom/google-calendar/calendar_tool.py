@@ -22,7 +22,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 
-TIMEZONE = "America/Los_Angeles"
+TIMEZONE = os.environ.get("CALENDAR_TIMEZONE", "America/Los_Angeles")
 
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))

@@ -20,7 +20,7 @@ SEED_QUERIES = [
     },
     {
         "name": "card_spend_by_month",
-        "sql": "SELECT DATE_TRUNC('month', dt) AS month, SUM(COALESCE(disbursement_amount_usd, 0)) AS card_spend FROM capital_markets_dm.loc_tape WHERE dt BETWEEN DATEADD('month', -6, CURRENT_DATE) AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY 1 ORDER BY 1",
+        "sql": "SELECT DATE_TRUNC('month', dt) AS month, SUM(COALESCE(disbursement_amount_usd, 0)) AS card_spend FROM capital_markets_dm.loc_tape WHERE dt BETWEEN CURRENT_DATE - INTERVAL '6 months' AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY 1 ORDER BY 1",
         "tags": ["spend", "disbursement", "monthly", "loc"],
         "description": "Monthly card spend (disbursement) trend for last 6 months",
     },
@@ -38,7 +38,7 @@ SEED_QUERIES = [
     },
     {
         "name": "total_revenue_by_quarter",
-        "sql": "SELECT DATE_TRUNC('quarter', posted_at) AS quarter, SUM(revenue_usd) AS total_revenue FROM master_transactions_dm.transactions_ssot WHERE is_company_test = false AND posted_at >= DATEADD('year', -1, CURRENT_DATE) GROUP BY 1 ORDER BY 1",
+        "sql": "SELECT DATE_TRUNC('quarter', posted_at) AS quarter, SUM(revenue_usd) AS total_revenue FROM master_transactions_dm.transactions_ssot WHERE is_company_test = false AND posted_at >= CURRENT_DATE - INTERVAL '1 year' GROUP BY 1 ORDER BY 1",
         "tags": ["revenue", "quarterly", "transactions"],
         "description": "Quarterly revenue for the last year",
     },
@@ -56,7 +56,7 @@ SEED_QUERIES = [
     },
     {
         "name": "monthly_charge_off_trend",
-        "sql": "SELECT DATE_TRUNC('month', charge_off_dt) AS month, COUNT(DISTINCT company_id) AS accounts, SUM(balance_usd) AS charged_off_balance FROM capital_markets_dm.loc_tape WHERE charge_off_dt IS NOT NULL AND dt = charge_off_dt AND charge_off_dt >= DATEADD('month', -6, CURRENT_DATE) GROUP BY 1 ORDER BY 1",
+        "sql": "SELECT DATE_TRUNC('month', charge_off_dt) AS month, COUNT(DISTINCT company_id) AS accounts, SUM(balance_usd) AS charged_off_balance FROM capital_markets_dm.loc_tape WHERE charge_off_dt IS NOT NULL AND dt = charge_off_dt AND charge_off_dt >= CURRENT_DATE - INTERVAL '6 months' GROUP BY 1 ORDER BY 1",
         "tags": ["charge-off", "monthly", "trend", "loc"],
         "description": "Monthly charge-off trend (last 6 months)",
     },
@@ -122,7 +122,7 @@ SEED_QUERIES = [
     },
     {
         "name": "monthly_payment_trend",
-        "sql": "SELECT DATE_TRUNC('month', dt) AS month, SUM(COALESCE(payment_amount_usd, 0)) AS total_payments FROM capital_markets_dm.loc_tape WHERE dt BETWEEN DATEADD('month', -6, CURRENT_DATE) AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY 1 ORDER BY 1",
+        "sql": "SELECT DATE_TRUNC('month', dt) AS month, SUM(COALESCE(payment_amount_usd, 0)) AS total_payments FROM capital_markets_dm.loc_tape WHERE dt BETWEEN CURRENT_DATE - INTERVAL '6 months' AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY 1 ORDER BY 1",
         "tags": ["payments", "monthly", "trend", "loc"],
         "description": "Monthly payment amounts for the last 6 months",
     },

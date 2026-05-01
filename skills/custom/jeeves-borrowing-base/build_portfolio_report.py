@@ -44,16 +44,15 @@ def _download_template(file_id: str, dest_path: str) -> None:
     creds = get_credentials()
     service = build('drive', 'v3', credentials=creds)
     request = service.files().get_media(fileId=file_id)
-    fh = io.FileIO(dest_path, 'wb')
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-        if status:
-            pct = int(status.progress() * 100)
-            if pct % 25 == 0:
-                print(f"    Download {pct}%")
-    fh.close()
+    with io.FileIO(dest_path, 'wb') as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+            if status:
+                pct = int(status.progress() * 100)
+                if pct % 25 == 0:
+                    print(f"    Download {pct}%")
 
 
 def _shift_summary_mom(ws) -> int:
@@ -157,7 +156,11 @@ def main():
     #   BOP = last day of the month before that (2026-02-28)
     # File is named with the report date and uploaded to the report month folder.
     yesterday = dt.date.today() - dt.timedelta(days=1)
-    report_date = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+    try:
+        report_date = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+    except ValueError:
+        print(f"ERROR: Invalid date format '{args.date}'. Expected YYYY-MM-DD.", file=sys.stderr)
+        sys.exit(1)
     date_end = report_date - dt.timedelta(days=1)  # EOP = day before report date
 
     if date_end >= dt.date.today():
@@ -221,35 +224,37 @@ def main():
     print("  Loading template with formulas...")
     wb = openpyxl.load_workbook(template_path, data_only=False)
 
-    # Write cached col L values into col N (prior period)
-    for sheet_name, values in summary_values.items():
-        shifted = _shift_summary_mom_with_values(wb[sheet_name], values)
-        print(f"    {sheet_name}: shifted {shifted} values from col L -> col N")
+    try:
+        # Write cached col L values into col N (prior period)
+        for sheet_name, values in summary_values.items():
+            shifted = _shift_summary_mom_with_values(wb[sheet_name], values)
+            print(f"    {sheet_name}: shifted {shifted} values from col L -> col N")
 
-    # ── Step 5: Replace data tabs ──────────────────────────────────
-    print("  Replacing data tabs...")
+        # ── Step 5: Replace data tabs ──────────────────────────────────
+        print("  Replacing data tabs...")
 
-    # loc and rollforward have a pandas index in col A (the original report
-    # was written with df.to_excel which includes the index by default).
-    # Summary formulas reference columns by letter, so the index column
-    # must be present or every formula shifts left by one.
-    # mods does NOT have an index column.
-    print(f"    loc: {len(df_loc)} rows x {len(df_loc.columns)} cols (+ index)")
-    _replace_data_sheet(wb, 'loc', df_loc, include_index=True)
+        # loc and rollforward have a pandas index in col A (the original report
+        # was written with df.to_excel which includes the index by default).
+        # Summary formulas reference columns by letter, so the index column
+        # must be present or every formula shifts left by one.
+        # mods does NOT have an index column.
+        print(f"    loc: {len(df_loc)} rows x {len(df_loc.columns)} cols (+ index)")
+        _replace_data_sheet(wb, 'loc', df_loc, include_index=True)
 
-    print(f"    rollforward: {len(df_rollforward)} rows x {len(df_rollforward.columns)} cols (+ index)")
-    _replace_data_sheet(wb, 'rollforward', df_rollforward, include_index=True)
+        print(f"    rollforward: {len(df_rollforward)} rows x {len(df_rollforward.columns)} cols (+ index)")
+        _replace_data_sheet(wb, 'rollforward', df_rollforward, include_index=True)
 
-    print(f"    mods: {len(df_mods)} rows x {len(df_mods.columns)} cols")
-    _replace_data_sheet(wb, 'mods', df_mods, include_index=False)
+        print(f"    mods: {len(df_mods)} rows x {len(df_mods.columns)} cols")
+        _replace_data_sheet(wb, 'mods', df_mods, include_index=False)
 
-    # ── Step 6: Save ───────────────────────────────────────────────
-    filename = f"Portfolio Report - {month_str}01.xlsx"
-    output_path = os.path.join(output_dir, filename)
+        # ── Step 6: Save ───────────────────────────────────────────────
+        filename = f"Portfolio Report - {month_str}01.xlsx"
+        output_path = os.path.join(output_dir, filename)
 
-    print(f"  Saving {filename}...")
-    wb.save(output_path)
-    wb.close()
+        print(f"  Saving {filename}...")
+        wb.save(output_path)
+    finally:
+        wb.close()
 
     # Clean up template
     try:

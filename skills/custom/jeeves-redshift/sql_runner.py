@@ -344,6 +344,7 @@ def main():
     _ensure_deps()
     _rate_limit()
     conn = None
+    cur = None
     try:
         conn = _connect()
         cur = conn.cursor()
@@ -351,15 +352,23 @@ def main():
 
         if cur.description is None:
             print("Query executed successfully (no result set).")
+            cur.close()
             _release(conn)
             return
 
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
+        cur.close()
+        cur = None
         _release(conn)
         conn = None
 
     except Exception as e:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
         if conn is not None:
             try:
                 conn.rollback()

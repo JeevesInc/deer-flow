@@ -20,6 +20,7 @@ import datetime as dt
 import json
 import os
 import re
+import threading
 import sys
 
 import dspy
@@ -164,7 +165,8 @@ def _setup_dspy():
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set")
 
-    lm = dspy.LM("anthropic/claude-sonnet-4-20250514", api_key=api_key, max_tokens=1024)
+    model = os.environ.get("DSPY_MODEL", "anthropic/claude-sonnet-4-20250514")
+    lm = dspy.LM(model, api_key=api_key, max_tokens=1024)
     dspy.configure(lm=lm)
     return lm
 
@@ -237,6 +239,7 @@ class JeevesSQL(dspy.Module):
 # ---------------------------------------------------------------------------
 
 _module: JeevesSQL | None = None
+_module_lock = threading.Lock()
 
 
 def generate_sql(question: str) -> dict:
@@ -250,8 +253,10 @@ def generate_sql(question: str) -> dict:
         import dspy
 
         if _module is None:
-            _setup_dspy()
-            _module = JeevesSQL()
+            with _module_lock:
+                if _module is None:
+                    _setup_dspy()
+                    _module = JeevesSQL()
 
         result = _module(question=question)
         return {

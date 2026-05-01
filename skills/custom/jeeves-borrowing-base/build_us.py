@@ -41,7 +41,11 @@ def main():
     # Compute dates
     yesterday = dt.date.today() - dt.timedelta(days=1)
     if args.date:
-        date_end = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+        try:
+            date_end = dt.datetime.strptime(args.date, '%Y-%m-%d').date()
+        except ValueError:
+            print(f"ERROR: Invalid date format '{args.date}'. Expected YYYY-MM-DD.", file=sys.stderr)
+            sys.exit(1)
     else:
         date_end = yesterday
 
@@ -71,9 +75,9 @@ def main():
         df_end = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)
         print(f"    {len(df_end)} rows")
         if len(df_end) == 0:
-            check_sql = f"SELECT COUNT(*) as count FROM capital_markets_dm.loc_tape_tmp WHERE dt = '{date_end.isoformat()}'"
+            check_sql = "SELECT COUNT(*) as count FROM capital_markets_dm.loc_tape_tmp WHERE dt = %s"
             import pandas as _pd
-            count_df = _pd.read_sql_query(check_sql, con)
+            count_df = _pd.read_sql_query(check_sql, con, params=[date_end.isoformat()])
             print(f"    WARNING: 0 rows returned. Total rows in loc_tape_tmp for this date: {count_df['count'].iloc[0]}")
 
         print(f"  Querying rollforward {date_beg} -> {date_end}...")

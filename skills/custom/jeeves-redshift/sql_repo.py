@@ -113,8 +113,8 @@ def list_queries():
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             queries.append(data)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: skipping malformed query file {fname}: {e}", file=sys.stderr)
     return queries
 
 

@@ -35,4 +35,6 @@ def connect():
         password=os.environ['REDSHIFT_PASSWORD'],
         sslmode='require',
         sslrootcert='disable',
+        connect_timeout=30,
+        options='-c statement_timeout=120000',
     )

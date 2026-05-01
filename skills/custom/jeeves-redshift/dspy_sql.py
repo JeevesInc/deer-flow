@@ -113,6 +113,42 @@ TRAINING_SET = [
         "question": "Revenue by product this quarter",
         "sql": "SELECT product, SUM(revenue_usd) AS total_revenue FROM master_transactions_dm.transactions_ssot WHERE posted_at >= DATE_TRUNC('quarter', CURRENT_DATE) AND is_company_test = false GROUP BY product ORDER BY total_revenue DESC",
     },
+    {
+        "question": "How many active accounts do we have in each country?",
+        "sql": "SELECT country_code, COUNT(DISTINCT company_id) AS active_accounts FROM capital_markets_dm.loc_tape WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape) AND charge_off_flag = false AND is_in_repayment = false GROUP BY country_code ORDER BY active_accounts DESC",
+    },
+    {
+        "question": "What's the GWC/Jeeves Pay portfolio balance?",
+        "sql": "SELECT SUM(balance_usd) AS gwc_balance FROM capital_markets_dm.gwc_tape WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.gwc_tape) AND charge_off_flag = false",
+    },
+    {
+        "question": "Show RPP loan installments",
+        "sql": "SELECT loan_id, company_id, dt AS due_date, principal_amount_due_usd, balance_usd, days_past_due FROM capital_markets_dm.gwc_tape WHERE loan_reference_number ILIKE 'RPP%' AND dt >= CURRENT_DATE - 30 AND principal_amount_due_usd != 0 ORDER BY dt",
+    },
+    {
+        "question": "Vintage cohort charge-off rates",
+        "sql": "SELECT start_date, SUM(charge_off_usd) / NULLIF(SUM(bop_balance_usd), 0) AS co_rate, SUM(bop_balance_usd) AS bop_balance, SUM(charge_off_usd) AS charge_offs FROM analytics_sandbox.loc_vintage_data GROUP BY start_date ORDER BY start_date",
+    },
+    {
+        "question": "Which companies activated in the last 30 days?",
+        "sql": "SELECT company_id, name, country_code, activation_date, credit_limit_usd FROM master_customer_dm.companies_dm WHERE activation_date >= CURRENT_DATE - 30 AND is_test = false ORDER BY activation_date DESC",
+    },
+    {
+        "question": "Daily portfolio balance trend for the past month",
+        "sql": "SELECT dt, SUM(balance_usd) AS total_balance, COUNT(DISTINCT company_id) AS active_accounts FROM capital_markets_dm.loc_tape WHERE dt BETWEEN CURRENT_DATE - 31 AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY dt ORDER BY dt",
+    },
+    {
+        "question": "Card vs Jeeves Pay balance split",
+        "sql": "SELECT dt, SUM(COALESCE(card_balance_usd, 0)) AS card_balance, SUM(COALESCE(jp_balance_usd, 0)) AS jp_balance, SUM(balance_usd) AS total_balance FROM capital_markets_dm.loc_tape WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape) AND charge_off_flag = false AND is_in_repayment = false GROUP BY dt",
+    },
+    {
+        "question": "Companies with credit limit over 1M",
+        "sql": "SELECT c.company_id, c.name, c.country_code, c.credit_limit_usd, lt.balance_usd FROM master_customer_dm.companies_dm c JOIN capital_markets_dm.loc_tape lt ON c.company_id = lt.company_id WHERE lt.dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape) AND lt.charge_off_flag = false AND lt.is_in_repayment = false AND c.is_test = false AND c.credit_limit_usd > 1000000 ORDER BY c.credit_limit_usd DESC",
+    },
+    {
+        "question": "Payment amounts by month for the last 6 months",
+        "sql": "SELECT DATE_TRUNC('month', dt) AS month, SUM(COALESCE(payment_amount_usd, 0)) AS total_payments FROM capital_markets_dm.loc_tape WHERE dt BETWEEN DATEADD('month', -6, CURRENT_DATE) AND CURRENT_DATE - 1 AND charge_off_flag = false AND is_in_repayment = false GROUP BY 1 ORDER BY 1",
+    },
 ]
 
 

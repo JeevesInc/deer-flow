@@ -20,8 +20,18 @@ import datetime as dt
 import os
 import re
 import sys
+import threading
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ---------------------------------------------------------------------------
+# Rate limiting (per-process, thread-safe)
+# ---------------------------------------------------------------------------
+
+_last_query_time: float = 0.0
+_rate_lock = threading.Lock()
+QUERY_MIN_INTERVAL = 5.0  # seconds between queries
 
 # ---------------------------------------------------------------------------
 # Known schema
@@ -110,17 +120,80 @@ def _ensure_deps():
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'psycopg2-binary'])
 
 
+_pool = None
+_pool_lock = threading.Lock()
+STATEMENT_TIMEOUT_MS = 60_000  # 60 seconds
+
+
+def _get_pool():
+    """Get or create the connection pool (singleton, thread-safe)."""
+    global _pool
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
+        from psycopg2 import pool as pg_pool
+        _pool = pg_pool.SimpleConnectionPool(
+            minconn=1,
+            maxconn=5,
+            host=os.environ['REDSHIFT_HOST'],
+            port=int(os.environ['REDSHIFT_PORT']),
+            dbname=os.environ['REDSHIFT_DB'],
+            user=os.environ['REDSHIFT_USER'],
+            password=os.environ['REDSHIFT_PASSWORD'],
+            sslmode='require',
+            sslrootcert='disable',
+            options=f'-c statement_timeout={STATEMENT_TIMEOUT_MS}',
+        )
+        return _pool
+
+
 def _connect():
-    import psycopg2
-    return psycopg2.connect(
-        host=os.environ['REDSHIFT_HOST'],
-        port=int(os.environ['REDSHIFT_PORT']),
-        dbname=os.environ['REDSHIFT_DB'],
-        user=os.environ['REDSHIFT_USER'],
-        password=os.environ['REDSHIFT_PASSWORD'],
-        sslmode='require',
-        sslrootcert='disable',
-    )
+    """Get a healthy connection from the pool, replacing stale ones."""
+    global _pool
+    pool = _get_pool()
+    conn = pool.getconn()
+    try:
+        # Quick health check — catches stale SSL / dropped connections
+        conn.cursor().execute('SELECT 1')
+        return conn
+    except Exception:
+        # Connection is dead — discard it and force a fresh pool
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        with _pool_lock:
+            try:
+                _pool.closeall()
+            except Exception:
+                pass
+            _pool = None
+        # Retry with a brand-new pool
+        return _get_pool().getconn()
+
+
+def _release(conn):
+    """Return a connection to the pool."""
+    try:
+        if _pool is not None:
+            _pool.putconn(conn)
+    except Exception:
+        pass
+
+
+def _rate_limit():
+    """Enforce minimum interval between queries."""
+    global _last_query_time
+    with _rate_lock:
+        now = time.monotonic()
+        elapsed = now - _last_query_time
+        if elapsed < QUERY_MIN_INTERVAL and _last_query_time > 0:
+            wait = QUERY_MIN_INTERVAL - elapsed
+            _warn(f"Rate limiting: waiting {wait:.1f}s before next query")
+            time.sleep(wait)
+        _last_query_time = time.monotonic()
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +287,10 @@ def main():
     parser.add_argument('--limit', type=int, default=100, help='Max rows for inline display (default: 100)')
     parser.add_argument('--generate', '-g', type=str, default=None,
                         help='Generate SQL from natural language question using DSPy, then execute')
+    parser.add_argument('--save', type=str, default=None,
+                        help='Save the query to the SQL repo after successful execution (provide a descriptive name)')
+    parser.add_argument('--tags', type=str, default=None,
+                        help='Comma-separated tags for --save (e.g. "portfolio,balance,loc")')
     args = parser.parse_args()
 
     # Generate SQL from natural language if --generate is used
@@ -255,8 +332,18 @@ def main():
             _error(e.replace('ERROR: ', ''))
         sys.exit(1)
 
+    # Always echo the SQL being executed for visibility
+    print("=" * 60)
+    print("EXECUTING SQL:")
+    print("-" * 60)
+    print(sql)
+    print("=" * 60)
+    print()
+
     # Execute
     _ensure_deps()
+    _rate_limit()
+    conn = None
     try:
         conn = _connect()
         cur = conn.cursor()
@@ -264,14 +351,21 @@ def main():
 
         if cur.description is None:
             print("Query executed successfully (no result set).")
-            conn.close()
+            _release(conn)
             return
 
         columns = [desc[0] for desc in cur.description]
         rows = cur.fetchall()
-        conn.close()
+        _release(conn)
+        conn = None
 
     except Exception as e:
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            _release(conn)
         err_msg = str(e).strip()
         _error(f"Query failed: {err_msg}")
 
@@ -282,6 +376,8 @@ def main():
             print("Hint: Check table name. Allowed tables: " + ', '.join(sorted(ALLOWED_TABLES)), file=sys.stderr)
         elif 'permission denied' in err_msg.lower():
             print("Hint: The analytics_dev user may not have access to this table.", file=sys.stderr)
+        elif 'statement_timeout' in err_msg.lower() or 'canceling statement' in err_msg.lower():
+            print(f"Hint: Query exceeded {STATEMENT_TIMEOUT_MS // 1000}s timeout. Simplify the query or add tighter filters.", file=sys.stderr)
         elif 'invalid input syntax' in err_msg.lower():
             print("Hint: Data type mismatch. Check for empty strings in integer columns — use a CTE with WHERE column > 0.", file=sys.stderr)
 
@@ -300,6 +396,16 @@ def main():
     else:
         print()
         print(_format_inline(columns, rows, args.limit))
+
+    # Save to SQL repo if requested
+    if args.save:
+        try:
+            from sql_repo import save_query
+            tags = [t.strip() for t in args.tags.split(',')] if args.tags else []
+            save_query(args.save, sql, tags=tags)
+            print(f"\nQuery saved to repo as: {args.save}")
+        except Exception as e:
+            print(f"\nWarning: Could not save to repo: {e}", file=sys.stderr)
 
 
 if __name__ == '__main__':

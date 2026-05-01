@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -37,12 +38,16 @@ class SlackChannel(Channel):
         self._loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users: set[str] = set(config.get("allowed_users", []))
         self._own_bot_id: str | None = None
+        self._own_user_id: str | None = None
         # Dedup: track recently processed message timestamps to avoid
         # double-processing when Slack sends both 'message' and 'app_mention'
         self._seen_ts: dict[str, float] = {}  # ts -> wall-clock time
-        # Progress tracking: map thread_ts -> ts of our "Working on it..." message
-        # so we can edit it in-place with progress updates.
-        self._progress_message_ts: dict[str, str] = {}
+        self._seen_ts_lock = threading.Lock()
+        # Progress tracking: map thread_ts -> (msg_ts, created_mono) of our
+        # "Working on it..." message so we can edit it in-place with updates.
+        # Entries are TTL-pruned after 10 minutes to prevent leaks.
+        self._progress_message_ts: dict[str, tuple[str, float]] = {}
+        _PROGRESS_TTL = 600  # seconds
 
     async def start(self) -> None:
         if self._running:
@@ -72,13 +77,24 @@ class SlackChannel(Channel):
         )
         self._loop = asyncio.get_event_loop()
 
-        # Fetch our own bot_id so we can ignore only self-messages (not other bots like Gmail)
-        try:
-            auth_info = self._web_client.auth_test()
-            self._own_bot_id = auth_info.get("bot_id")
-            logger.info("Slack bot identity: user_id=%s, bot_id=%s", auth_info.get("user_id"), self._own_bot_id)
-        except Exception:
-            logger.warning("Could not fetch bot identity; falling back to rejecting all bot messages")
+        # Fetch our own bot_id so we can ignore only self-messages (not other bots like Gmail).
+        # Retry once on failure since this is critical for correct message filtering.
+        for _attempt in range(2):
+            try:
+                auth_info = self._web_client.auth_test()
+                self._own_bot_id = auth_info.get("bot_id")
+                self._own_user_id = auth_info.get("user_id")
+                logger.info("Slack bot identity: user_id=%s, bot_id=%s", self._own_user_id, self._own_bot_id)
+                break
+            except Exception:
+                if _attempt == 0:
+                    logger.warning("Could not fetch bot identity, retrying...")
+                    await asyncio.sleep(2)
+                else:
+                    logger.error(
+                        "Could not fetch bot identity after 2 attempts. "
+                        "Will use user_id-based filtering as fallback (other bots will still be allowed through)."
+                    )
 
         self._socket_client.socket_mode_request_listeners.append(self._on_socket_event)
 
@@ -105,8 +121,9 @@ class SlackChannel(Channel):
 
         # --- Non-final (progress) updates: edit the "Working on it..." message ---
         if not msg.is_final and msg.thread_ts:
-            progress_ts = self._progress_message_ts.get(msg.thread_ts)
-            if progress_ts:
+            entry = self._progress_message_ts.get(msg.thread_ts)
+            if entry:
+                progress_ts = entry[0]
                 try:
                     await asyncio.to_thread(
                         self._web_client.chat_update,
@@ -127,7 +144,7 @@ class SlackChannel(Channel):
                 )
                 new_ts = resp.get("ts")
                 if new_ts:
-                    self._progress_message_ts[msg.thread_ts] = new_ts
+                    self._progress_message_ts[msg.thread_ts] = (new_ts, time.monotonic())
                 return
             except Exception as exc:
                 logger.warning("[Slack] progress post failed: %s", exc)
@@ -147,7 +164,8 @@ class SlackChannel(Channel):
                 await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)
                 if msg.thread_ts:
                     # Clean up the progress message — delete it now that we have the real response
-                    progress_ts = self._progress_message_ts.pop(msg.thread_ts, None)
+                    entry = self._progress_message_ts.pop(msg.thread_ts, None)
+                    progress_ts = entry[0] if entry else None
                     if progress_ts:
                         try:
                             await asyncio.to_thread(
@@ -168,9 +186,10 @@ class SlackChannel(Channel):
             except Exception as exc:
                 last_exc = exc
                 if attempt < _max_retries - 1:
-                    delay = 2**attempt  # 1s, 2s
+                    import random
+                    delay = 2**attempt + random.uniform(0, 1)  # jitter to avoid thundering herd
                     logger.warning(
-                        "[Slack] send failed (attempt %d/%d), retrying in %ds: %s",
+                        "[Slack] send failed (attempt %d/%d), retrying in %.1fs: %s",
                         attempt + 1,
                         _max_retries,
                         delay,
@@ -247,7 +266,7 @@ class SlackChannel(Channel):
             # Cache the ts so we can edit this message with progress updates
             msg_ts = resp.get("ts")
             if msg_ts:
-                self._progress_message_ts[thread_ts] = msg_ts
+                self._progress_message_ts[thread_ts] = (msg_ts, time.monotonic())
             logger.info("[Slack] 'Working on it...' reply sent in channel=%s, thread_ts=%s, msg_ts=%s", channel_id, thread_ts, msg_ts)
         except Exception:
             logger.exception("[Slack] failed to send running reply in channel=%s", channel_id)
@@ -589,9 +608,13 @@ class SlackChannel(Channel):
         msg_bot_id = event.get("bot_id")
         if msg_bot_id and self._own_bot_id and msg_bot_id == self._own_bot_id:
             return
-        # If we couldn't determine our own bot_id, fall back to blocking all bot messages
+        # If we couldn't determine our own bot_id, use user_id as fallback.
+        # Only block messages from our own user_id — let other bots through.
         if msg_bot_id and not self._own_bot_id:
-            return
+            msg_user = event.get("user", "")
+            if self._own_user_id and msg_user == self._own_user_id:
+                return
+            # Unknown bot but not us — allow through (could be Gmail, Calendar, etc.)
         # Ignore non-message subtypes (edits, joins, etc.) but allow bot_message subtype
         subtype = event.get("subtype", "")
         if subtype in self._IGNORED_SUBTYPES:
@@ -601,12 +624,18 @@ class SlackChannel(Channel):
         # Skip if we already processed this exact message timestamp.
         msg_ts = event.get("ts", "")
         now = time.monotonic()
-        # Prune entries older than 10 seconds
-        self._seen_ts = {ts: t for ts, t in self._seen_ts.items() if now - t < 10}
-        if msg_ts in self._seen_ts:
-            logger.debug("Dedup: skipping already-seen message ts=%s", msg_ts)
-            return
-        self._seen_ts[msg_ts] = now
+        with self._seen_ts_lock:
+            # Prune entries older than 60 seconds
+            self._seen_ts = {ts: t for ts, t in self._seen_ts.items() if now - t < 60}
+            if msg_ts in self._seen_ts:
+                logger.debug("Dedup: skipping already-seen message ts=%s", msg_ts)
+                return
+            self._seen_ts[msg_ts] = now
+            # Prune orphaned progress messages older than TTL
+            self._progress_message_ts = {
+                k: v for k, v in self._progress_message_ts.items()
+                if now - v[1] < self._PROGRESS_TTL
+            }
 
         user_id = event.get("user", "") or event.get("bot_id", "")
 

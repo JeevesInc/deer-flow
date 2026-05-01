@@ -277,19 +277,19 @@ class TestChannelBase:
 
 class TestExtractResponseText:
     def test_string_content(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "ai", "content": "hello"}]}
         assert _extract_response_text(result) == "hello"
 
     def test_list_content_blocks(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "ai", "content": [{"type": "text", "text": "hello"}, {"type": "text", "text": " world"}]}]}
         assert _extract_response_text(result) == "hello world"
 
     def test_picks_last_ai_message(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -301,24 +301,24 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == "second"
 
     def test_empty_messages(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         assert _extract_response_text({"messages": []}) == ""
 
     def test_no_ai_messages(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "human", "content": "hi"}]}
         assert _extract_response_text(result) == ""
 
     def test_list_result(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = [{"type": "ai", "content": "from list"}]
         assert _extract_response_text(result) == "from list"
 
     def test_skips_empty_ai_content(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -329,7 +329,7 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == "actual response"
 
     def test_clarification_tool_message(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -342,7 +342,7 @@ class TestExtractResponseText:
 
     def test_clarification_over_empty_ai(self):
         """When AI content is empty but ask_clarification tool message exists, use the tool message."""
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -354,7 +354,7 @@ class TestExtractResponseText:
 
     def test_does_not_leak_previous_turn_text(self):
         """When current turn AI has no text (only tool calls), do not return previous turn's text."""
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -387,6 +387,9 @@ def _make_mock_langgraph_client(thread_id="test-thread-123", run_result=None):
 
     # threads.get() returns thread info (succeeds by default)
     mock_client.threads.get = AsyncMock(return_value={"thread_id": thread_id})
+
+    # threads.search() returns empty list (no zombie runs)
+    mock_client.threads.search = AsyncMock(return_value=[])
 
     # runs.wait() returns the final state with messages
     if run_result is None:
@@ -451,7 +454,7 @@ class TestChannelManager:
             call_args = mock_client.runs.wait.call_args
             assert call_args[0][0] == "test-thread-123"  # thread_id
             assert call_args[0][1] == "lead_agent"  # assistant_id
-            assert call_args[1]["input"]["messages"][0]["content"] == "hi"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("hi")
 
             assert len(outbound_received) == 1
             assert outbound_received[0].text == "Hello from agent!"
@@ -622,12 +625,17 @@ class TestChannelManager:
                 thread_ts="om-source-1",
             )
             await bus.publish_inbound(inbound)
-            await _wait_for(lambda: len(outbound_received) >= 3)
+            # Expect 2 outbound messages: one non-final progress ("Hello") and one final ("Hello world").
+            # The second messages-tuple ("Hello world") and the values event both produce the same text,
+            # so the non-final dedup in _publish_progress correctly skips the duplicate.
+            await _wait_for(lambda: any(m.is_final for m in outbound_received))
             await manager.stop()
 
             mock_client.runs.stream.assert_called_once()
-            assert [msg.text for msg in outbound_received] == ["Hello", "Hello world", "Hello world"]
-            assert [msg.is_final for msg in outbound_received] == [False, False, True]
+            assert outbound_received[0].text == "Hello"
+            assert outbound_received[0].is_final is False
+            assert outbound_received[-1].text == "Hello world"
+            assert outbound_received[-1].is_final is True
             assert all(msg.thread_ts == "om-source-1" for msg in outbound_received)
 
         _run(go())
@@ -980,7 +988,7 @@ class TestChannelManager:
             call_args = mock_client.runs.wait.call_args
 
             # The text sent to the agent should be the part after /bootstrap
-            assert call_args[1]["input"]["messages"][0]["content"] == "setup my workspace"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("setup my workspace")
 
             # run_context should contain is_bootstrap=True
             assert call_args[1]["context"]["is_bootstrap"] is True
@@ -1029,7 +1037,7 @@ class TestChannelManager:
             call_args = mock_client.runs.wait.call_args
 
             # Default text should be used when no text is provided
-            assert call_args[1]["input"]["messages"][0]["content"] == "Initialize workspace"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("Initialize workspace")
             assert call_args[1]["context"]["is_bootstrap"] is True
 
         _run(go())
@@ -1087,7 +1095,7 @@ class TestChannelManager:
             mock_client.runs.stream.assert_called_once()
             call_args = mock_client.runs.stream.call_args
 
-            assert call_args[1]["input"]["messages"][0]["content"] == "hello"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("hello")
             assert call_args[1]["context"]["is_bootstrap"] is True
 
             # Final message should be published
@@ -1175,7 +1183,7 @@ class TestChannelManager:
 
 class TestExtractArtifacts:
     def test_extracts_from_present_files_tool_call(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1193,7 +1201,7 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == ["/mnt/user-data/outputs/report.md"]
 
     def test_empty_when_no_present_files(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1204,14 +1212,14 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == []
 
     def test_empty_for_list_result_no_tool_calls(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = [{"type": "ai", "content": "hello"}]
         assert _extract_artifacts(result) == []
 
     def test_only_extracts_after_last_human_message(self):
         """Artifacts from previous turns (before the last human message) should be ignored."""
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1239,7 +1247,7 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == ["/mnt/user-data/outputs/chart.png"]
 
     def test_multiple_files_in_single_call(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1258,13 +1266,13 @@ class TestExtractArtifacts:
 
 class TestFormatArtifactText:
     def test_single_artifact(self):
-        from app.channels.manager import _format_artifact_text
+        from app.channels.manager_helpers import format_artifact_text as _format_artifact_text
 
         text = _format_artifact_text(["/mnt/user-data/outputs/report.md"])
         assert text == "Created File: 📎 report.md"
 
     def test_multiple_artifacts(self):
-        from app.channels.manager import _format_artifact_text
+        from app.channels.manager_helpers import format_artifact_text as _format_artifact_text
 
         text = _format_artifact_text(
             ["/mnt/user-data/outputs/a.txt", "/mnt/user-data/outputs/b.csv"],

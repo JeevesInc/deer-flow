@@ -1,4 +1,13 @@
 with
+collateral_totals as (
+    select
+        companyid
+        , sum(collateralamountusd) as total_collateral_amount_usd
+    from
+        dms_mysql_jeeves_raw.collateral_records
+    group by
+        1
+),
 max_dq as (
     select
         company_id
@@ -115,8 +124,8 @@ select
     , lt.forex_adjustment
     , lt.is_in_repayment
     , lt.repayment_dt
-    , lt.v0_charge_off_amount_usd
-    , lt.v0_charge_off_cumulative_amount_usd
+    , lt.fee_amount
+    , lt.fee_amount_usd
     , lt.status
     , lt.card_disbursement
     , lt.card_payment
@@ -147,11 +156,15 @@ select
     , c.city_name
     , coalesce(c.naics_industry_id, 9999) as naics_industry_id
     , case when td.company_type = 'Startup' then 1 else 0 end as is_startup
+    , cr.total_collateral_amount_usd
 from
     capital_markets_dm.loc_tape lt
 left join
     master_customer_dm.companies_dm c
     on c.company_id = lt.company_id
+left join
+    collateral_totals cr
+    on cr.companyid = lt.company_id
 left join
     max_dq md
     on md.company_id = lt.company_id

@@ -8,6 +8,7 @@ from deerflow.agents.lead_agent.prompt import apply_prompt_template
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from deerflow.agents.middlewares.step_budget_middleware import StepBudgetMiddleware
+from deerflow.agents.middlewares.mem0_injection_middleware import Mem0InjectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
 from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
@@ -223,6 +224,12 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 
+    # NOTE: Mem0InjectionMiddleware disabled — Anthropic API rejects multiple
+    # non-consecutive system messages and injecting HumanMessages via
+    # before_model accumulates across turns.  mem0 memories are retrieved at
+    # system prompt build time instead (see _get_memory_context).
+    # TODO: re-enable with a proper wrap_model_call approach.
+
     # Add TodoList middleware if plan mode is enabled
     is_plan_mode = config.get("configurable", {}).get("is_plan_mode", False)
     todo_list_middleware = _create_todo_list_middleware(is_plan_mode)
@@ -266,7 +273,51 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
 
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())
+
+    # Runtime validation of critical middleware ordering invariants
+    _validate_middleware_order(middlewares)
+
     return middlewares
+
+
+def _validate_middleware_order(middlewares):
+    """Validate critical middleware ordering constraints at build time."""
+    from deerflow.agents.middlewares.tool_error_handling_middleware import ToolErrorHandlingMiddleware
+    from deerflow.sandbox.middleware import SandboxMiddleware
+    try:
+        from deerflow.agents.middlewares.thread_data_middleware import ThreadDataMiddleware
+    except ImportError:
+        ThreadDataMiddleware = None
+
+    type_list = [type(m) for m in middlewares]
+
+    # ClarificationMiddleware must be last
+    if ClarificationMiddleware in type_list:
+        assert type_list[-1] is ClarificationMiddleware, (
+            "ClarificationMiddleware must be the last middleware (uses Command(goto=END) to interrupt)"
+        )
+
+    # ToolErrorHandlingMiddleware must come before ClarificationMiddleware
+    if ToolErrorHandlingMiddleware in type_list and ClarificationMiddleware in type_list:
+        err_idx = type_list.index(ToolErrorHandlingMiddleware)
+        clar_idx = type_list.index(ClarificationMiddleware)
+        assert err_idx < clar_idx, (
+            "ToolErrorHandlingMiddleware must precede ClarificationMiddleware"
+        )
+
+    # ThreadDataMiddleware must be first (if present)
+    if ThreadDataMiddleware and ThreadDataMiddleware in type_list:
+        assert type_list[0] is ThreadDataMiddleware, (
+            "ThreadDataMiddleware must be the first middleware (provides thread_id for all others)"
+        )
+
+    # SandboxMiddleware must come after ThreadDataMiddleware (if both present)
+    if ThreadDataMiddleware and ThreadDataMiddleware in type_list and SandboxMiddleware in type_list:
+        td_idx = type_list.index(ThreadDataMiddleware)
+        sb_idx = type_list.index(SandboxMiddleware)
+        assert td_idx < sb_idx, (
+            "ThreadDataMiddleware must precede SandboxMiddleware"
+        )
 
 
 def make_lead_agent(config: RunnableConfig):

@@ -4,7 +4,7 @@ import abc
 import json
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,9 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 def create_empty_memory() -> dict[str, Any]:
-    """Create an empty memory structure."""
+    """Create an empty memory structure.
+
+    Version 2.0: profile-only (no facts array — facts are in mem0).
+    """
     return {
-        "version": "1.0",
+        "version": "2.0",
         "lastUpdated": datetime.utcnow().isoformat() + "Z",
         "user": {
             "workContext": {"summary": "", "updatedAt": ""},
@@ -30,7 +33,6 @@ def create_empty_memory() -> dict[str, Any]:
             "earlierContext": {"summary": "", "updatedAt": ""},
             "longTermBackground": {"summary": "", "updatedAt": ""},
         },
-        "facts": [],
     }
 
 
@@ -151,7 +153,7 @@ class FileMemoryStorage(MemoryStorage):
 
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
-            memory_data["lastUpdated"] = datetime.utcnow().isoformat() + "Z"
+            memory_data["lastUpdated"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
             temp_path = file_path.with_suffix(".tmp")
             with open(temp_path, "w", encoding="utf-8") as f:

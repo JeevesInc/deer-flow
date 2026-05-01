@@ -186,12 +186,47 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict:
-        """Health check endpoint.
+        """Health check endpoint with dependency status.
 
         Returns:
-            Service health status information.
+            Service health status with dependency checks.
         """
-        return {"status": "healthy", "service": "deer-flow-gateway"}
+        checks: dict[str, str] = {}
+        overall = "healthy"
+
+        # Check config is loaded
+        try:
+            get_app_config()
+            checks["config"] = "ok"
+        except Exception as e:
+            checks["config"] = f"error: {e}"
+            overall = "degraded"
+
+        # Check channel service
+        try:
+            from app.channels.service import get_channel_service
+            svc = get_channel_service()
+            if svc is not None:
+                checks["channels"] = svc.get_status()
+            else:
+                checks["channels"] = "not configured"
+        except Exception:
+            checks["channels"] = "not configured"
+
+        # Check LangGraph reachability
+        try:
+            import httpx
+            cfg = get_app_config()
+            channels_cfg = getattr(cfg, "channels", None) or {}
+            langgraph_url = channels_cfg.get("langgraph_url", "http://localhost:2024") if isinstance(channels_cfg, dict) else "http://localhost:2024"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{langgraph_url}/ok")
+                checks["langgraph"] = "ok" if resp.status_code == 200 else f"status {resp.status_code}"
+        except Exception:
+            checks["langgraph"] = "unreachable"
+            overall = "degraded"
+
+        return {"status": overall, "service": "deer-flow-gateway", "checks": checks}
 
     return app
 

@@ -45,7 +45,9 @@ def _add_common_elig_fields(df):
     # Double-letter flags in alphabetical order
     for s in ['aa', 'bb', 'cc', 'dd']:
         df[f'elig_{s}'] = df['company_id'].notna().astype(int)
-    df['elig_ee'] = (df['credit_limit_usd'] <= 5_000_000).astype(int)
+    df['elig_ee'] = (
+        (df['credit_limit_usd'] - df['total_collateral_amount_usd'].fillna(0)) <= 7_000_000
+    ).astype(int)
 
     # elig_ff is set by the caller (US vs SOFOM have different balance columns)
 
@@ -67,7 +69,7 @@ def calculate_eligibility_fields(df):
     """US eligibility: uses balance_usd for the over-limit check."""
     result = df.copy()
     result = _add_common_elig_fields(result)
-    result['elig_ff'] = (result['balance_usd'] <= (1.05 * result['credit_limit_usd'])).astype(int)
+    result['elig_ff'] = ((result['card_balance_usd'] + result['jp_principal_balance_usd']) <= (1.05 * result['credit_limit_usd'])).astype(int)
 
     elig_cols = [c for c in result.columns if c.startswith('elig_')]
     result['elig'] = result[elig_cols].min(axis=1)
@@ -76,10 +78,10 @@ def calculate_eligibility_fields(df):
 
 
 def calculate_eligibility_fields_sofom(df):
-    """SOFOM eligibility: uses sofom_balance_usd for the over-limit check."""
+    """SOFOM eligibility: same over-limit check as US, but eligible balance uses sofom_balance_usd."""
     result = df.copy()
     result = _add_common_elig_fields(result)
-    result['elig_ff'] = (result['sofom_balance_usd'] <= (1.05 * result['credit_limit_usd'])).astype(int)
+    result['elig_ff'] = ((result['card_balance_usd'] + result['jp_principal_balance_usd']) <= (1.05 * result['credit_limit_usd'])).astype(int)
 
     elig_cols = [c for c in result.columns if c.startswith('elig_')]
     result['elig'] = result[elig_cols].min(axis=1)

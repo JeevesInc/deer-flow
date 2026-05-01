@@ -42,18 +42,19 @@ _DEFAULT_MAX_TRACKED_THREADS = 100  # LRU eviction limit
 def _normalize_args(args: dict) -> dict:
     """Normalize tool call arguments for consistent hashing.
 
-    Strips leading/trailing whitespace from string values and collapses
-    internal whitespace runs, so near-identical calls (e.g. with extra
-    spaces in SQL or file paths) hash the same.
+    Strips leading/trailing whitespace only (preserves internal spacing)
+    and sorts keys for deterministic ordering.  This avoids false positives
+    where semantically different strings (e.g. SQL with different column
+    lists) would hash the same after aggressive whitespace collapsing.
     """
     normalized = {}
     for k, v in sorted(args.items()):
         if isinstance(v, str):
-            normalized[k] = " ".join(v.split())  # collapse whitespace
+            normalized[k] = v.strip()
         elif isinstance(v, dict):
             normalized[k] = _normalize_args(v)
         elif isinstance(v, list):
-            normalized[k] = [" ".join(i.split()) if isinstance(i, str) else i for i in v]
+            normalized[k] = [i.strip() if isinstance(i, str) else i for i in v]
         else:
             normalized[k] = v
     return normalized

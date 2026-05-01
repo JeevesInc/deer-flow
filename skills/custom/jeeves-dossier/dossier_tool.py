@@ -16,6 +16,7 @@ Requires env vars:
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 
 # Load .env before anything else
@@ -354,6 +355,23 @@ def cmd_read(email):
     print(json.dumps(data, indent=2, default=str))
 
 
+def _atomic_json_write(path, data):
+    """Write JSON atomically: write to temp file then rename."""
+    dir_name = os.path.dirname(path)
+    os.makedirs(dir_name, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(suffix='.tmp', dir=dir_name)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, default=str)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def cmd_write(email, file_path):
     """Save a dossier JSON file."""
     if not os.path.exists(file_path):
@@ -368,8 +386,7 @@ def cmd_write(email, file_path):
     data['last_updated'] = datetime.now().isoformat()
 
     dest = _dossier_path(email)
-    with open(dest, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, default=str)
+    _atomic_json_write(dest, data)
 
     print(f"Dossier saved for {email}")
     print(f"  Path: {dest}")

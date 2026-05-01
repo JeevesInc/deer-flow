@@ -235,14 +235,38 @@ class ChannelManager:
                                 updated_at = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
                             else:
                                 updated_at = updated_raw
-                            age = (now - updated_at).total_seconds()
-                            if age < STUCK_THRESHOLD:
+                            thread_age = (now - updated_at).total_seconds()
+                            if thread_age < STUCK_THRESHOLD:
                                 continue
 
                             try:
                                 runs = await client.runs.list(tid)
                                 active_runs = [r for r in runs if r["status"] in ("running", "pending")]
                                 if active_runs:
+                                    # Before cancelling, check if any active run was
+                                    # updated recently.  The thread-level timestamp can
+                                    # lag behind actual run progress (e.g. tool calls
+                                    # that update the run but not the thread state).
+                                    any_run_active = False
+                                    for run in active_runs:
+                                        run_updated_raw = run.get("updated_at") or run.get("created_at")
+                                        if run_updated_raw:
+                                            if isinstance(run_updated_raw, str):
+                                                run_updated = datetime.fromisoformat(run_updated_raw.replace("Z", "+00:00"))
+                                            else:
+                                                run_updated = run_updated_raw
+                                            run_age = (now - run_updated).total_seconds()
+                                            if run_age < STUCK_THRESHOLD:
+                                                any_run_active = True
+                                                logger.info(
+                                                    "[Monitor] thread %s looks stale (%.0fs) but run %s "
+                                                    "was updated %.0fs ago — skipping",
+                                                    tid, thread_age, run["run_id"], run_age,
+                                                )
+                                                break
+                                    if any_run_active:
+                                        continue
+
                                     for run in active_runs:
                                         try:
                                             await client.runs.cancel(tid, run["run_id"])
@@ -250,7 +274,7 @@ class ChannelManager:
                                             logger.warning(
                                                 "[Monitor] cancelled stuck run %s on thread %s "
                                                 "(status=%s, idle %.0fs)",
-                                                run["run_id"], tid, run["status"], age,
+                                                run["run_id"], tid, run["status"], thread_age,
                                             )
                                         except Exception:
                                             logger.warning("[Monitor] failed to cancel run %s on thread %s", run["run_id"], tid, exc_info=True)
@@ -262,7 +286,7 @@ class ChannelManager:
                                         cancelled += 1
                                         logger.warning(
                                             "[Monitor] unstuck zombie busy thread %s (no active runs, idle %.0fs)",
-                                            tid, age,
+                                            tid, thread_age,
                                         )
                                     except Exception:
                                         logger.warning("[Monitor] failed to unstick thread %s", tid, exc_info=True)
@@ -327,6 +351,9 @@ class ChannelManager:
             logger.error("[Manager] unhandled error in message task: %s", exc, exc_info=exc)
 
     async def _handle_message(self, msg: InboundMessage) -> None:
+        if self._semaphore is None:
+            logger.error("[Manager] semaphore not initialized — dropping message from %s", msg.channel_name)
+            return
         async with self._semaphore:
             try:
                 if msg.msg_type == InboundMessageType.COMMAND:

@@ -13,6 +13,7 @@ Output saved to $OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx
 import argparse
 import datetime as dt
 import os
+from pathlib import Path
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -57,25 +58,30 @@ def main():
     print(f"US Borrowing Base: BOP={date_beg}, EOP={date_end}")
 
     # Load SQL
-    tape_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'data_tape.sql')).read()
-    rf_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql')).read()
+    tape_sql = Path(SCRIPT_DIR, 'sql', 'data_tape.sql').read_text()
+    rf_sql = Path(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql').read_text()
 
     con = connect()
+    try:
+        print(f"  Querying tape for {date_beg} (BOP)...")
+        df_beg = pd.read_sql_query(tape_sql.format(date_beg.isoformat()), con)
+        print(f"    {len(df_beg)} rows")
 
-    print(f"  Querying tape for {date_beg} (BOP)...")
-    df_beg = pd.read_sql_query(tape_sql.format(date_beg.isoformat()), con)
-    print(f"    {len(df_beg)} rows")
+        print(f"  Querying tape for {date_end} (EOP)...")
+        df_end = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)
+        print(f"    {len(df_end)} rows")
+        if len(df_end) == 0:
+            check_sql = f"SELECT COUNT(*) as count FROM capital_markets_dm.loc_tape_tmp WHERE dt = '{date_end.isoformat()}'"
+            import pandas as _pd
+            count_df = _pd.read_sql_query(check_sql, con)
+            print(f"    WARNING: 0 rows returned. Total rows in loc_tape_tmp for this date: {count_df['count'].iloc[0]}")
 
-    print(f"  Querying tape for {date_end} (EOP)...")
-    df_end = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)
-    print(f"    {len(df_end)} rows")
-
-    print(f"  Querying rollforward {date_beg} -> {date_end}...")
-    rollforward = pd.read_sql_query(
-        rf_sql.format(date_beg.isoformat(), date_end.isoformat()), con)
-    print(f"    {len(rollforward)} rows")
-
-    con.close()
+        print(f"  Querying rollforward {date_beg} -> {date_end}...")
+        rollforward = pd.read_sql_query(
+            rf_sql.format(date_beg.isoformat(), date_end.isoformat()), con)
+        print(f"    {len(rollforward)} rows")
+    finally:
+        con.close()
 
     print("  Calculating eligibility (BOP)...")
     df_beg = calculate_eligibility_fields(df_beg)
@@ -102,13 +108,13 @@ def main():
         'adjustment_amount_usd','debit_amount_usd','credit_amount_usd','balance_usd',
         'card_balance_usd','jp_balance_usd','jp_principal_balance_usd','jp_interest_balance_usd',
         'invoiced_usd','forex_adjustment','is_in_repayment','repayment_dt',
-        'v0_charge_off_amount_usd','v0_charge_off_cumulative_amount_usd','status',
+        'fee_amount','fee_amount_usd','status',
         'card_disbursement','card_payment','card_cashback','card_late_payment_penalty',
         'card_loan_allocation','card_fx_adjustment','card_adjustment','jp_disbursement','jp_fee',
         'jp_payment','jp_cashback','jp_late_payment_penalty','jp_loan_allocation','jp_fx_adjustment',
         'jp_adjustment','prior_currency','prior_balance','prior_spot_rate',
         'currency_switch_adjustment_usd','onboarding_date','max_dpd','uw_score','name','ein',
-        'credit_limit_usd','elig','state_name','city_name','naics_industry_id','is_startup',
+        'credit_limit_usd','elig','state_name','city_name','naics_industry_id','is_startup','total_collateral_amount_usd','coverageamountusd',
         'elig_juris','elig_a','elig_b','elig_c','elig_d','elig_e','elig_f','elig_g','elig_h',
         'elig_i','elig_j','elig_k','elig_l','elig_m','elig_n','elig_o','elig_p','elig_q','elig_r',
         'elig_s','elig_t','elig_u','elig_v','elig_w','elig_x','elig_y','elig_z','elig_aa','elig_bb',

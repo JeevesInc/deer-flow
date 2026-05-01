@@ -51,6 +51,7 @@ select
   , sum(cashback_amount * spot_rate) as cashback_amount_usd
   , sum(late_payment_penalty_amount * spot_rate) as late_payment_penalty_amount_usd
   , sum(jeeves_pay_fee_amount * spot_rate) as jeeves_pay_fee_amount_usd
+  , sum(fee_amount * spot_rate) as fee_amount_usd
   , sum(loan_allocation_amount * spot_rate) as loan_allocation_amount_usd
   , sum(fx_adjustment_amount * spot_rate) as fx_adjustment_amount_usd
   , sum(case when charge_off_dt is null then forex_adjustment else 0 end) as forex_adjustment_usd
@@ -110,6 +111,7 @@ select
   , coalesce(t.cashback_amount_usd, 0) as cashback_amount_usd
   , coalesce(t.late_payment_penalty_amount_usd, 0) as late_payment_penalty_amount_usd
   , coalesce(t.jeeves_pay_fee_amount_usd, 0) as jeeves_pay_fee_amount_usd
+  , coalesce(t.fee_amount_usd, 0) as fee_amount_usd
   , coalesce(t.loan_allocation_amount_usd, 0) as loan_allocation_amount_usd
   , coalesce(t.fx_adjustment_amount_usd, 0) as fx_adjustment_amount_usd
   , coalesce(t.forex_adjustment_usd, 0) as forex_adjustment_usd
@@ -137,6 +139,7 @@ select *
   + cashback_amount_usd
   + late_payment_penalty_amount_usd
   + jeeves_pay_fee_amount_usd
+  + fee_amount_usd
   + loan_allocation_amount_usd
   + fx_adjustment_amount_usd
   + forex_adjustment_usd

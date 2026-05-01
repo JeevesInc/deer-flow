@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import os
 import sys
+from pathlib import Path
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -172,27 +173,27 @@ def main():
     print(f"Portfolio Report: report_date={report_date}, BOP={date_beg}, EOP={date_end}")
 
     # ── Step 1: Query LOC tape + rollforward ───────────────────────
-    tape_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'data_tape.sql')).read()
-    rf_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql')).read()
-    mods_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'gwc_mods.sql')).read()
+    tape_sql = Path(SCRIPT_DIR, 'sql', 'data_tape.sql').read_text()
+    rf_sql = Path(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql').read_text()
+    mods_sql = Path(SCRIPT_DIR, 'sql', 'gwc_mods.sql').read_text()
 
     con = connect()
+    try:
+        print(f"  Querying LOC tape for {date_end} (EOP)...")
+        df_loc = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)
+        print(f"    {len(df_loc)} rows")
 
-    print(f"  Querying LOC tape for {date_end} (EOP)...")
-    df_loc = pd.read_sql_query(tape_sql.format(date_end.isoformat()), con)
-    print(f"    {len(df_loc)} rows")
+        print(f"  Querying rollforward {date_beg} -> {date_end}...")
+        df_rollforward = pd.read_sql_query(
+            rf_sql.format(date_beg.isoformat(), date_end.isoformat()), con)
+        print(f"    {len(df_rollforward)} rows")
 
-    print(f"  Querying rollforward {date_beg} -> {date_end}...")
-    df_rollforward = pd.read_sql_query(
-        rf_sql.format(date_beg.isoformat(), date_end.isoformat()), con)
-    print(f"    {len(df_rollforward)} rows")
-
-    # ── Step 2: Query GWC mods (repayment plans only) ──────────────
-    print(f"  Querying GWC mods (RPP%) for {date_end}...")
-    df_mods = pd.read_sql_query(mods_sql.format(date_end.isoformat()), con)
-    print(f"    {len(df_mods)} rows")
-
-    con.close()
+        # ── Step 2: Query GWC mods (repayment plans only) ──────────────
+        print(f"  Querying GWC mods (RPP%) for {date_end}...")
+        df_mods = pd.read_sql_query(mods_sql.format(date_end.isoformat()), con)
+        print(f"    {len(df_mods)} rows")
+    finally:
+        con.close()
 
     # ── Step 3: Download template ──────────────────────────────────
     output_dir = os.environ.get('OUTPUTS_PATH', '/mnt/user-data/outputs')

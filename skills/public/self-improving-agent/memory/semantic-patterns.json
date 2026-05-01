@@ -36,10 +36,10 @@
       "id": "pat-2026-04-07-003",
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
-      "confidence": 0.8500000000000001,
-      "applications": 4,
+      "confidence": 1.0,
+      "applications": 7,
       "created": "2026-04-07",
-      "last_applied": "2026-04-08T00:58:54.535922+00:00",
+      "last_applied": "2026-04-28T01:37:44.491452+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -174,6 +174,198 @@
       "solution": "",
       "target_skills": [
         "jeeves-analytics"
+      ]
+    },
+    "pat-2026-04-20-012": {
+      "id": "pat-2026-04-20-012",
+      "name": "1. Dileep Thazhmon is CEO (not unknown title) - always check",
+      "source": "ep-2026-04-20-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-20",
+      "last_applied": "2026-04-20T20:40:10.076007+00:00",
+      "category": "general",
+      "pattern": "1. Dileep Thazhmon is CEO (not unknown title) - always check email signatures before flagging as unknown. 2. Org chart for NB is in BBVA DD folder 1.05 - Organizational Chart (Jeeves-org-chart.pdf). 3. 3-year pro forma is with Pradeep Manoharan (pradeepan@tryjeeves.com) - do not substitute 2026 forecast as a 3-year model. 4. Capital markets plans: NB replaces CIM US bridge; CIM MX SOFOM stays. Fasanara and Gramercy were competing with NB and go away. 5. For KPIs/disbursements use MBR not portfolio report rollforward. Active customer count 730 was MX-only from BB tape - wrong for global. 6. 12312025 financial statements file is NOT audited - do not label it as such. Monthly financials to CIM are in email (Jeeves Financial Reporting thread). 7. Credit Policy v2.1 (Mar 2026) is from Pablo email thread (Drive ID: 1MOLXPE3Qjt5QBW-xP5ZpCQ8pacw_WuzO). 8. Servicing and collections policy exists - do not flag as missing. 9. Org chart was discussed in same conversation - do not flag as needing HR input after already identifying it.",
+      "problem": "NB diligence deck content brief - Brian corrected multiple errors",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-04-21-013": {
+      "id": "pat-2026-04-21-013",
+      "name": "Brian wants an execution-layer analyst who eliminates key-ma",
+      "source": "ep-2026-04-21-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-21",
+      "last_applied": "2026-04-21T00:12:17.010106+00:00",
+      "category": "general",
+      "pattern": "Brian wants an execution-layer analyst who eliminates key-man risk. Core behavioral rules: clarify first, correct openly, deliver results not process, own failures with accountability.",
+      "problem": "Brian Mauck bootstrapped his analyst identity on 2026-04-20. Key framing: analyst not tool, delegation with trust, clarify before executing, push back when wrong, surface mistakes with explanation of what changed.",
+      "solution": "",
+      "target_skills": [
+        "bootstrap"
+      ]
+    },
+    "pat-2026-04-21-014": {
+      "id": "pat-2026-04-21-014",
+      "name": "The Slides API cannot copy live chart objects between presen",
+      "source": "ep-2026-04-21-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-21",
+      "last_applied": "2026-04-21T00:47:45.305009+00:00",
+      "category": "general",
+      "pattern": "The Slides API cannot copy live chart objects between presentations. getThumbnail returns whole-slide rasters with chrome/labels included. The only way to get a clean chart image is to use the contentUrl of the image element directly from the source slide (e.g. g3cbe697f5a9_6_3 for the DQ chart). Even then, the image must be sized to match the NB deck panel dimensions exactly. The correct workflow: (1) get element contentUrl from source slide, (2) calculate target panel dimensions from NB deck layout, (3) insert image sized to fill panel. Do NOT use getThumbnail for panel-level embedding - it includes the full slide chrome. Also: updatePageElementTransform with scaleX/scaleY distorts panel fill colors - never use it to resize panel backgrounds.",
+      "problem": "Tried to embed corp deck visuals into NB diligence deck via Slides API. Spent 30+ tool calls fighting panel sizing, z-order, and image embedding.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-slides"
+      ]
+    },
+    "pat-2026-04-21-015": {
+      "id": "pat-2026-04-21-015",
+      "name": "Always fetch Cc header when building reply-all. The gmail_to",
+      "source": "ep-2026-04-21-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-21",
+      "last_applied": "2026-04-21T18:54:48.549176+00:00",
+      "category": "general",
+      "pattern": "Always fetch Cc header when building reply-all. The gmail_tool.py draft command now does this correctly.",
+      "problem": "cmd_draft_reply only fetched From/To/Subject/Message-ID headers \u2014 never Cc. Alex Melikian was silently dropped from every reply on the Shalom BBVA thread.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-04-21-016": {
+      "id": "pat-2026-04-21-016",
+      "name": "ALWAYS fetch current SQL from Metabase GET api/card/{id} bef",
+      "source": "ep-2026-04-21-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-21",
+      "last_applied": "2026-04-21T21:54:57.898897+00:00",
+      "category": "general",
+      "pattern": "ALWAYS fetch current SQL from Metabase GET api/card/{id} before writing any update. Never reconstruct from memory or prior context. The live question is source of truth. Also: the ad-hoc question# URL encodes SQL in base64 in the URL hash - to update it, decode existing URL, apply changes, re-encode, send new URL. Saved question and ad-hoc link are separate artifacts.",
+      "problem": "Updating Metabase question 38354 - needed MXN conversion and legal_name swap. Overwrote query without reading current live state first, risking loss of to_char formatting Brian had manually added.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-04-23-017": {
+      "id": "pat-2026-04-23-017",
+      "name": "Visa is NOT a Jeeves investor. The confirmed Jeeves investor",
+      "source": "ep-2026-04-23-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-23",
+      "last_applied": "2026-04-23T16:10:52.629918+00:00",
+      "category": "general",
+      "pattern": "Visa is NOT a Jeeves investor. The confirmed Jeeves investor list is: CRV, Tencent, Andreessen Horowitz, GIC, Stanford StartX. Do not add Visa or any other investor not explicitly confirmed by Brian or a primary source document.",
+      "problem": "While building the NB Diligence deck, I incorrectly listed Visa as a Jeeves investor. Brian caught it and it had to be removed.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-04-23-018": {
+      "id": "pat-2026-04-23-018",
+      "name": "data_tape_sofom.sql must include the collateral_totals CTE (",
+      "source": "ep-2026-04-23-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-23",
+      "last_applied": "2026-04-23T16:21:12.893531+00:00",
+      "category": "general",
+      "pattern": "data_tape_sofom.sql must include the collateral_totals CTE (sum of collateralamountusd from dms_mysql_jeeves_raw.collateral_records grouped by companyid) and a left join on cr.companyid = lt.company_id, selecting cr.total_collateral_amount_usd. This was added on 2026-04-23 to match the elig_ee logic in eligibility.py which requires total_collateral_amount_usd.",
+      "problem": "MX SOFOM BB failed with KeyError: total_collateral_amount_usd because data_tape_sofom.sql was missing the collateral_totals CTE and join that was added to data_tape.sql",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-04-24-019": {
+      "id": "pat-2026-04-24-019",
+      "name": "Workaround: write CTE queries to a .sql file and execute dir",
+      "source": "ep-2026-04-24-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-24",
+      "last_applied": "2026-04-24T21:49:46.899677+00:00",
+      "category": "general",
+      "pattern": "Workaround: write CTE queries to a .sql file and execute directly via psycopg2 with sslmode=require and sslrootcert=disable (same params as sql_runner pool). The validator regex needs greedy match up to last ) before SELECT keyword.",
+      "problem": "sql_runner validate_sql uses non-greedy regex to strip WITH CTEs. For multi-CTE queries it stops at first ) inside the CTE body, leaving AS as first keyword and rejecting valid queries with: Only SELECT queries are allowed. Got: AS",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-04-24-020": {
+      "id": "pat-2026-04-24-020",
+      "name": "ALWAYS show the full SQL executed AND include the Drive link",
+      "source": "ep-2026-04-24-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-24",
+      "last_applied": "2026-04-24T21:50:53.760545+00:00",
+      "category": "general",
+      "pattern": "ALWAYS show the full SQL executed AND include the Drive link in every query response. No exceptions. Never deliver results without both.",
+      "problem": "Brian asked for SQL and Drive link after every query result",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-04-27-021": {
+      "id": "pat-2026-04-27-021",
+      "name": "1) Always read user instructions first - funding_source=loc ",
+      "source": "ep-2026-04-27-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-27",
+      "last_applied": "2026-04-27T00:54:55.573291+00:00",
+      "category": "general",
+      "pattern": "1) Always read user instructions first - funding_source=loc and cash source were stated upfront. 2) Fetch the reference chart image BEFORE building anything. 3) Quarterly ratio = average of 3 monthly ratios (monthly GTV / avg monthly cash), NOT summed GTV. 4) Always put raw data in the sheet alongside the chart. 5) Google Sheets API chart source ranges require explicit sheetId on EVERY source - missing sheetId=0 causes axis labels to silently not render. 6) Google Sheets API cannot set axis tick label text color via the format field - it is silently dropped. Chart backgroundColor also does not persist via the API. These must be set manually in the UI. 7) Never claim something is impossible in the API without testing it first.",
+      "problem": "Building Cash vs GTV capital efficiency chart in Google Sheets",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-04-27-022": {
+      "id": "pat-2026-04-27-022",
+      "name": "Always rename the merged output file to match the data date ",
+      "source": "ep-2026-04-27-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-27",
+      "last_applied": "2026-04-27T15:38:57.521156+00:00",
+      "category": "general",
+      "pattern": "Always rename the merged output file to match the data date before uploading. Never ask the user about it \u2014 just do it. The correct name is always Jeeves SOFOM Borrowing Base - Master - {data_date}.xlsx where data_date is the --end-date passed to build_mx.py.",
+      "problem": "MX SOFOM BB merge_template.py outputs a file named after the template date (e.g. 20260423), not the data date (e.g. 20260425). I flagged this as a note instead of just fixing it automatically.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-04-28-023": {
+      "id": "pat-2026-04-28-023",
+      "name": "1) DocuSign email links expire \u2014 trigger Send New Link on th",
+      "source": "ep-2026-04-28-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-04-28",
+      "last_applied": "2026-04-28T03:41:18.929158+00:00",
+      "category": "general",
+      "pattern": "1) DocuSign email links expire \u2014 trigger Send New Link on the expired page, then grab fresh link from Gmail. 2) The Completed email (subject: Completed: Here is your signed document) contains a fresher link than the original signed notification. 3) DocuSign download is two-step: click Download button to open dropdown, then click Combined PDF \u2014 expect_download() must wrap the SECOND click (Combined PDF), not the first. 4) Draft IDs with r- prefix (e.g. r-378...) may be stale/invalid; real Gmail draft IDs use r303... format without the dash.",
+      "problem": "Needed to download signed PDF from DocuSign via Playwright automation",
+      "solution": "",
+      "target_skills": [
+        "gmail"
       ]
     }
   }

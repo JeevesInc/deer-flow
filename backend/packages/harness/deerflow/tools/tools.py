@@ -67,8 +67,9 @@ def get_available_tools(
     # made through the Gateway API (which runs in a separate process) are immediately
     # reflected when loading MCP tools.
     mcp_tools = []
-    # Reset deferred registry upfront to prevent stale state from previous calls
-    reset_deferred_registry()
+    # Only reset deferred registry when tool_search is actually enabled
+    if config.tool_search.enabled:
+        reset_deferred_registry()
     if include_mcp:
         try:
             from deerflow.config.extensions_config import ExtensionsConfig

@@ -1,4 +1,8 @@
-"""Middleware for memory mechanism."""
+"""Middleware for memory mechanism.
+
+Uses mem0 for long-term fact storage (semantic vector search) and keeps
+the lightweight FileMemoryStorage for profile sections only.
+"""
 
 import logging
 import re
@@ -36,12 +40,6 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
     - Human messages (with the ephemeral upload block removed)
     - AI messages without tool_calls (final assistant responses), unless the
       paired human turn was upload-only and had no real user text.
-
-    Args:
-        messages: List of all conversation messages.
-
-    Returns:
-        Filtered list containing only user inputs and final assistant responses.
     """
     _UPLOAD_BLOCK_RE = re.compile(r"<uploaded_files>[\s\S]*?</uploaded_files>\n*", re.IGNORECASE)
 
@@ -56,15 +54,10 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
                 content = " ".join(p.get("text", "") for p in content if isinstance(p, dict))
             content_str = str(content)
             if "<uploaded_files>" in content_str:
-                # Strip the ephemeral upload block; keep the user's real question.
                 stripped = _UPLOAD_BLOCK_RE.sub("", content_str).strip()
                 if not stripped:
-                    # Nothing left — the entire turn was upload bookkeeping;
-                    # skip it and the paired assistant response.
                     skip_next_ai = True
                     continue
-                # Rebuild the message with cleaned content so the user's question
-                # is still available for memory summarisation.
                 from copy import copy
 
                 clean_msg = copy(msg)
@@ -86,6 +79,47 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
     return filtered
 
 
+def _messages_to_mem0_format(messages: list[Any]) -> list[dict[str, str]]:
+    """Convert LangChain messages to mem0's expected format.
+
+    Args:
+        messages: Filtered LangChain message objects.
+
+    Returns:
+        List of {"role": "user"|"assistant", "content": "..."} dicts.
+    """
+    result = []
+    for msg in messages:
+        msg_type = getattr(msg, "type", None)
+        content = getattr(msg, "content", "")
+
+        if isinstance(content, list):
+            text_parts = []
+            for p in content:
+                if isinstance(p, str):
+                    text_parts.append(p)
+                elif isinstance(p, dict):
+                    text_val = p.get("text")
+                    if isinstance(text_val, str):
+                        text_parts.append(text_val)
+            content = " ".join(text_parts) if text_parts else str(content)
+
+        content = str(content).strip()
+        if not content:
+            continue
+
+        # Truncate very long messages before sending to mem0
+        if len(content) > 2000:
+            content = content[:2000] + "..."
+
+        if msg_type == "human":
+            result.append({"role": "user", "content": content})
+        elif msg_type == "ai":
+            result.append({"role": "assistant", "content": content})
+
+    return result
+
+
 class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
     """Middleware that queues conversation for memory update after agent execution.
 
@@ -93,42 +127,27 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
     1. After each agent execution, queues the conversation for memory update
     2. Only includes user inputs and final assistant responses (ignores tool calls)
     3. The queue uses debouncing to batch multiple updates together
-    4. Memory is updated asynchronously via LLM summarization
+    4. Long-term facts are stored via mem0 (semantic vector search)
+    5. Profile sections (workContext etc.) are still updated via the legacy updater
     """
 
     state_schema = MemoryMiddlewareState
 
     def __init__(self, agent_name: str | None = None):
-        """Initialize the MemoryMiddleware.
-
-        Args:
-            agent_name: If provided, memory is stored per-agent. If None, uses global memory.
-        """
         super().__init__()
         self._agent_name = agent_name
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
-        """Queue conversation for memory update after agent completes.
-
-        Args:
-            state: The current agent state.
-            runtime: The runtime context.
-
-        Returns:
-            None (no state changes needed from this middleware).
-        """
         config = get_memory_config()
         if not config.enabled:
             return None
 
-        # Get thread ID from runtime context
         thread_id = runtime.context.get("thread_id") if runtime.context else None
         if not thread_id:
             logger.debug("No thread_id in context, skipping memory update")
             return None
 
-        # Get messages from state
         messages = state.get("messages", [])
         if not messages:
             logger.debug("No messages in state, skipping memory update")
@@ -137,15 +156,13 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # Filter to only keep user inputs and final assistant responses
         filtered_messages = _filter_messages_for_memory(messages)
 
-        # Only queue if there's meaningful conversation
-        # At minimum need one user message and one assistant response
         user_messages = [m for m in filtered_messages if getattr(m, "type", None) == "human"]
         assistant_messages = [m for m in filtered_messages if getattr(m, "type", None) == "ai"]
 
         if not user_messages or not assistant_messages:
             return None
 
-        # Queue the filtered conversation for memory update
+        # Queue for mem0 storage (debounced) — replaces old fact extraction
         queue = get_memory_queue()
         queue.add(thread_id=thread_id, messages=filtered_messages, agent_name=self._agent_name)
 

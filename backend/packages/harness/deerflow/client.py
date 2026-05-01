@@ -170,12 +170,13 @@ class DeerFlowClient:
         """Write JSON to *path* atomically (temp file + replace)."""
         fd = tempfile.NamedTemporaryFile(
             mode="w",
+            encoding="utf-8",
             dir=path.parent,
             suffix=".tmp",
             delete=False,
         )
         try:
-            json.dump(data, fd, indent=2)
+            json.dump(data, fd, indent=2, ensure_ascii=False)
             fd.close()
             Path(fd.name).replace(path)
         except BaseException:

@@ -85,6 +85,8 @@ def test_load_claude_code_credential_from_override_path(tmp_path, monkeypatch):
 
 def test_load_claude_code_credential_ignores_directory_path(tmp_path, monkeypatch):
     _clear_claude_code_env(monkeypatch)
+    # Point HOME to temp dir so the default fallback path doesn't find real creds
+    monkeypatch.setenv("HOME", str(tmp_path))
     cred_dir = tmp_path / "claude-creds-dir"
     cred_dir.mkdir()
     monkeypatch.setenv("CLAUDE_CODE_CREDENTIALS_PATH", str(cred_dir))

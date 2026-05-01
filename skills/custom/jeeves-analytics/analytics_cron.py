@@ -88,14 +88,15 @@ def _connect():
         sslmode='require',
         sslrootcert='disable',
         connect_timeout=30,
+        options='-c statement_timeout=120000',
     )
 
 
-def _query(sql):
+def _query(sql, params=None):
     conn = _connect()
     try:
         with conn.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, params)
             cols = [d[0] for d in cur.description]
             rows = cur.fetchall()
         return cols, rows
@@ -103,8 +104,8 @@ def _query(sql):
         conn.close()
 
 
-def _scalar(sql):
-    _, rows = _query(sql)
+def _scalar(sql, params=None):
+    _, rows = _query(sql, params)
     return rows[0][0] if rows and rows[0] else None
 
 
@@ -122,7 +123,7 @@ def get_max_dt():
 
 
 def get_loc_snapshot(date):
-    _, rows = _query(f"""
+    _, rows = _query("""
         SELECT
             SUM(balance_usd),
             SUM(CASE WHEN days_past_due >= 90 THEN balance_usd ELSE 0 END),
@@ -133,9 +134,9 @@ def get_loc_snapshot(date):
                 / NULLIF(SUM(balance_usd), 0),
             COUNT(DISTINCT company_id)
         FROM capital_markets_dm.loc_tape
-        WHERE dt = '{date}'
+        WHERE dt = %s
           AND charge_off_flag = false AND is_in_repayment = false
-    """)
+    """, (date,))
     if not rows or rows[0][0] is None:
         return None
     r = rows[0]
@@ -150,14 +151,14 @@ def get_loc_snapshot(date):
 
 
 def get_gwc_snapshot(date):
-    _, rows = _query(f"""
+    _, rows = _query("""
         SELECT
             SUM(balance_usd),
             SUM(CASE WHEN days_past_due >= 90 THEN balance_usd ELSE 0 END)
                 / NULLIF(SUM(balance_usd), 0)
         FROM capital_markets_dm.gwc_tape
-        WHERE dt = '{date}' AND charge_off_flag = false
-    """)
+        WHERE dt = %s AND charge_off_flag = false
+    """, (date,))
     if not rows or rows[0][0] is None:
         return None
     r = rows[0]
@@ -168,42 +169,42 @@ def get_gwc_snapshot(date):
 
 
 def get_chargeoffs(start, end):
-    _, rows = _query(f"""
+    _, rows = _query("""
         SELECT COALESCE(SUM(balance_usd), 0), COUNT(*)
         FROM capital_markets_dm.loc_tape
-        WHERE charge_off_dt BETWEEN '{start}' AND '{end}'
+        WHERE charge_off_dt BETWEEN %s AND %s
           AND dt = charge_off_dt
-    """)
+    """, (start, end))
     r = rows[0] if rows else (0, 0)
     return {'amount': float(r[0] or 0), 'count': int(r[1] or 0)}
 
 
 def get_disbursements(start, end):
-    val = _scalar(f"""
+    val = _scalar("""
         SELECT COALESCE(SUM(
             COALESCE(disbursement_amount_usd, 0)
             + COALESCE(jeeves_pay_disbursement_amount_usd, 0)
         ), 0)
         FROM capital_markets_dm.loc_tape
-        WHERE dt BETWEEN '{start}' AND '{end}'
+        WHERE dt BETWEEN %s AND %s
           AND charge_off_flag = false AND is_in_repayment = false
-    """)
+    """, (start, end))
     return float(val or 0)
 
 
 def get_country_breakdown(date):
-    _, rows = _query(f"""
+    _, rows = _query("""
         SELECT
             country_code,
             SUM(balance_usd),
             SUM(CASE WHEN days_past_due >= 90 THEN balance_usd ELSE 0 END)
                 / NULLIF(SUM(balance_usd), 0)
         FROM capital_markets_dm.loc_tape
-        WHERE dt = '{date}'
+        WHERE dt = %s
           AND charge_off_flag = false AND is_in_repayment = false
         GROUP BY country_code
         ORDER BY 2 DESC
-    """)
+    """, (date,))
     return [
         {
             'country': COUNTRY_NAMES.get(int(r[0]) if r[0] else 0, str(r[0])),

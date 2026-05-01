@@ -130,6 +130,19 @@ def main():
         template_wb = openpyxl.load_workbook(template_path)
         original_tab_order = list(template_wb.sheetnames)  # capture before any modifications
 
+        # Validate template has formula/summary tabs
+        _EXPECTED_FORMULA_TABS = {'Summary', 'Summary - Country'}
+        found_formula_tabs = _EXPECTED_FORMULA_TABS & set(template_wb.sheetnames)
+        if not found_formula_tabs:
+            print(f"WARNING: Template has no formula tabs (expected at least one of: {_EXPECTED_FORMULA_TABS})", file=sys.stderr)
+            print(f"         Template sheets: {template_wb.sheetnames}", file=sys.stderr)
+            print(f"         This may be a raw data file, not a proper template with formulas.", file=sys.stderr)
+            print(f"         Use a file named 'Portfolio Reporting - YYYYMM01.xlsx' (with 'ing').", file=sys.stderr)
+            resp = input("Continue anyway? [y/N] ") if sys.stdin.isatty() else 'y'
+            if resp.strip().lower() != 'y':
+                print("Aborted.", file=sys.stderr)
+                sys.exit(1)
+
         print("Opening data workbook...")
         data_wb = openpyxl.load_workbook(args.data_workbook)
 

@@ -20,8 +20,10 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
 # Load .env before anything else (belt-and-suspenders: uv run loads it too,
@@ -47,6 +49,11 @@ LOOKAHEAD_MIN = 15  # Look for events starting in 15-25 min
 LOOKAHEAD_MAX = 25
 MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
 SYNTHESIS_MODEL = 'claude-sonnet-4-6'
+SYNTHESIS_MAX_RETRIES = 3
+ALERT_FAILURE_THRESHOLD = 3  # consecutive failures before alerting
+
+# Track consecutive failures for alerting
+_consecutive_failures = 0
 
 
 def _state_path():
@@ -84,6 +91,23 @@ def load_state():
     return {"prepped_events": {}, "last_check": None}
 
 
+def _atomic_json_write(path, data):
+    """Write JSON atomically: write to temp file then rename."""
+    dir_name = os.path.dirname(path)
+    fd, tmp_path = tempfile.mkstemp(suffix='.tmp', dir=dir_name)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, default=str)
+        os.replace(tmp_path, path)
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def save_state(state):
     state['last_check'] = datetime.now().isoformat()
     # Clean entries older than 24 hours
@@ -92,8 +116,7 @@ def save_state(state):
         k: v for k, v in state.get('prepped_events', {}).items()
         if v > cutoff
     }
-    with open(_state_path(), 'w') as f:
-        json.dump(state, f, indent=2)
+    _atomic_json_write(_state_path(), state)
 
 
 # ---------------------------------------------------------------------------
@@ -167,12 +190,11 @@ def read_existing_dossier(email):
 
 
 def save_dossier(email, data):
-    """Save dossier JSON."""
+    """Save dossier JSON atomically."""
     data['email'] = email
     data['last_updated'] = datetime.now().isoformat()
     path = _dossier_path(email)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, default=str)
+    _atomic_json_write(path, data)
     log.info(f"Saved dossier for {email}")
 
 
@@ -233,22 +255,26 @@ def synthesize_dossier(email, gathered_data, existing_dossier):
     else:
         user_msg += "\n\n## No existing dossier — create a new one."
 
-    try:
-        response = client.messages.create(
-            model=SYNTHESIS_MODEL,
-            max_tokens=4096,
-            system=SYNTHESIS_PROMPT,
-            messages=[{"role": "user", "content": user_msg}],
-        )
-        text = response.content[0].text
+    for attempt in range(1, SYNTHESIS_MAX_RETRIES + 1):
+        try:
+            response = client.messages.create(
+                model=SYNTHESIS_MODEL,
+                max_tokens=4096,
+                system=SYNTHESIS_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            text = response.content[0].text
 
-        # Extract JSON from response
-        json_start = text.find('{')
-        json_end = text.rfind('}') + 1
-        if json_start >= 0 and json_end > json_start:
-            return json.loads(text[json_start:json_end])
-    except Exception as e:
-        log.error(f"Synthesis failed for {email}: {e}")
+            # Extract JSON from response
+            json_start = text.find('{')
+            json_end = text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                return json.loads(text[json_start:json_end])
+            log.warning(f"Synthesis returned non-JSON for {email} (attempt {attempt})")
+        except Exception as e:
+            log.error(f"Synthesis failed for {email} (attempt {attempt}/{SYNTHESIS_MAX_RETRIES}): {e}")
+            if attempt < SYNTHESIS_MAX_RETRIES:
+                time.sleep(2 ** attempt)  # exponential backoff: 2s, 4s, 8s
 
     return None
 
@@ -346,8 +372,28 @@ def post_briefing(event, dossiers):
 # Main loop
 # ---------------------------------------------------------------------------
 
+def _post_alert(message):
+    """Post an error alert to Slack DM (best-effort)."""
+    bot_token = os.environ.get('SLACK_BOT_TOKEN')
+    owner_id = os.environ.get('SLACK_OWNER_USER_ID')
+    if not bot_token or not owner_id:
+        return
+    try:
+        from slack_sdk import WebClient
+        client = WebClient(token=bot_token)
+        dm = client.conversations_open(users=[owner_id])
+        channel_id = dm['channel']['id']
+        client.chat_postMessage(
+            channel=channel_id,
+            text=f":warning: *Dossier Cron Alert*\n{message}",
+        )
+    except Exception as e:
+        log.error(f"Failed to post alert: {e}")
+
+
 def process_event(event, state):
     """Process one upcoming event: gather, synthesize, post briefing."""
+    global _consecutive_failures
     event_id = event.get('id', '')
     summary = event.get('summary', '(No title)')
 
@@ -362,18 +408,25 @@ def process_event(event, state):
 
     log.info(f"Prepping for: {summary} ({len(external)} attendee(s))")
 
-    dossiers = {}
-    for attendee in external:
-        email = attendee.get('email', '')
-        if not email:
-            continue
+    # Gather data for all attendees in parallel
+    emails = [a.get('email', '') for a in external if a.get('email')]
+    gather_results = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(gather_for_contact, email, 14): email for email in emails}
+        for future in as_completed(futures):
+            email = futures[future]
+            try:
+                gather_results[email] = future.result()
+            except Exception as e:
+                log.error(f"Gather failed for {email}: {e}")
+                gather_results[email] = None
 
-        # Gather data
-        gathered = gather_for_contact(email, days=14)
+    dossiers = {}
+    for email in emails:
+        gathered = gather_results.get(email)
         existing = read_existing_dossier(email)
 
         if gathered:
-            # Synthesize
             updated = synthesize_dossier(email, gathered, existing)
             if updated:
                 save_dossier(email, updated)
@@ -384,7 +437,20 @@ def process_event(event, state):
             dossiers[email] = existing
 
     if dossiers:
-        post_briefing(event, dossiers)
+        success = post_briefing(event, dossiers)
+        if success:
+            _consecutive_failures = 0
+        else:
+            _consecutive_failures += 1
+    else:
+        _consecutive_failures += 1
+
+    if _consecutive_failures >= ALERT_FAILURE_THRESHOLD:
+        _post_alert(
+            f"Dossier cron has failed {_consecutive_failures} consecutive times. "
+            f"Last event: {summary}. Check gateway logs."
+        )
+        _consecutive_failures = 0  # reset after alerting
 
     # Mark as prepped
     state.setdefault('prepped_events', {})[event_id] = datetime.now().isoformat()

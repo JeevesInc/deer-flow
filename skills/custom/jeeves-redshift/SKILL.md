@@ -11,9 +11,32 @@ allowed-tools:
 
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
+## Workflow: Always Check Repo First
+
+**Before writing any SQL from scratch**, search the query repo for an existing query:
+
+```bash
+# Search the repo by keyword
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py search "portfolio balance"
+
+# List all saved queries
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py list
+
+# Get the full SQL for a saved query
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py get "total_portfolio_balance"
+
+# Run a saved query directly (tracks usage)
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py run "total_portfolio_balance"
+
+# Run with output options
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py run "total_portfolio_balance" --output /mnt/user-data/outputs/results.xlsx
+```
+
+If a saved query covers 80%+ of what's needed, start from it and adapt rather than writing from scratch.
+
 ## Running Queries
 
-Use the SQL runner — it handles connection, validation, and output formatting automatically:
+Use the SQL runner — it handles connection, validation, and output formatting automatically. **The runner always echoes the full SQL being executed so Brian has direct visibility.**
 
 ```bash
 # Inline query
@@ -33,13 +56,36 @@ python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --limit 500
 
 # Generate SQL from natural language (uses DSPy + Claude)
 python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the total portfolio balance by country?"
+
+# Save a query to the repo after successful execution
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "total_portfolio_balance" --tags "portfolio,balance,loc"
 ```
 
 The runner automatically:
+- **Echoes the full SQL** being executed (always visible to the user)
 - Validates SQL before executing (catches common mistakes, warns on missing filters)
 - Blocks non-SELECT queries
 - Formats small results inline, saves large results to files
 - Provides actionable error hints on failure
+
+## Saving Queries to the Repo
+
+**After every successful query, save it to the repo** so it can be reused:
+
+```bash
+# Save via sql_runner --save flag (after execution)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "descriptive_name" --tags "tag1,tag2"
+
+# Or save directly via sql_repo.py
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py save "descriptive_name" "SELECT ..." --tags "tag1,tag2" --description "What this query does"
+
+# Delete an outdated query
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py delete "old_query_name"
+```
+
+**Naming convention:** Use snake_case descriptive names like `total_portfolio_balance`, `dpd_90plus_by_country`, `monthly_charge_off_trend`, `top_borrowers_with_names`.
+
+**When to save:** Save every query that answers a real question. Don't save one-off debugging queries. If an existing query was adapted, update it with the improved version.
 
 ## Key Tables
 
@@ -150,6 +196,7 @@ Daily LOC portfolio tape. One row per company per day. Use for **balances, disbu
 - `jp_balance_usd` (numeric): Jeeves Pay balance
 - `disbursement_amount_usd` (numeric): Card spend/disbursements
 - `jeeves_pay_disbursement_amount_usd` (numeric): Jeeves Pay spend
+- `fee_amount` / `fee_amount_usd` (numeric): Fee amounts
 - `payment_amount_usd` (numeric): Payments received
 - `days_past_due` (integer): Days overdue (0 = current)
 - `dq_bucket` (varchar): Delinquency bucket (current, 1-30, 31-60, 61-90, 90+)

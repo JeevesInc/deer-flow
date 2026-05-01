@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from starlette.requests import Request
 from starlette.responses import FileResponse
 
 import app.gateway.routers.artifacts as artifacts_router
@@ -15,10 +14,6 @@ ACTIVE_ARTIFACT_CASES = [
     ("page.xhtml", '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body>hello</body></html>'),
     ("image.svg", '<svg xmlns="http://www.w3.org/2000/svg"><script>alert("xss")</script></svg>'),
 ]
-
-
-def _make_request(query_string: bytes = b"") -> Request:
-    return Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": query_string})
 
 
 def test_get_artifact_reads_utf8_text_file_on_windows_locale(tmp_path, monkeypatch) -> None:
@@ -35,10 +30,9 @@ def test_get_artifact_reads_utf8_text_file_on_windows_locale(tmp_path, monkeypat
     monkeypatch.setattr(Path, "read_text", read_text_with_gbk_default)
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
 
-    request = _make_request()
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", "mnt/user-data/outputs/note.txt", request))
+    response = asyncio.run(artifacts_router.get_artifact("thread-1", "mnt/user-data/outputs/note.txt"))
 
-    assert bytes(response.body).decode("utf-8") == text
+    assert response.body.decode("utf-8") == text
     assert response.media_type == "text/plain"
 
 
@@ -49,7 +43,7 @@ def test_get_artifact_forces_download_for_active_content(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: artifact_path)
 
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/{filename}", _make_request()))
+    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/{filename}"))
 
     assert isinstance(response, FileResponse)
     assert response.headers.get("content-disposition", "").startswith("attachment;")
@@ -63,7 +57,7 @@ def test_get_artifact_forces_download_for_active_content_in_skill_archive(tmp_pa
 
     monkeypatch.setattr(artifacts_router, "resolve_thread_virtual_path", lambda _thread_id, _path: skill_path)
 
-    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/sample.skill/{filename}", _make_request()))
+    response = asyncio.run(artifacts_router.get_artifact("thread-1", f"mnt/user-data/outputs/sample.skill/{filename}"))
 
     assert response.headers.get("content-disposition", "").startswith("attachment;")
     assert bytes(response.body) == content.encode("utf-8")

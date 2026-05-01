@@ -13,6 +13,7 @@ Output saved to $OUTPUTS_PATH/Borrowing Base - SOFOM - {YYYYMMDD}.xlsx
 import argparse
 import datetime as dt
 import os
+from pathlib import Path
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -68,21 +69,22 @@ def main():
     print(f"MX SOFOM Borrowing Base: {start_date} to {end_date} ({len(dates)} days)")
 
     # Load SQL
-    tape_sql = open(os.path.join(SCRIPT_DIR, 'sql', 'data_tape_sofom.sql')).read()
+    tape_sql = Path(SCRIPT_DIR, 'sql', 'data_tape_sofom.sql').read_text()
 
     con = connect()
-    dfs = []
+    try:
+        dfs = []
 
-    for i, date in enumerate(dates):
-        date_str = date.isoformat()
-        print(f"  [{i+1}/{len(dates)}] Querying SOFOM tape for {date_str}...")
-        df = pd.read_sql_query(tape_sql.format(date_str), con)
-        print(f"    {len(df)} rows")
-        if len(df) > 0:
-            df = calculate_eligibility_fields_sofom(df)
-        dfs.append(df)
-
-    con.close()
+        for i, date in enumerate(dates):
+            date_str = date.isoformat()
+            print(f"  [{i+1}/{len(dates)}] Querying SOFOM tape for {date_str}...")
+            df = pd.read_sql_query(tape_sql.format(date_str), con)
+            print(f"    {len(df)} rows")
+            if len(df) > 0:
+                df = calculate_eligibility_fields_sofom(df)
+            dfs.append(df)
+    finally:
+        con.close()
 
     print("\n  Combining results...")
     df_combined = pd.concat(dfs, ignore_index=True)

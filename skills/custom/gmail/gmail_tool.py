@@ -123,7 +123,7 @@ def _resolve_attachment(path_or_id):
 
 
 def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
-                in_reply_to=None, references=None):
+                in_reply_to=None, references=None, cc=None):
     """Build a MIME message, with attachments if provided."""
     if attachments:
         mime = MIMEMultipart('mixed')
@@ -145,6 +145,8 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
     mime['to'] = to_addr
     mime['from'] = from_addr
     mime['subject'] = subject
+    if cc:
+        mime['cc'] = cc
     if in_reply_to:
         mime['In-Reply-To'] = in_reply_to
         mime['References'] = references or in_reply_to
@@ -203,14 +205,16 @@ def cmd_read(message_id):
 def cmd_draft_reply(message_id, body_text, attachments=None):
     service = _get_service()
 
-    # Get the original message for threading
+    # Get the original message for threading — fetch Cc too for reply-all
     orig = service.users().messages().get(userId='me', id=message_id, format='metadata',
-                                          metadataHeaders=['From', 'To', 'Subject', 'Message-ID']).execute()
+                                          metadataHeaders=['From', 'To', 'Cc', 'Subject', 'Message-ID']).execute()
     orig_headers = orig.get('payload', {}).get('headers', [])
     thread_id = orig.get('threadId')
 
-    reply_to = _header(orig_headers, 'From')
-    subject = _header(orig_headers, 'Subject')
+    orig_from = _header(orig_headers, 'From')
+    orig_to   = _header(orig_headers, 'To')
+    orig_cc   = _header(orig_headers, 'Cc')
+    subject   = _header(orig_headers, 'Subject')
     if not subject.lower().startswith('re:'):
         subject = f"Re: {subject}"
     orig_message_id = _header(orig_headers, 'Message-ID')
@@ -218,11 +222,27 @@ def cmd_draft_reply(message_id, body_text, attachments=None):
     profile = service.users().getProfile(userId='me').execute()
     my_email = profile['emailAddress']
 
+    # Build reply-all recipients:
+    # To = original From (always reply to sender)
+    # Cc = everyone else on original To + Cc, minus ourselves
+    def _parse_addrs(field):
+        if not field:
+            return []
+        return [addr.strip() for addr in field.split(',') if addr.strip()]
+
+    all_recipients = _parse_addrs(orig_to) + _parse_addrs(orig_cc)
+    cc_addrs = [a for a in all_recipients
+                if email.utils.parseaddr(a)[1].lower() != my_email.lower()
+                and email.utils.parseaddr(a)[1].lower() != email.utils.parseaddr(orig_from)[1].lower()]
+
+    cc_str = ', '.join(cc_addrs) if cc_addrs else None
+
     mime = _build_mime(
-        body_text, my_email, reply_to, subject,
+        body_text, my_email, orig_from, subject,
         attachments=attachments,
         in_reply_to=orig_message_id,
         references=orig_message_id,
+        cc=cc_str,
     )
 
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('utf-8')
@@ -240,7 +260,9 @@ def cmd_draft_reply(message_id, body_text, attachments=None):
     print(f"Draft created successfully!")
     print(f"  Draft ID: {draft['id']}")
     print(f"  Thread:   {thread_id}")
-    print(f"  To:       {reply_to}")
+    print(f"  To:       {orig_from}")
+    if cc_str:
+        print(f"  Cc:       {cc_str}")
     print(f"  Subject:  {subject}")
     if attachments:
         print(f"  Attachments: {len(attachments)}")

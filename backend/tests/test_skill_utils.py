@@ -156,21 +156,25 @@ from deerflow.agents.memory.updater import _parse_memory_response, MemoryUpdateR
 
 
 class TestMemoryResponseParsing:
-    """Tests for LLM memory response parsing robustness."""
+    """Tests for LLM memory/profile response parsing robustness.
+
+    Note: Facts are now managed by mem0. ProfileUpdateResponse (aliased as
+    MemoryUpdateResponse) only has user/history sections.
+    """
 
     def test_valid_json(self):
-        data = {"user": {}, "history": {}, "newFacts": [], "factsToRemove": []}
+        data = {"user": {}, "history": {}}
         result = _parse_memory_response(json.dumps(data))
         assert isinstance(result, MemoryUpdateResponse)
 
     def test_markdown_code_block(self):
-        data = {"user": {}, "history": {}, "newFacts": [{"content": "test", "confidence": 0.9}]}
+        data = {"user": {"workContext": {"shouldUpdate": True, "summary": "test"}}, "history": {}}
         text = f"```json\n{json.dumps(data)}\n```"
         result = _parse_memory_response(text)
-        assert len(result.newFacts) == 1
+        assert result.user.workContext.shouldUpdate is True
 
     def test_json_with_surrounding_text(self):
-        data = {"user": {}, "history": {}, "newFacts": []}
+        data = {"user": {}, "history": {}}
         text = f"Here's the update:\n{json.dumps(data)}\nDone."
         result = _parse_memory_response(text)
         assert isinstance(result, MemoryUpdateResponse)
@@ -178,10 +182,9 @@ class TestMemoryResponseParsing:
     def test_invalid_json_returns_noop(self):
         result = _parse_memory_response("This is not JSON at all")
         assert isinstance(result, MemoryUpdateResponse)
-        assert len(result.newFacts) == 0
-        assert len(result.factsToRemove) == 0
+        assert result.user.workContext.shouldUpdate is False
 
     def test_partial_fields_use_defaults(self):
-        result = _parse_memory_response('{"newFacts": [{"content": "hello", "confidence": 0.8}]}')
-        assert len(result.newFacts) == 1
-        assert result.newFacts[0].content == "hello"
+        result = _parse_memory_response('{"user": {"topOfMind": {"shouldUpdate": true, "summary": "hello"}}}')
+        assert result.user.topOfMind.shouldUpdate is True
+        assert result.user.topOfMind.summary == "hello"

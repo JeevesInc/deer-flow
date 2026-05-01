@@ -53,7 +53,7 @@ def save_extensions_config(mcp_servers: dict, skills: dict) -> None:
     }
 
     with open(config_path, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=2)
+        json.dump(config_data, f, indent=2, ensure_ascii=False)
 
     _logger.info("Extensions configuration saved to: %s", config_path)
     reload_extensions_config()

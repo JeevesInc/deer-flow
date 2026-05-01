@@ -22,7 +22,7 @@ Match the user's keywords to the correct pipeline. These are three DIFFERENT pro
 **Date rules:**
 - Portfolio report: "4/1 portfolio reporting" → `--date 2026-04-01`. Script derives EOP (3/31) and BOP (2/28) automatically.
 - Borrowing base: "run the BB" with no date → use yesterday. "BB for 3/27" → `--date 2026-03-27`.
-- **Never use today's date.** Data only available through yesterday. Scripts hard-reject today/future.
+- **Never use today's date.** Always use yesterday's date as the snapshot — even on Mondays (Sunday data is available). Do NOT fall back to last Friday on weekends. Scripts hard-reject today/future.
 
 ---
 

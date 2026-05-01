@@ -12,9 +12,13 @@ models:
     use: langchain_anthropic:ChatAnthropic
     model: claude-sonnet-4-6
     api_key: $ANTHROPIC_API_KEY
-    max_tokens: 8192
-    temperature: 0.0
+    max_tokens: 64000
+    temperature: 1.0
     supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: enabled
+      budget_tokens: 10000
 
 basic_model: claude-sonnet
 reasoning_model: claude-sonnet
@@ -86,12 +90,26 @@ title:
 # window is large enough for even heavy threads. Cross-thread knowledge
 # is handled by the memory system (memory.json), not summarization.
 #
-# Previously at 15K tokens this was destroying thread context and
-# replacing it with "Previous conversation was too long to summarize."
+# Short-term memory: summarize older messages to prevent token explosion.
+# Triggers at 80% of model max input OR 50 messages, keeps last 20 messages.
 summarization:
-  enabled: false
+  enabled: true
+  trigger:
+    - type: fraction
+      value: 0.8
+    - type: messages
+      value: 200
+  keep:
+    type: messages
+    value: 80
+  trim_tokens_to_summarize: 32000
 
 # ── Memory ─────────────────────────────────────────────────────────
+# ── Memory ─────────────────────────────────────────────────────────
+# Profile sections (workContext, personalContext, topOfMind, history)
+# are stored in memory.json. Long-term facts are in mem0 (semantic
+# vector search). max_facts and fact_confidence_threshold are legacy
+# fields kept for backward compat but no longer used.
 memory:
   enabled: true
   storage_path: memory.json
@@ -100,7 +118,7 @@ memory:
   max_facts: 100
   fact_confidence_threshold: 0.7
   injection_enabled: true
-  max_injection_tokens: 2000
+  max_injection_tokens: 1500
 
 # ── Checkpointer ──────────────────────────────────────────────────
 checkpointer:

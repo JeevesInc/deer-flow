@@ -104,13 +104,18 @@ def start_crons() -> None:
 
     _load_and_start("dossier-cron", skills_dir / "jeeves-dossier" / "dossier_cron.py")
     _load_and_start("analytics-cron", skills_dir / "jeeves-analytics" / "analytics_cron.py")
-    _load_and_start("email-monitor", skills_dir / "gmail" / "email_monitor_cron.py")
+    # email-monitor disabled 2026-05-20 — replaced by webhook_receiver.py (Gmail Pub/Sub push + Haiku classifier).
+    # Re-enable only if the webhook pipe goes down for an extended period.
+    # _load_and_start("email-monitor", skills_dir / "gmail" / "email_monitor_cron.py")
     _load_and_start("report-scheduler", skills_dir / "jeeves-borrowing-base" / "report_scheduler_cron.py")
     _load_and_start("knowledge-crawler", skills_dir / "knowledge-crawler" / "knowledge_cron.py")
     _load_and_start("revenue-comp", skills_dir / "jeeves-analytics" / "revenue_comp_cron.py")
     _load_and_start("state-backup", backend_dir / "scripts" / "backup_state.py")
     _load_and_start("checkpoint-cleanup", backend_dir / "scripts" / "checkpoint_cleanup_cron.py")
     _load_and_start("slack-dm-monitor", skills_dir / "slack-search" / "slack_dm_monitor_cron.py")
+    _load_and_start("bot-dm-history", backend_dir / "scripts" / "bot_dm_history_cron.py")
+    _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
+    _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
 
 
 def stop_crons() -> None:

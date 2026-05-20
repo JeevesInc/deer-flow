@@ -100,10 +100,13 @@ python /mnt/skills/custom/jeeves-redshift/sql_repo.py delete "old_query_name"
 | `capital_markets_dm.gwc_tape` | GWC (Global Working Capital) daily tape — principal, interest, VAT/fees/tax breakdowns, obligation tracking. By company by day. |
 | `analytics_sandbox.loc_vintage_data` | LOC vintage/cohort data — BOP/EOP balances, charge-offs, repayments, period-over-period deltas. |
 
-### TODO — Tables to add after verification:
-- `analytics_sandbox.jurs_test` — JURS loss rate scores (needs validation)
-- `capital_markets_dm.rms_transactions` — RMS transaction-level collections data (needs validation)
-- Borrowing base table — not found in schema, may be derived or in a different location
+### Additional Tables
+
+| Table | Description |
+|-------|-------------|
+| `analytics_sandbox.jurs_test` | JURS loss rate scores. |
+| `capital_markets_dm.rms_transactions` | RMS transaction-level collections data (~9.2M rows). |
+| `capital_markets_dm.intraday_collections` | Intraday collection events. |
 
 ---
 
@@ -286,7 +289,7 @@ Vintage/cohort analysis data for LOC portfolio.
 
 ## Query Examples by Intent
 
-## SQL Style\nALWAYS write SQL with leading commas, not trailing commas. Example:\n  SELECT\n      col1\n    , col2\n    , col3\n  FROM ...\n  ORDER BY\n      col1\n    , col2\n\n## RPP Data Model\nRPP accounts are LOC balances financed into GWC loans. Key facts:\n- Identify via: gwc_tape WHERE loan_reference_number ILIKE 'RPP%'\n- One row per installment = rows WHERE principal_amount_due_usd != 0\n- dt on those rows = the invoice due date\n- balance_usd = running unpaid balance at that point\n- days_past_due = days since that installment was due\n- delinquent_dt = date the current installment became overdue\n- 96 RPP loans as of 2026-04-07, 666 installment rows total\n- Do NOT use dms_mysql_jeeves_raw.instalments or company_statements for RPP — gwc_tape is the source of truth\n\nUse these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+## SQL Style\nALWAYS write SQL with leading commas, not trailing commas. Example:\n  SELECT\n      col1\n    , col2\n    , col3\n  FROM ...\n  ORDER BY\n      col1\n    , col2\n\n## RPP Data Model\nRPP accounts are LOC balances financed into GWC loans. Key facts:\n- Identify via: gwc_tape WHERE loan_reference_number ILIKE 'RPP%'\n- One row per installment = rows WHERE principal_amount_due_usd != 0\n- dt on those rows = the invoice due date\n- balance_usd = running unpaid balance at that point\n- days_past_due = days since that installment was due\n- delinquent_dt = date the current installment became overdue\n- ~99 RPP loans (as of May 2026), one row per installment\n- Do NOT use dms_mysql_jeeves_raw.instalments or company_statements for RPP — gwc_tape is the source of truth\n\nUse these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
 
 ### Balance (portfolio snapshot)
 **Q:** "What's the total portfolio balance?"

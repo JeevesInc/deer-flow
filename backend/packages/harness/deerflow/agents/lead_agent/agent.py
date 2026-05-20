@@ -5,7 +5,9 @@ from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.runnables import RunnableConfig
 
 from deerflow.agents.lead_agent.prompt import apply_prompt_template
+from deerflow.agents.middlewares.anthropic_retry_middleware import AnthropicRetryMiddleware
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from deerflow.agents.middlewares.continuation_middleware import ContinuationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
 from deerflow.agents.middlewares.step_budget_middleware import StepBudgetMiddleware
 from deerflow.agents.middlewares.mem0_injection_middleware import Mem0InjectionMiddleware
@@ -224,11 +226,10 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 
-    # NOTE: Mem0InjectionMiddleware disabled — Anthropic API rejects multiple
-    # non-consecutive system messages and injecting HumanMessages via
-    # before_model accumulates across turns.  mem0 memories are retrieved at
-    # system prompt build time instead (see _get_memory_context).
-    # TODO: re-enable with a proper wrap_model_call approach.
+    # Mem0 semantic memory injection — uses wrap_model_call to inject
+    # recalled memories per-turn based on the user's actual message.
+    # This is in addition to the static profile injection in the system prompt.
+    middlewares.append(Mem0InjectionMiddleware(top_k=10))
 
     # Add TodoList middleware if plan mode is enabled
     is_plan_mode = config.get("configurable", {}).get("is_plan_mode", False)
@@ -270,6 +271,16 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
 
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     middlewares.append(LoopDetectionMiddleware())
+
+    # ContinuationMiddleware — re-invoke once when the model abandons stated intent
+    # (says "now let me X" but emits no tool call). Sits outside the retry layer so a
+    # transient API error during the re-invocation gets retried, not re-detected.
+    middlewares.append(ContinuationMiddleware())
+
+    # AnthropicRetryMiddleware — retry transient API errors (500/502/503/504/529, connection, timeout, rate-limit).
+    # Added last (before ClarificationMiddleware) so it sits closest to the model call; outer middlewares'
+    # request mutations are preserved across retries.
+    middlewares.append(AnthropicRetryMiddleware())
 
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())

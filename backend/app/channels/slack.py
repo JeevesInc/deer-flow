@@ -39,6 +39,15 @@ class SlackChannel(Channel):
         self._allowed_users: set[str] = set(config.get("allowed_users", []))
         self._own_bot_id: str | None = None
         self._own_user_id: str | None = None
+        # Owner-notification config: DM the owner every time someone OTHER than
+        # them messages the analyst. Falls back to env var if not in config.
+        self._owner_user_id: str = (
+            config.get("owner_user_id")
+            or os.environ.get("SLACK_OWNER_USER_ID", "")
+        ).strip()
+        # Cache for Slack user_id → display_name lookups so we don't hammer
+        # users.info on every inbound notification.
+        self._user_name_cache: dict[str, str] = {}
         # Dedup: track recently processed message timestamps to avoid
         # double-processing when Slack sends both 'message' and 'app_mention'
         self._seen_ts: dict[str, float] = {}  # ts -> wall-clock time
@@ -47,7 +56,54 @@ class SlackChannel(Channel):
         # "Working on it..." message so we can edit it in-place with updates.
         # Entries are TTL-pruned after 10 minutes to prevent leaks.
         self._progress_message_ts: dict[str, tuple[str, float]] = {}
-        _PROGRESS_TTL = 600  # seconds
+        self._PROGRESS_TTL = 600  # seconds
+        # Assistant threads: track threads opened via the Slack assistant panel
+        # so we can use assistant-specific UX (setStatus, suggested prompts, titles).
+        # Persisted to disk so they survive gateway restarts.
+        self._assistant_threads_path = Path(__file__).resolve().parent.parent.parent / ".deer-flow" / "_assistant_threads.json"
+        self._assistant_threads: set[str] = self._load_assistant_threads()
+        self._assistant_context: dict[str, str] = {}  # thread_ts -> viewing channel_id
+        self._root_context_injected: set[str] = set()  # thread_ts values where root msg already injected
+
+    def _load_assistant_threads(self) -> set[str]:
+        """Load persisted assistant thread_ts values from disk."""
+        try:
+            if self._assistant_threads_path.exists():
+                import json
+                data = json.loads(self._assistant_threads_path.read_text())
+                # Only keep entries from the last 7 days to avoid unbounded growth
+                cutoff = time.time() - 7 * 86400
+                threads = {ts for ts, t in data.items() if t > cutoff}
+                logger.info("[Slack] Loaded %d assistant threads from disk", len(threads))
+                return threads
+        except Exception as exc:
+            logger.warning("[Slack] Failed to load assistant threads: %s", exc)
+        return set()
+
+    def _save_assistant_threads(self) -> None:
+        """Persist assistant thread_ts values to disk."""
+        try:
+            import json
+            # Store as {thread_ts: timestamp} for TTL pruning
+            now = time.time()
+            data = {}
+            # Load existing to preserve timestamps
+            if self._assistant_threads_path.exists():
+                try:
+                    data = json.loads(self._assistant_threads_path.read_text())
+                except Exception:
+                    pass
+            # Update with current set
+            for ts in self._assistant_threads:
+                if ts not in data:
+                    data[ts] = now
+            # Prune old entries
+            cutoff = now - 7 * 86400
+            data = {ts: t for ts, t in data.items() if t > cutoff and ts in self._assistant_threads}
+            self._assistant_threads_path.parent.mkdir(parents=True, exist_ok=True)
+            self._assistant_threads_path.write_text(json.dumps(data))
+        except Exception as exc:
+            logger.warning("[Slack] Failed to save assistant threads: %s", exc)
 
     async def start(self) -> None:
         if self._running:
@@ -118,9 +174,22 @@ class SlackChannel(Channel):
             return
 
         slack_text = _slack_md_converter.convert(msg.text)
+        is_assistant = msg.thread_ts and self._is_assistant_thread(msg.thread_ts)
 
-        # --- Non-final (progress) updates: edit the "Working on it..." message ---
+        # --- Non-final (progress) updates ---
         if not msg.is_final and msg.thread_ts:
+            if is_assistant:
+                # Assistant thread: update the native status indicator
+                # Truncate for status (short descriptions work best)
+                status_text = msg.text[:100].split("\n")[0] if msg.text else "Working..."
+                await asyncio.to_thread(
+                    self._set_assistant_status,
+                    msg.chat_id,
+                    msg.thread_ts,
+                    status_text,
+                )
+                return
+
             entry = self._progress_message_ts.get(msg.thread_ts)
             if entry:
                 progress_ts = entry[0]
@@ -163,25 +232,47 @@ class SlackChannel(Channel):
             try:
                 await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)
                 if msg.thread_ts:
-                    # Clean up the progress message — delete it now that we have the real response
-                    entry = self._progress_message_ts.pop(msg.thread_ts, None)
-                    progress_ts = entry[0] if entry else None
-                    if progress_ts:
+                    if is_assistant:
+                        # Assistant thread: clear status (auto-clears, but be explicit)
+                        # and set a thread title from the response
                         try:
                             await asyncio.to_thread(
-                                self._web_client.chat_delete,
-                                channel=msg.chat_id,
-                                ts=progress_ts,
+                                self._set_assistant_status,
+                                msg.chat_id,
+                                msg.thread_ts,
+                                "",  # empty clears the status
                             )
                         except Exception:
-                            pass  # Best-effort cleanup
-                    # Add completion reaction to the thread root
-                    await asyncio.to_thread(
-                        self._add_reaction,
-                        msg.chat_id,
-                        msg.thread_ts,
-                        "white_check_mark",
-                    )
+                            pass
+                        # Auto-title from the first ~60 chars of the response
+                        title = (msg.text or "").strip().split("\n")[0][:60]
+                        if title:
+                            await asyncio.to_thread(
+                                self._set_assistant_title,
+                                msg.chat_id,
+                                msg.thread_ts,
+                                title,
+                            )
+                    else:
+                        # Regular thread: clean up progress message + add checkmark
+                        entry = self._progress_message_ts.pop(msg.thread_ts, None)
+                        progress_ts = entry[0] if entry else None
+                        if progress_ts:
+                            try:
+                                await asyncio.to_thread(
+                                    self._web_client.chat_delete,
+                                    channel=msg.chat_id,
+                                    ts=progress_ts,
+                                )
+                            except Exception:
+                                pass  # Best-effort cleanup
+                        # Add completion reaction to the thread root
+                        await asyncio.to_thread(
+                            self._add_reaction,
+                            msg.chat_id,
+                            msg.thread_ts,
+                            "white_check_mark",
+                        )
                 return
             except Exception as exc:
                 last_exc = exc
@@ -235,6 +326,57 @@ class SlackChannel(Channel):
 
     # -- internal ----------------------------------------------------------
 
+    def _resolve_user_name(self, user_id: str) -> str:
+        """Best-effort Slack user_id → display name with caching. Falls back to user_id."""
+        if not user_id:
+            return ""
+        cached = self._user_name_cache.get(user_id)
+        if cached is not None:
+            return cached
+        name = user_id
+        if self._web_client:
+            try:
+                resp = self._web_client.users_info(user=user_id)
+                profile = resp.get("user", {}).get("profile", {})
+                name = (
+                    profile.get("real_name")
+                    or profile.get("display_name")
+                    or user_id
+                )
+            except Exception as e:
+                logger.debug("users_info failed for %s: %s", user_id, e)
+        self._user_name_cache[user_id] = name
+        return name
+
+    def _notify_owner_of_inbound(self, user_id: str, channel_id: str,
+                                 thread_ts: str, text: str) -> None:
+        """
+        DM the owner whenever someone OTHER than them messages the analyst.
+        Best-effort and silent on failure — must never block the inbound path.
+        """
+        if not self._owner_user_id or not self._web_client:
+            return
+        # Skip the owner's own messages and the bot's own messages.
+        if not user_id:
+            return
+        if user_id == self._owner_user_id or user_id == self._own_user_id:
+            return
+        try:
+            sender_name = self._resolve_user_name(user_id)
+            snippet = text[:280].replace("\n", " ").strip()
+            notification = (
+                f":eyes: *{sender_name}* (`{user_id}`) just messaged the analyst.\n"
+                f"> {snippet}"
+            )
+            self._web_client.chat_postMessage(
+                channel=self._owner_user_id,
+                text=notification,
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+        except Exception as e:
+            logger.warning("[Slack] owner notification failed for user_id=%s: %s", user_id, e)
+
     def _add_reaction(self, channel_id: str, timestamp: str, emoji: str) -> None:
         """Add an emoji reaction to a message (best-effort, non-blocking)."""
         if not self._web_client:
@@ -271,6 +413,100 @@ class SlackChannel(Channel):
         except Exception:
             logger.exception("[Slack] failed to send running reply in channel=%s", channel_id)
 
+    # -- Assistant-specific handlers ------------------------------------------
+
+    _ASSISTANT_PROMPTS = [
+        {"title": "Portfolio snapshot", "message": "What's the current portfolio balance and DPD rates?"},
+        {"title": "Check my email", "message": "Any important emails I should know about?"},
+        {"title": "Meeting prep", "message": "Prep dossiers for my next meeting"},
+        {"title": "Borrowing base", "message": "Run the US and MX borrowing base for yesterday"},
+    ]
+
+    def _handle_assistant_thread_started(self, event: dict) -> None:
+        """Handle the assistant_thread_started event.
+
+        Fires when a user opens a new assistant thread from the Slack sidebar.
+        We set suggested prompts and track this as an assistant thread.
+        """
+        assistant_thread = event.get("assistant_thread", {})
+        channel_id = assistant_thread.get("channel_id", "")
+        thread_ts = assistant_thread.get("thread_ts", "")
+        context = assistant_thread.get("context", {})
+        context_channel = context.get("channel_id", "")
+
+        if not channel_id or not thread_ts:
+            return
+
+        self._assistant_threads.add(thread_ts)
+        self._save_assistant_threads()
+        if context_channel:
+            self._assistant_context[thread_ts] = context_channel
+
+        logger.info(
+            "[Slack] Assistant thread started: channel=%s, thread_ts=%s, context_channel=%s",
+            channel_id, thread_ts, context_channel,
+        )
+
+        if not self._web_client:
+            return
+
+        # Set suggested prompts
+        try:
+            self._web_client.assistant_threads_setSuggestedPrompts(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                prompts=self._ASSISTANT_PROMPTS,
+            )
+        except Exception as exc:
+            logger.warning("[Slack] Failed to set suggested prompts: %s", exc)
+
+    def _handle_assistant_context_changed(self, event: dict) -> None:
+        """Handle the assistant_thread_context_changed event.
+
+        Fires when the user navigates to a different channel while the
+        assistant panel is open.  We update the stored context so the
+        agent knows what the user is looking at.
+        """
+        assistant_thread = event.get("assistant_thread", {})
+        thread_ts = assistant_thread.get("thread_ts", "")
+        context = assistant_thread.get("context", {})
+        context_channel = context.get("channel_id", "")
+
+        if thread_ts and context_channel:
+            self._assistant_context[thread_ts] = context_channel
+            logger.info("[Slack] Assistant context changed: thread_ts=%s -> channel=%s", thread_ts, context_channel)
+
+    def _set_assistant_status(self, channel_id: str, thread_ts: str, status: str = "Thinking...") -> None:
+        """Set the native assistant loading indicator (instead of 'Working on it...' message)."""
+        if not self._web_client:
+            return
+        try:
+            self._web_client.assistant_threads_setStatus(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                status=status,
+            )
+        except Exception as exc:
+            logger.warning("[Slack] Failed to set assistant status: %s", exc)
+
+    def _set_assistant_title(self, channel_id: str, thread_ts: str, title: str) -> None:
+        """Set the assistant thread title (shows in DM history)."""
+        if not self._web_client:
+            return
+        try:
+            self._web_client.assistant_threads_setTitle(
+                channel_id=channel_id,
+                thread_ts=thread_ts,
+                title=title[:255],  # Slack title limit
+            )
+        except Exception as exc:
+            logger.warning("[Slack] Failed to set assistant title: %s", exc)
+
+    def _is_assistant_thread(self, thread_ts: str) -> bool:
+        return thread_ts in self._assistant_threads
+
+    # -- Socket Mode event router ------------------------------------------
+
     def _on_socket_event(self, client, req) -> None:
         """Called by slack-sdk for each Socket Mode event."""
         try:
@@ -288,6 +524,10 @@ class SlackChannel(Channel):
             # Handle message events (DM or @mention)
             if etype in ("message", "app_mention"):
                 self._handle_message_event(event)
+            elif etype == "assistant_thread_started":
+                self._handle_assistant_thread_started(event)
+            elif etype == "assistant_thread_context_changed":
+                self._handle_assistant_context_changed(event)
 
         except Exception:
             logger.exception("Error processing Slack event")
@@ -402,6 +642,72 @@ class SlackChannel(Channel):
             logger.info("[Slack] Resolved archive URL -> %d chars from channel %s", len(cleaned), channel_id)
             return f"[Slack message from channel {channel_id}]:\n{cleaned}"
         return None
+
+    def _fetch_root_message_text(self, channel_id: str, thread_ts: str) -> str | None:
+        """Fetch the root message of a Slack thread, including any forwarded/attached content.
+
+        This is used to give the agent context when a user replies in a thread
+        whose root message was posted by the bot (e.g. email notifications).
+        Extracts text from the message body, rich blocks (section, header), and
+        attachments/forwarded content.
+        """
+        if not self._web_client:
+            return None
+        try:
+            resp = self._web_client.conversations_history(
+                channel=channel_id,
+                latest=thread_ts,
+                inclusive=True,
+                limit=1,
+            )
+            msgs = resp.get("messages", [])
+            if not msgs:
+                return None
+            root = msgs[0]
+            parts = []
+
+            # Primary text field
+            body = self._clean_slack_text(root.get("text", "")).strip()
+            if body:
+                parts.append(body)
+
+            # Extract text from rich blocks (header, section, context, rich_text)
+            for block in root.get("blocks", []):
+                btype = block.get("type", "")
+                if btype in ("section", "header", "context"):
+                    bt = block.get("text", {})
+                    if isinstance(bt, dict):
+                        block_text = self._clean_slack_text(bt.get("text", "")).strip()
+                        if block_text and block_text not in body:
+                            parts.append(block_text)
+                    # Also check fields (section blocks can have multiple fields)
+                    for field in block.get("fields", []):
+                        if isinstance(field, dict):
+                            ft = self._clean_slack_text(field.get("text", "")).strip()
+                            if ft:
+                                parts.append(ft)
+                elif btype == "rich_text":
+                    # rich_text blocks have elements with nested text
+                    for elem in block.get("elements", []):
+                        for sub in elem.get("elements", []):
+                            if sub.get("type") == "text":
+                                parts.append(sub.get("text", "").strip())
+
+            # Forwarded content from attachments
+            forwarded = self._extract_forwarded_text(root)
+            if forwarded:
+                parts.append(f"Forwarded message:\n{forwarded}")
+
+            # Quoted blocks (modern Slack forwarding)
+            quoted = self._extract_quoted_blocks_text(root)
+            if quoted:
+                parts.append(f"Forwarded message:\n{quoted}")
+
+            text = "\n\n".join(p for p in parts if p)
+            return text if text else None
+        except Exception as exc:
+            logger.warning("[Slack] Failed to fetch root message for thread_ts=%s: %s", thread_ts, exc)
+            return None
 
     def _resolve_slack_archive_urls(self, text: str) -> str:
         """Find Slack archive URLs in *text* and append the resolved message content."""
@@ -754,6 +1060,18 @@ class SlackChannel(Channel):
         channel_id = event.get("channel", "")
         thread_ts = event.get("thread_ts") or event.get("ts", "")
 
+        # If this is a threaded reply (user replying to a bot message or notification),
+        # and we haven't injected the root message context yet, fetch the root message
+        # and prepend it so the agent knows what the user is referring to.
+        event_ts = event.get("ts", "")
+        is_threaded_reply = thread_ts and event_ts and thread_ts != event_ts
+        if is_threaded_reply and thread_ts not in self._root_context_injected:
+            self._root_context_injected.add(thread_ts)
+            root_text = self._fetch_root_message_text(channel_id, thread_ts)
+            if root_text:
+                logger.info("[Slack] Injecting root message context (%d chars) for thread_ts=%s", len(root_text), thread_ts)
+                text = f"[Thread context — the message being replied to:]\n{root_text}\n\n[User's reply:]\n{text}"
+
         # Detect commands: /cmd or bare keywords like "btw", "status"
         _BARE_COMMANDS = {"btw", "status", "new", "help", "models", "memory"}
         text_lower = text.strip().lower()
@@ -777,9 +1095,27 @@ class SlackChannel(Channel):
         )
         inbound.topic_id = thread_ts
 
+        # Structured log line for Loki/Grafana — emit once per dispatched inbound.
+        # Tile "Conversations with non-owner users" filters this on user_id.
+        logger.info(
+            "[Slack inbound] user_id=%s channel=%s thread_ts=%s text=%r",
+            user_id, channel_id, thread_ts, text[:120],
+        )
+
+        # Notify owner if a non-owner user is talking to the analyst.
+        self._notify_owner_of_inbound(user_id, channel_id, thread_ts, text)
+
         if self._loop and self._loop.is_running():
-            # Acknowledge with an eyes reaction
-            self._add_reaction(channel_id, event.get("ts", thread_ts), "eyes")
-            # Send "running" reply first (fire-and-forget from SDK thread)
-            self._send_running_reply(channel_id, thread_ts)
+            if self._is_assistant_thread(thread_ts):
+                # Assistant thread: use native status indicator + inject context
+                self._set_assistant_status(channel_id, thread_ts, "Thinking...")
+                context_channel = self._assistant_context.get(thread_ts)
+                if context_channel:
+                    inbound.metadata["assistant_context_channel"] = context_channel
+                    # Prepend context so the agent knows what the user is viewing
+                    inbound.text = f"[User is currently viewing Slack channel {context_channel}]\n\n{inbound.text}"
+            else:
+                # Regular DM/channel: use reaction + progress message
+                self._add_reaction(channel_id, event.get("ts", thread_ts), "eyes")
+                self._send_running_reply(channel_id, thread_ts)
             asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._loop)

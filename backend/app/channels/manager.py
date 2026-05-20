@@ -29,6 +29,10 @@ DEFAULT_LANGGRAPH_URL = "http://localhost:2024"
 DEFAULT_GATEWAY_URL = "http://localhost:8001"
 DEFAULT_ASSISTANT_ID = "lead_agent"
 
+# Maximum wall-clock time (seconds) a single runs.wait() call may block
+# before the gateway cancels the run and returns an error to the user.
+RUN_TIMEOUT_SECONDS = 20 * 60  # 20 minutes
+
 DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 50}
 DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "thinking_enabled": True,
@@ -137,10 +141,11 @@ class ChannelManager:
             from langgraph_sdk import get_client
 
             # Agent runs can take 10-20+ minutes for complex analysis tasks.
-            # Default read timeout (300s) is too short — use 1 hour.
+            # Read timeout must exceed RUN_TIMEOUT_SECONDS so that our
+            # asyncio.wait_for() fires before the HTTP timeout does.
             self._client = get_client(
                 url=self._langgraph_url,
-                timeout=httpx.Timeout(connect=5, read=3600, write=300, pool=5),
+                timeout=httpx.Timeout(connect=5, read=RUN_TIMEOUT_SECONDS + 120, write=300, pool=5),
             )
         return self._client
 
@@ -203,8 +208,8 @@ class ChannelManager:
         def _monitor_loop():
             import asyncio as _aio
 
-            POLL_INTERVAL = 60   # seconds between checks
-            STUCK_THRESHOLD = 1800  # 30 min with no state update → stuck
+            POLL_INTERVAL = 30   # seconds between checks
+            STUCK_THRESHOLD = 600  # 10 min with no state update → stuck
 
             async def _run():
                 import httpx
@@ -368,7 +373,14 @@ class ChannelManager:
                 )
                 import httpx
                 err_str = str(exc).lower()
-                if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout, TimeoutError)):
+                if isinstance(exc, TimeoutError) and "timed out" in err_str:
+                    error_text = (
+                        "This task took too long and was cancelled after "
+                        f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
+                        "Try breaking it into smaller steps, or reply **continue** "
+                        "to pick up where I left off."
+                    )
+                elif isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
                     error_text = "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
                 elif "recursion" in err_str or "recursion_limit" in err_str:
                     error_text = (
@@ -432,13 +444,21 @@ class ChannelManager:
 
         stamped_text = stamp_message(msg.text)
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r)", thread_id, msg.text[:100])
-        result = await client.runs.wait(
-            thread_id,
-            assistant_id,
-            input={"messages": [{"role": "human", "content": stamped_text}]},
-            config=run_config,
-            context=run_context,
-        )
+        try:
+            result = await asyncio.wait_for(
+                client.runs.wait(
+                    thread_id,
+                    assistant_id,
+                    input={"messages": [{"role": "human", "content": stamped_text}]},
+                    config=run_config,
+                    context=run_context,
+                ),
+                timeout=RUN_TIMEOUT_SECONDS,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.error("[Manager] run timed out after %ds on thread %s — cancelling", RUN_TIMEOUT_SECONDS, thread_id)
+            await self._cancel_active_runs(client, thread_id)
+            raise TimeoutError(f"Run timed out after {RUN_TIMEOUT_SECONDS // 60} minutes")
 
         response_text = extract_response_text(result)
         artifacts = extract_artifacts(result)
@@ -529,7 +549,8 @@ class ChannelManager:
 
         heartbeat_task = asyncio.create_task(_heartbeat_loop())
 
-        try:
+        async def _stream_iteration() -> None:
+            nonlocal last_values, current_message_id, latest_text, active_tool, tool_start_at
             async for chunk in client.runs.stream(
                 thread_id,
                 assistant_id,
@@ -542,17 +563,14 @@ class ChannelManager:
                 data = getattr(chunk, "data", None)
 
                 if event == "messages-tuple":
-                    # Check for tool-call events (AI requesting a tool)
                     tool_name = extract_tool_call_name(data)
                     if tool_name:
                         active_tool = tool_name
                         tool_start_at = time.monotonic()
                         if tool_name not in tools_seen:
                             tools_seen.append(tool_name)
-                        # Immediately publish on tool transition
                         await _publish_progress(format_progress_text(active_tool, 0, tools_seen))
 
-                    # Check for tool-result events (tool finished)
                     if is_tool_result(data):
                         active_tool = None
 
@@ -565,10 +583,15 @@ class ChannelManager:
                     if snapshot_text:
                         latest_text = snapshot_text
 
-                # Publish real AI text when available
                 if latest_text:
                     await _publish_progress(latest_text)
 
+        try:
+            await asyncio.wait_for(_stream_iteration(), timeout=RUN_TIMEOUT_SECONDS)
+        except (asyncio.TimeoutError, TimeoutError):
+            stream_error = TimeoutError(f"Streaming run timed out after {RUN_TIMEOUT_SECONDS // 60} minutes")
+            logger.error("[Manager] streaming run timed out after %ds on thread %s — cancelling", RUN_TIMEOUT_SECONDS, thread_id)
+            await self._cancel_active_runs(client, thread_id)
         except Exception as exc:
             stream_error = exc
             logger.exception("[Manager] streaming error: thread_id=%s", thread_id)
@@ -590,7 +613,14 @@ class ChannelManager:
                     response_text = format_artifact_text([attachment.virtual_path for attachment in attachments])
                 elif stream_error:
                     err_str = str(stream_error).lower()
-                    if "recursion" in err_str or "recursion_limit" in err_str:
+                    if isinstance(stream_error, TimeoutError) and "timed out" in err_str:
+                        response_text = (
+                            "This task took too long and was cancelled after "
+                            f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
+                            "Try breaking it into smaller steps, or reply **continue** "
+                            "to pick up where I left off."
+                        )
+                    elif "recursion" in err_str or "recursion_limit" in err_str:
                         response_text = (
                             "I hit my step limit before finishing. "
                             "Reply **continue** in this thread and I'll pick up where I left off."
@@ -750,6 +780,22 @@ class ChannelManager:
             return "Failed to fetch status."
 
         return "\n".join(lines)
+
+    # -- run lifecycle helpers ------------------------------------------------
+
+    async def _cancel_active_runs(self, client, thread_id: str) -> None:
+        """Cancel all active (running/pending) runs on a thread."""
+        try:
+            runs = await client.runs.list(thread_id)
+            for run in runs:
+                if run["status"] in ("running", "pending"):
+                    try:
+                        await client.runs.cancel(thread_id, run["run_id"])
+                        logger.info("[Manager] cancelled run %s on thread %s", run["run_id"], thread_id)
+                    except Exception:
+                        logger.warning("[Manager] failed to cancel run %s on thread %s", run["run_id"], thread_id, exc_info=True)
+        except Exception:
+            logger.warning("[Manager] failed to list runs for thread %s during cancel", thread_id, exc_info=True)
 
     # -- error helper ------------------------------------------------------
 

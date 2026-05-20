@@ -65,7 +65,7 @@ For each claim you are about to write, ask:
 
 ---
 
-## Specific Known Traps
+## Known Traps (Lessons from Past DD Rounds)
 
 ### Portfolio Performance Narratives
 
@@ -198,3 +198,64 @@ Reads a text file of DDQ questions (one per line) and creates a Markdown respons
    - If neither: mark as **[Management to confirm]**
 5. **Before sending**: run `verify-claim` on every factual statement in the document
 6. **Never fill gaps** with general knowledge, estimates, or assumptions
+
+---
+
+## Diligence Registry
+
+The central store for all diligence items across counterparties is:
+
+**Drive:** `Diligence Registry - Capital Markets - YYYYMMDD.xlsx` in `Debt/` root  
+**Debt/ root folder ID:** `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU`
+
+The registry has three tabs:
+- **Master Registry** — every DD item across all counterparties (Drive ID, status, owner, notes)
+- **Counterparty Summary** — one-row-per-lender stage/status overview
+- **Monthly Update Runbook** — 8-step procedure for the monthly refresh
+
+### Monthly Update Job
+
+Run on the 1st of each month (or when Brian asks):
+
+```bash
+# Dry run — discover new items, no rebuild/upload
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py --dry-run
+
+# Full refresh — discover + rebuild Excel + upload to Drive
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py
+
+# Rebuild without Drive upload
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py --no-upload
+```
+
+The refresh script:
+1. Reads the latest registry Excel in `C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/5480aa25-b99c-4e54-893f-0fadd433bbb5/user-data/outputs/` to get all known Drive IDs
+2. Crawls all active counterparty folders (BBVA DD, NB Diligence, FP Diligence, Vista, CIM, Covalto, Gramercy, Fasanara, Debt Root)
+3. Identifies NEW files not yet in the registry and RECENT files (last 45 days)
+4. Saves a `Diligence Refresh Summary - YYYYMMDD.txt` with actionable item list
+5. Rebuilds the registry Excel with today's date and uploads to Drive Debt/ root
+6. Logs a self-improvement episode if new items were found
+
+### Rebuilding the Registry from Scratch
+
+```bash
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/build_diligence_registry.py
+```
+
+### Counterparty Drive Folder IDs (active as of May 2026)
+
+| Counterparty | Folder | ID |
+|---|---|---|
+| BBVA | Due Diligence/ | 1pA5_GOqtHMTatJE5vIIYCwm-p742d5yT |
+| BBVA | Root | 12ns4FGnFiA6K3jH3h6cECJ2S8TD8irEf |
+| Neuberger Berman | Diligence/ | 19fmtr7f3714EGe9j8fYFBUHmZ7_aWRz0 |
+| Neuberger Berman | Legal/ | 18uJghRNqHmPLklxrRcMFl3as_JOB4Ss3 |
+| Francisco Partners | Diligence/ | 1Z82iHprfIyXKdxNeuvwMUSiYXeOCH67X |
+| Francisco Partners | Root | 1LdmMpCmQQ5Y1UUDoxNnAZ1toWIrytJp4 |
+| Vista Credit | Root | 1ah1x2cD_wIBQrRku7xuLelS52-D0L3I8 |
+| CIM | Diligence/ | 1bmZJORaHbvxqYeWAE-KCx4_cy4hZdtsE |
+| CIM | Legal/ | 1bdqcBmngeKXBkUf5x5QR6zcggTA5Abuc |
+| Covalto | Root | 11v7G67k_XSGVXn7igUTRJlVNeojmcpZO |
+| Gramercy | Root | 1k-R1fldUnw90kZpJCS7VR5Yu7SNu0TXn |
+| Fasanara | Root | 125_p3cKygzuyh-dbcarZjMP9HI74ohhx |
+| Debt Root | — | 1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU |

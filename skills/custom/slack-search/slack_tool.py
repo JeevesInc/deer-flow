@@ -1,32 +1,51 @@
 #!/usr/bin/env python3
-"""Slack search tool: search workspace messages and look up users by email.
+"""Slack tool: search workspace messages, look up users, and send DMs.
 
 Usage:
     python slack_tool.py search "query" [--days 30] [--count 20]
     python slack_tool.py lookup <email>
+    python slack_tool.py send <user-id-or-email> "message text"
 
-Requires env var: SLACK_USER_TOKEN (xoxp-... user token with search:read, users:read, users:read.email scopes)
+Search and lookup use the user token (SLACK_USER_TOKEN, xoxp-...).
+Send uses the bot token (SLACK_BOT_TOKEN, xoxb-...) so recipients see
+the bot's identity, not Brian's.
 """
 
 import os
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
 
-def _get_client():
-    token = os.environ.get('SLACK_USER_TOKEN')
-    if not token:
-        print("ERROR: Missing SLACK_USER_TOKEN environment variable.", file=sys.stderr)
-        print("Add a Slack user token (xoxp-...) with search:read, users:read, users:read.email scopes.", file=sys.stderr)
-        sys.exit(1)
-
+def _slack_sdk():
     try:
         from slack_sdk import WebClient
     except ImportError:
         import subprocess
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'slack_sdk'])
         from slack_sdk import WebClient
+    return WebClient
 
+
+def _get_client():
+    """User-token client for search/lookup (xoxp)."""
+    token = os.environ.get('SLACK_USER_TOKEN')
+    if not token:
+        print("ERROR: Missing SLACK_USER_TOKEN environment variable.", file=sys.stderr)
+        print("Add a Slack user token (xoxp-...) with search:read, users:read, users:read.email scopes.", file=sys.stderr)
+        sys.exit(1)
+    WebClient = _slack_sdk()
+    return WebClient(token=token)
+
+
+def _get_bot_client():
+    """Bot-token client for send (xoxb) so messages appear from the bot, not Brian."""
+    token = os.environ.get('SLACK_BOT_TOKEN')
+    if not token:
+        print("ERROR: Missing SLACK_BOT_TOKEN environment variable.", file=sys.stderr)
+        print("Add a Slack bot token (xoxb-...) with chat:write scope.", file=sys.stderr)
+        sys.exit(1)
+    WebClient = _slack_sdk()
     return WebClient(token=token)
 
 
@@ -116,6 +135,112 @@ def cmd_lookup(email):
     print(f'  Email:        {email}')
 
 
+def cmd_send(recipient, message):
+    """Send a DM via the bot identity. Recipient can be a Slack user_id (UXXX/WXXX) or an email.
+
+    Logs `[Slack outbound]` to bot_dm_history.log so the message shows up in
+    Grafana right away — no need to wait for the polling reconciliation.
+    """
+    if not message or not message.strip():
+        print("ERROR: empty message — refusing to send.", file=sys.stderr)
+        sys.exit(1)
+
+    bot = _get_bot_client()
+    owner_id = os.environ.get('SLACK_OWNER_USER_ID', '').strip()
+
+    # Resolve recipient → user_id
+    user_id = recipient.strip()
+    if '@' in user_id:
+        # Treat as email; needs user token for users.lookupByEmail
+        try:
+            user_client = _get_client()
+            resp = user_client.users_lookupByEmail(email=user_id)
+            user_id = resp['user']['id']
+        except Exception as e:
+            print(f"ERROR: couldn't look up {recipient}: {e}", file=sys.stderr)
+            sys.exit(1)
+    elif not (user_id.startswith('U') or user_id.startswith('W')):
+        print(f"ERROR: recipient must be a Slack user_id (UXXX/WXXX) or an email; got: {recipient}", file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve display name for the audit log (best-effort).
+    recipient_name = user_id
+    try:
+        info = bot.users_info(user=user_id)
+        prof = info.get('user', {}).get('profile', {})
+        recipient_name = prof.get('real_name') or prof.get('display_name') or user_id
+    except Exception:
+        pass
+
+    # Open the DM channel.
+    try:
+        dm = bot.conversations_open(users=[user_id])
+        channel_id = dm['channel']['id']
+    except Exception as e:
+        print(f"ERROR: couldn't open DM with {user_id} ({recipient_name}): {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Send.
+    try:
+        resp = bot.chat_postMessage(
+            channel=channel_id,
+            text=message,
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+        ts = resp.get('ts', '')
+    except Exception as e:
+        print(f"ERROR: chat_postMessage to {user_id} ({recipient_name}) failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve bot's own user_id for the audit line.
+    bot_user_id = ''
+    try:
+        bot_user_id = bot.auth_test().get('user_id', '')
+    except Exception:
+        pass
+
+    # Append to the unified bot DM audit log so Grafana sees it instantly.
+    # Walk up looking for the repo root (marker = start.sh) to be robust to
+    # being called from inside the sandbox path-mapped tree.
+    try:
+        log_path = None
+        cur = Path(__file__).resolve().parent
+        for _ in range(8):
+            if (cur / "start.sh").exists():
+                log_path = cur / "bot_dm_history.log"
+                break
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+        if log_path is None:
+            # Fall back to a path the cron also uses, derived absolutely.
+            log_path = Path("/c/Jeeves/redshift-bot/bot_dm_history.log")
+        text_for_log = message.replace('\n', '\\n').replace('\r', ' ')
+        try:
+            when = datetime.fromtimestamp(float(ts)).strftime('%Y-%m-%dT%H:%M:%S') if ts else ''
+        except Exception:
+            when = ts
+        line = (
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+            f"[Slack outbound] sent_at={when} ts={ts} "
+            f"to_user_id={user_id} to_user_name={recipient_name!r} "
+            f"channel={channel_id} bot_user_id={bot_user_id} "
+            f"sender=slack-send-tool "
+            f"text={message!r}"
+        )
+        with log_path.open('a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except Exception as e:
+        # Don't fail the send if logging fails.
+        print(f"WARN: audit log append failed: {e}", file=sys.stderr)
+
+    # Friendly stdout — the agent will read this back.
+    print(f"Sent to {recipient_name} ({user_id}) at {ts}. Logged for owner audit.")
+    if owner_id and user_id == owner_id:
+        print("(Note: this is the owner. The polling cron filters this out of the dashboard.)")
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -124,7 +249,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python slack_tool.py <command> [args]")
-        print("Commands: search, lookup")
+        print("Commands: search, lookup, send")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -153,6 +278,12 @@ def main():
             print('Usage: python slack_tool.py lookup <email>', file=sys.stderr)
             sys.exit(1)
         cmd_lookup(sys.argv[2])
+
+    elif command == 'send':
+        if len(sys.argv) < 4:
+            print('Usage: python slack_tool.py send <user-id-or-email> "message text"', file=sys.stderr)
+            sys.exit(1)
+        cmd_send(sys.argv[2], sys.argv[3])
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

@@ -12,6 +12,17 @@ allowed-tools:
 > **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
 
 
+## ⚠️ SOFOM Distribution Tape (Daily — F/12339 > F/12340)
+
+When asked to run the SOFOM distribution tape for Axel's daily distribution email, the file to generate and attach is **NOT** the Master BB. It is the **raw tape**:
+
+- **Filename:** `tape_sofom_daterange_{start_YYYYMMDD}_{end_YYYYMMDD}.xlsx`
+- **How:** Run `data_tape_sofom.sql` (one query per day using `'{}'\ format placeholder) for each of the 3 days: yesterday-2, yesterday-1, yesterday. Concat all rows. Save as above.
+- **Draft reply:** Gmail message ID from Axel's email, body = "tape attached, please review", attach the raw tape file.
+- **Never** attach `Jeeves SOFOM Borrowing Base - Master - *.xlsx` to this thread. That is a separate product.
+
+---
+
 ## Request Router
 
 Match the user's keywords to the correct pipeline. These are three DIFFERENT products — never substitute one for another.

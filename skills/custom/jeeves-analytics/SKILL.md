@@ -87,7 +87,7 @@ ORDER BY total_revenue DESC
 ## Rules
 
 - Always state the snapshot date in the response
-- MX balances are USD unless explicitly asked for MXN (default rate: 17.5)
+- MX balances are USD unless explicitly asked for MXN. Use `spot_rate` from loc_tape for conversion — do NOT hardcode an FX rate.
 - "Active" accounts = balance_usd > 0 AND charge_off_flag = false AND is_in_repayment = false
 - Revenue questions → use transactions_ssot.revenue_usd
 - Spend questions → use loc_tape.disbursement_amount_usd

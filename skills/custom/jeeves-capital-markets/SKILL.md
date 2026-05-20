@@ -1,6 +1,6 @@
 ---
 name: jeeves-capital-markets
-description: Use this skill when the user asks about capital markets files, lender documents, portfolio reports, Google Drive folder navigation, or asks "where is [X]?" in the Capital Markets workspace. Also use when the user references a lender name (Castlelake, Atalaya, Victory Park, Fasanara, etc.) or asks for a monthly report.
+description: Use this skill when the user asks about capital markets files, lender documents, portfolio reports, Google Drive folder navigation, or asks "where is [X]?" in the Capital Markets workspace. Also use when the user references a lender or counterparty name, asks for a monthly report, or needs to find a credit agreement or term sheet.
 allowed-tools:
   - bash
   - read_file
@@ -21,82 +21,114 @@ The team's capital markets work lives in a shared Google Drive folder.
 | Folder | ID | What's inside | When to look here |
 |--------|----|---------------|-------------------|
 | `.archive/` | — | Old/deprecated files, prior deal versions | User asks for historical versions or "old" docs |
-| `.github/` | `1Vs2emp9jbSF3AbTqn6jkdqIHNIOy50yK` | Analytics repo: ~56 SQL files in `sql/`, credit models, Python scripts | User needs a SQL query template or analytics code. Load `jeeves-sql-library` skill for the full catalog. |
-| `Debt/` | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` | One subfolder per lending facility. Key subfolder: `CIM/` contains monthly period folders (`{YYYYMM}/`) each with `US/` (Bridge BBs) and `MX/` (SOFOM Master BBs) subdirectories. Also: credit agreements, amendments, data tapes, compliance certs, term sheets, legal docs | User references a lender name, asks about a credit facility, needs a contract, or asks to build a borrowing base |
+| `Daily Digest/` | `1q4pE0obMcrHOE0eQCh1M1ENhqaLW-wNg` | Revenue digest CSVs (MTD vs prior month) | User asks about daily revenue tracking |
+| `Debt/` | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` | One subfolder per lending counterparty. Key subfolder: `CIM/Reporting/` contains monthly period folders (`{YYYYMM}/`) with US (Bridge BBs) and MX (SOFOM) data tapes. Also: credit agreements, amendments, term sheets, legal docs, diligence materials | User references a lender name, asks about a credit facility, needs a contract, or asks to build a borrowing base |
 | `Insurance/` | — | Insurance policies, certificates, renewal docs | User asks about insurance coverage |
 | `Portfolio Reporting/` | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` | Monthly subfolders (`YYYYMM`). Inside each: portfolio reports, data tape snapshots, charts, board materials | User asks for a monthly report, portfolio snapshot, or board deck |
-| `Strategy/` | — | Strategic planning docs, market analysis, new product proposals | User asks about strategy or planning materials |
+| `Strategy/` | — | Strategic planning docs, market analysis | User asks about strategy or planning materials |
 | `Treasury/` | — | Cash management, bank account docs, FX hedging, liquidity reports | User asks about treasury operations |
 | `Vendors/` | — | Vendor contracts, SOWs, pricing proposals | User asks about a vendor or service provider |
 
-## Lenders in Debt/
+## Counterparties in Debt/
 
-Each lender has its own subfolder under `Debt/`. The typical structure inside a lender folder:
+Each counterparty has its own subfolder under `Debt/`. The typical structure:
 
 ```
-Debt/{Lender}/
-├── Credit Agreement/     — Executed agreements, amendments
-├── Data Tapes/           — Periodic data tape deliveries
-├── Compliance/           — Compliance certificates, covenants
-├── Term Sheets/          — Proposed and executed term sheets
-├── Correspondence/       — Key emails, memos
+Debt/{Counterparty}/
+├── Diligence/        — DD materials, trackers, data packages
+├── Legal/            — Credit agreements, amendments, term sheets
+├── ~BROMIUM/         — Encrypted/sensitive copies
 └── (other docs)
 ```
 
-Known lenders with active folders:
+### Active Facilities
 
-| Lender | Notes |
-|--------|-------|
-| Castlelake | Senior lender |
-| Atalaya | Credit facility |
-| Victory Park Capital (VPC) | Credit facility |
-| Fasanara | Credit facility |
-| *(others)* | Browse `Debt/` folder to discover additional lenders |
+| Counterparty | Status | Key People / Counsel | Notes |
+|---|---|---|---|
+| **CIM** | Primary facility — active | Alejandra Granados (CIM), Goodwin (legal), CXC/Monex (MX SPV trustee/servicer) | Bridge Loan Agreement, 5th Amendment in progress. Monthly reporting under `CIM/Reporting/{YYYYMM}/`. MX recycling operations with CXC (Gustavo Villarreal, Iván Mendez) and Monex (Rodrigo Cue, Lizbeth Caballero). |
+| **Neuberger Berman (NB)** | New facility — diligence | Goodwin (legal), BU Colombia (local counsel) | Colombia SPV credit facility. Active diligence (April-May 2026). Financial forecasts, collateral proposal, background checks in progress. Compare docs: `Analysis - NB vs CIM*.md` in Debt/ root. |
 
-To find a specific lender's folder, list the Debt directory:
+### Active Negotiations
 
-```bash
-python /mnt/skills/custom/google-drive/list_drive_folder.py "1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU"
+| Counterparty | Status | Notes |
+|---|---|---|
+| **BBVA** | DD + legal docs | SBLC + overdraft + revolving. Due diligence tracker (April 2026). White & Case (counsel). |
+| **Vista Credit** | DDQ in progress | DDQ list, data package, tracker (April 2026). |
+| **Covalto** | Term sheet negotiation | Secured facility. Multiple redline rounds (March-April 2026). |
+| **Fasanara** | Term sheet negotiation | Credit facility terms. Q&A + redlines (March-April 2026). |
+| **Gramercy** | Term sheet negotiation | Corp facility. Redlines (March-April 2026). |
+
+### Data Room / Early Stage
+
+| Counterparty | Status | Notes |
+|---|---|---|
+| **i80** | Data room shared | Corporate deck, data tape, financials (Feb 2026). |
+| **Accial** | Term sheet | March 2026. |
+| **Lendable** | NDA only | Feb 2026. |
+| **Rivonia Road** | NDA only | March 2026. |
+| **PFG** | NDA only | Feb 2026. |
+| **UBS** | NDA + discussion | Jan-March 2025. |
+| **BTG AM** | Q&A stage | NDA + Q&A (Jan 2025). |
+
+### Legacy / Closed
+
+| Counterparty | Notes |
+|---|---|
+| **PSC-Atalaya** | Legacy facility (2022-2023). Forbearance, paydowns, compliance certs. Fully wound down. |
+| **PSC** | Legacy (2022-2023). Closing docs, invoices, funding requests. |
+| **GS (Goldman Sachs)** | Historical warehouse facility (2022). DD materials, legal docs. |
+| **Empirica** | NDA only (Oct 2024). |
+
+### Cross-Counterparty Analysis
+
+The Debt/ root folder contains comparison documents:
+- `Analysis - Lender Term Sheet Comparison - 20260401.xlsx`
+- `Analysis - CIM vs NB Colombia Term Sheet - 20260410.xlsx`
+- `Analysis - NB vs CIM (Bridge + CO SPV) - 20260430.md`
+- `Summary - Facility Overview VDR - 20260423.docx`
+
+## CIM Reporting Structure
+
+CIM is the only active reporting lender. Monthly data tapes and BBs go here:
+
+```
+Debt/CIM/Reporting/{YYYYMM}/
 ```
 
-Then drill into the lender's subfolder to find specific documents.
+Folders exist from 202312 through 202605. To find the latest:
+
+```bash
+python /mnt/skills/custom/google-drive/list_drive_folder.py "1oDi6HjzArnX_jPQbI9UfEs4R5DC9TTrA"
+```
+
+Other CIM subfolders: `Audit/`, `Diligence/` (CO SPV, Corp Credit, MX SPV), `Legal/` (Bridge Facility, Colombia SPV, Mexico SPV), `Modelling/`, `Vendors/` (CxC, Trustee).
 
 ## Portfolio Reporting
 
-Monthly report folders follow the `YYYYMM` naming convention (e.g., `202603` for March 2026).
-
-To find the latest report folder:
+Monthly report folders follow the `YYYYMM` naming convention (e.g., `202605` for May 2026).
 
 ```bash
 python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
 ```
 
-The last entry (sorted alphabetically) will be the most recent month.
+The last entry (sorted alphabetically) will be the most recent month. Also contains a `Vintage/` subfolder.
 
 ## Where to save files
 
-When the agent generates output files, upload them to the **correct location** in the workspace — not just the generic DeerFlow Output folder.
-
 | Output type | Save to | How |
 |-------------|---------|-----|
-| US Borrowing Base (Bridge) | `Debt/CIM/{YYYYMM}/US/` | Browse CIM to find the month's US folder ID |
-| MX Borrowing Base (SOFOM) | `Debt/CIM/{YYYYMM}/MX/` | Browse CIM to find the month's MX folder ID |
-| Lender data tape | `Debt/{Lender}/Data Tapes/` | List the lender folder to find the Data Tapes subfolder ID, then `upload_to_drive.py <file> --folder <ID>` |
+| US Borrowing Base (Bridge) | `Debt/CIM/Reporting/{YYYYMM}/` | Browse CIM/Reporting to find the month's folder ID |
+| MX Borrowing Base (SOFOM) | `Debt/CIM/Reporting/{YYYYMM}/` | Same folder as US BB |
+| Lender data tape | `Debt/{Counterparty}/Diligence/` or `Data Tapes/` | List the counterparty folder to find the right subfolder |
 | Portfolio report / board deck | `Portfolio Reporting/{YYYYMM}/` | List Portfolio Reporting to find the month's folder ID, create the month folder first if it doesn't exist |
-| Redline / contract markup | `Debt/{Lender}/` (same subfolder as the source doc) | Upload next to the original document |
-| SQL query / analytics code | `DeerFlow Output/` (default) | General outputs that don't belong to a specific folder |
-| Ad-hoc analysis or one-off export | `DeerFlow Output/` (default) | Use default when there's no natural home |
+| Redline / contract markup | `Debt/{Counterparty}/` (same subfolder as the source doc) | Upload next to the original document |
+| Term sheet comparison | `Debt/` root | Cross-counterparty analysis goes in the Debt root |
+| Ad-hoc analysis or one-off export | `DeerFlow Output/` (default) | General outputs that don't belong to a specific folder |
 
 **Upload to a specific folder:**
 ```bash
 python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/outputs/<filename>" --folder "<TARGET_FOLDER_ID>"
 ```
-
-**Workflow for saving to the right place:**
-1. Determine what type of output you're producing
-2. Browse the Drive to find the correct target folder ID (use `list_drive_folder.py`)
-3. Upload with `--folder <ID>`
-4. If the correct subfolder doesn't exist yet, upload to the nearest parent and note the location
 
 ## Navigation Commands
 
@@ -127,4 +159,4 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "<LOCAL_FILE>" --folde
 - Summarize rather than echo large files — the user wants insights, not raw text
 - Always provide Google Drive links when referencing files: `https://drive.google.com/file/d/{ID}/view`
 - When a folder ID is unknown, start at the workspace root and navigate down
-- For SQL queries, load the `jeeves-sql-library` skill instead
+- For SQL queries, load the `cfo-org-kb` skill instead — all SQL templates are local now

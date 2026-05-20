@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 7,
+      "applications": 8,
       "created": "2026-04-07",
-      "last_applied": "2026-04-28T01:37:44.491452+00:00",
+      "last_applied": "2026-05-07T00:40:41.972429+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -366,6 +366,310 @@
       "solution": "",
       "target_skills": [
         "gmail"
+      ]
+    },
+    "pat-2026-05-06-024": {
+      "id": "pat-2026-05-06-024",
+      "name": "Jeeves does NOT use Sigma. Tools confirmed are Metabase. Nev",
+      "source": "ep-2026-05-06-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-06",
+      "last_applied": "2026-05-06T17:17:21.362994+00:00",
+      "category": "general",
+      "pattern": "Jeeves does NOT use Sigma. Tools confirmed are Metabase. Never assert specific tooling unless Brian has confirmed it. When in doubt, omit.",
+      "problem": "Drafting a Linear comment reply on behalf of Brian, mentioned Sigma as a tool Jeeves uses",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-05-07-025": {
+      "id": "pat-2026-05-07-025",
+      "name": "Drive API comments.create with anchor field is a known broke",
+      "source": "ep-2026-05-07-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-07",
+      "last_applied": "2026-05-07T00:38:45.492541+00:00",
+      "category": "general",
+      "pattern": "Drive API comments.create with anchor field is a known broken bug - always shows original content deleted in Docs UI. The correct approach is Playwright browser automation: (1) one-time login via launch(headless=False) + save context.storage_state() to C:/Users/BrianMauck/AppData/Local/Temp/playwright_google_session.json, (2) future sessions load storage_state=SESSION_PATH in new_context(), (3) use Ctrl+F to find text, Escape to close find bar (cursor lands on found text), Ctrl+Alt+M to open comment, paste via clipboard, Ctrl+Enter to submit. Chrome profile at default path cannot be used directly with Playwright - Chrome blocks CDP on default profile. Must kill Chrome processes first with psutil, then copy profile or use saved session state. v20 cookie encryption (Chrome 127+) cannot be bypassed - only option is to have user log in once to a fresh Playwright browser and save session state.",
+      "problem": "Needed to add anchored inline comments to a Google Doc programmatically",
+      "solution": "",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-05-08-026": {
+      "id": "pat-2026-05-08-026",
+      "name": "File naming convention is STRICTLY: {Category} - {Descriptor",
+      "source": "ep-2026-05-08-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-08",
+      "last_applied": "2026-05-08T03:26:49.442755+00:00",
+      "category": "general",
+      "pattern": "File naming convention is STRICTLY: {Category} - {Descriptor} - {YYYYMMDD}.{ext} with title case and ` - ` (space-dash-space) separators. Never use underscores. Example: Collections Report - RPP With Future Installments - 20260507.xlsx",
+      "problem": "Generated output file RPP_Report_With_Future_Installments_20260507.xlsx using underscores instead of the required dash-space separator format",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-05-08-027": {
+      "id": "pat-2026-05-08-027",
+      "name": "ALWAYS load cfo-org-kb and use loc_acct_rollforward.sql for ",
+      "source": "ep-2026-05-08-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-08",
+      "last_applied": "2026-05-08T04:52:35.472016+00:00",
+      "category": "general",
+      "pattern": "ALWAYS load cfo-org-kb and use loc_acct_rollforward.sql for any rollforward request. The standard template properly handles: BOP/EOP snapshots on exact dates, card vs JeevesPay disbursement split, repayment exits, currency switch adjustments, and a reconciliation diff check. An ad-hoc rollforward will miss at least some of these. Brian caught this in review.",
+      "problem": "Built FP diligence rollforward for Francisco Partners DD package. Used an ad-hoc inline SQL query instead of checking cfo-org-kb first.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-05-08-028": {
+      "id": "pat-2026-05-08-028",
+      "name": "Registry lives at Diligence Registry - Capital Markets - YYY",
+      "source": "ep-2026-05-08-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-08",
+      "last_applied": "2026-05-08T05:34:55.293743+00:00",
+      "category": "general",
+      "pattern": "Registry lives at Diligence Registry - Capital Markets - YYYYMMDD.xlsx in Drive Debt/ root (1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU). Three tabs: Master Registry, Counterparty Summary, Monthly Update Runbook. Monthly job: diligence_registry_refresh.py in jeeves-diligence skill - crawls all active counterparty folders, diffs against known IDs, outputs Refresh Summary txt, rebuilds Excel, uploads to Drive. Build script: build_diligence_registry.py. Run on 1st of each month.",
+      "problem": "Brian asked for a central diligence registry covering all counterparties touched in the last 6 months, plus a monthly auto-update job",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-05-08-029": {
+      "id": "pat-2026-05-08-029",
+      "name": "The correct rollforward query is in jeeves-borrowing-base/sq",
+      "source": "ep-2026-05-08-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-08",
+      "last_applied": "2026-05-08T15:45:40.190783+00:00",
+      "category": "general",
+      "pattern": "The correct rollforward query is in jeeves-borrowing-base/sql/loc_acct_rollforward.sql. It includes fee_amount_usd (sum(fee_amount * spot_rate)) in both the transactions CTE and intra_period_transactions formula. The cfo-org-kb version is missing this field, causing the diff. Always use the borrowing-base version for any diligence rollforward.",
+      "problem": "Built FP diligence portfolio rollforward. Used cfo-org-kb/sql/loc_acct_rollforward.sql which produced large diffs at the account level.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-05-12-030": {
+      "id": "pat-2026-05-12-030",
+      "name": "For the daily SOFOM distribution reply, NEVER attach the Mas",
+      "source": "ep-2026-05-12-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-12",
+      "last_applied": "2026-05-12T16:25:33.530211+00:00",
+      "category": "general",
+      "pattern": "For the daily SOFOM distribution reply, NEVER attach the Master BB. Always attach the raw tape file: tape_sofom_daterange_{start}_{end}.xlsx generated from data_tape_sofom.sql",
+      "problem": "Asked to run the SOFOM distribution tape for the F/12339>F/12340 daily distribution email",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-12-031": {
+      "id": "pat-2026-05-12-031",
+      "name": "Always extract just the email address via email.utils.parsea",
+      "source": "ep-2026-05-12-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-12",
+      "last_applied": "2026-05-12T17:00:23.205438+00:00",
+      "category": "general",
+      "pattern": "Always extract just the email address via email.utils.parseaddr(orig_from)[1] when building the To field for a draft reply. Never fall back to draft-new \u2014 fix the encoding and retry threaded. Getting a non-threaded reply is unacceptable.",
+      "problem": "draft reply failed with 400 Invalid To header when sender name had special/accented chars (Gustavo Villarreal Garc\u00eda De Le\u00f3n)",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-12-032": {
+      "id": "pat-2026-05-12-032",
+      "name": "Do NOT surface automated transactional emails to Brian \u2014 thi",
+      "source": "ep-2026-05-12-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-12",
+      "last_applied": "2026-05-12T17:07:01.802644+00:00",
+      "category": "general",
+      "pattern": "Do NOT surface automated transactional emails to Brian \u2014 this includes Monex digital signature notifications (from ti_firma.digital@monex.com.mx or similar), process initiation alerts, and other automated system emails that require no action from Brian.",
+      "problem": "User was notified about a Monex digital signature process email (ti_firma.digital@monex.com.mx). User said they do not want notifications about emails like this.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-12-033": {
+      "id": "pat-2026-05-12-033",
+      "name": "Do not infer direct collaboration from co-attendance at grou",
+      "source": "ep-2026-05-12-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-12",
+      "last_applied": "2026-05-12T20:20:57.719149+00:00",
+      "category": "general",
+      "pattern": "Do not infer direct collaboration from co-attendance at group meetings. For capital markets work specifically, only attribute involvement if there is direct email, Slack, or document evidence of the person working on the deliverable. Pradeep Manoharan = not a capital markets contact.",
+      "problem": "Dossier for Agent Office Hours meeting prep attributed capital markets work (Vista/Francisco Partners data tape, NB CoR breakdown) to Pradeep Manoharan",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-05-12-034": {
+      "id": "pat-2026-05-12-034",
+      "name": "MX BB for May 2026 goes in CIM Reporting/202605/ (folder ID:",
+      "source": "ep-2026-05-12-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-12",
+      "last_applied": "2026-05-12T22:31:39.857293+00:00",
+      "category": "general",
+      "pattern": "MX BB for May 2026 goes in CIM Reporting/202605/ (folder ID: 1iuCA4QUyFLMrYUiXzCZDdT-t4IDdBQNL). The 202605 folder is flat \u2014 no MX subfolder. Always check the monthly subfolder first before uploading to root.",
+      "problem": "Uploaded MX SOFOM BB to wrong folder (CIM Reporting root) instead of 202605 subfolder",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-13-035": {
+      "id": "pat-2026-05-13-035",
+      "name": "For deterministic cron tasks (SQL query -> Excel -> Gmail dr",
+      "source": "ep-2026-05-13-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-13",
+      "last_applied": "2026-05-13T15:15:24.194092+00:00",
+      "category": "general",
+      "pattern": "For deterministic cron tasks (SQL query -> Excel -> Gmail draft), do the work directly in Python inside the cron function, not via LangGraph agent dispatch. The fix replaces run_sofom_distribution with direct psycopg2 + pandas + subprocess(gmail_tool.py) pipeline \u2014 no agent in the middle, no timeout risk. Agent dispatch is only appropriate for complex multi-step tasks requiring judgment, not mechanical pipelines.",
+      "problem": "SOFOM distribution tape failed silently \u2014 report_scheduler_cron.py dispatched task to LangGraph agent via _run_agent_task which timed out (20min limit) and returned None, triggering the :warning: alert",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-13-036": {
+      "id": "pat-2026-05-13-036",
+      "name": "For any document retrieval (PDFs, spreadsheets, etc.), alway",
+      "source": "ep-2026-05-13-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-13",
+      "last_applied": "2026-05-13T20:06:09.758456+00:00",
+      "category": "general",
+      "pattern": "For any document retrieval (PDFs, spreadsheets, etc.), always share the Google Drive link. Never use present_files. If the file is already in Drive, share that link directly. If it was just uploaded, share the upload link. present_files is not the right delivery mechanism for Brian.",
+      "problem": "Brian asked to see benefits summary docs. I used present_files to deliver PDFs as downloads instead of sharing Drive links.",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-05-15-037": {
+      "id": "pat-2026-05-15-037",
+      "name": "All required packages (mem0ai, sentence_transformers, qdrant",
+      "source": "ep-2026-05-15-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-15",
+      "last_applied": "2026-05-15T01:50:25.854146+00:00",
+      "category": "general",
+      "pattern": "All required packages (mem0ai, sentence_transformers, qdrant_client) were already installed. Two env vars required: TRANSFORMERS_OFFLINE=1 and HF_HUB_OFFLINE=1 (Zscaler blocks HuggingFace). MEM0_TELEMETRY=false required to prevent Qdrant lock conflict. search() API uses filters={user_id:...} not top-level user_id param. Store persists at $WORKSPACE_PATH/mem0_qdrant. 20 seed facts loaded from session context.",
+      "problem": "Brian asked to build a persistent memory system. Mem0 self-hosted was implemented with Haiku LLM + sentence-transformers/all-MiniLM-L6-v2 local embeddings + Qdrant embedded mode.",
+      "solution": "",
+      "target_skills": [
+        "mem0-memory"
+      ]
+    },
+    "pat-2026-05-19-038": {
+      "id": "pat-2026-05-19-038",
+      "name": "Replace master_customer_dm.companies_dm with raw_cos CTE fro",
+      "source": "ep-2026-05-19-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-19",
+      "last_applied": "2026-05-19T18:56:09.687163+00:00",
+      "category": "general",
+      "pattern": "Replace master_customer_dm.companies_dm with raw_cos CTE from dms_mysql_jeeves_raw.companies + credit_limits CTE from analytics_sandbox.credit_limit_usd_history. Same fix already in run_us_bb_v2.py. data_tape_sofom.sql was never updated. Fix unblocked 3 days of tape immediately.",
+      "problem": "MX SOFOM BB failing with QueryCanceled on data_tape_sofom.sql \u2014 companies_dm join causing WLM kills",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-19-039": {
+      "id": "pat-2026-05-19-039",
+      "name": "data_tape_sofom.sql must not use master_customer_dm.companie",
+      "source": "ep-2026-05-19-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-19",
+      "last_applied": "2026-05-19T18:56:30.417381+00:00",
+      "category": "general",
+      "pattern": "data_tape_sofom.sql must not use master_customer_dm.companies_dm. Apply the run_us_bb_v2.py fix: add raw_cos CTE from dms_mysql_jeeves_raw.companies (id->company_id, name, naicsindustryid->naics_industry_id, creditlineassignationdate->onboarding_date) and credit_limits CTE from analytics_sandbox.credit_limit_usd_history (latest row per company_id). Replace companies_dm LEFT JOIN with LEFT JOIN raw_cos rc + LEFT JOIN credit_limits cl. Column mappings: c.name->rc.name, c.credit_limit_usd->cl.credit_limit_usd, c.state_name->lt.state_name, c.city_name->lt.city_name, c.naics_industry_id->rc.naics_industry_id, c.credit_limit_approved_date->rc.onboarding_date. Patched SQL is in C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/ff11c954-2075-4ef5-85c8-cc6c25a6bd16/user-data/workspace/jeeves-borrowing-base/sql/data_tape_sofom.sql \u2014 run build_mx.py from that workspace copy until canonical skills file is updated. Same fix needed for data_tape.sql (US tape) if build_us.py ever breaks.",
+      "problem": "MX SOFOM BB query failing with psycopg2.errors.QueryCanceled on any date \u2014 data_tape_sofom.sql joins master_customer_dm.companies_dm which is causing WLM kills cluster-wide",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-20-040": {
+      "id": "pat-2026-05-20-040",
+      "name": "For files >20MB, always use the requests-based resumable upl",
+      "source": "ep-2026-05-20-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-20",
+      "last_applied": "2026-05-20T18:38:55.780914+00:00",
+      "category": "general",
+      "pattern": "For files >20MB, always use the requests-based resumable uploader, not upload_to_drive.py. Gmail attachment limit is 25MB \u2014 use Drive links in body for large files.",
+      "problem": "Upload of 50MB+ Excel file to Google Drive timed out with upload_to_drive.py (httplib2 SSL timeout)",
+      "solution": "Use requests library directly with Drive resumable upload API (8MB chunks, 120s timeout per chunk). Run with PYTHONPATH=C:/Jeeves/redshift-bot/deer-flow/skills/custom/_shared. Script saved at C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/a58cba4b-3dc8-41d8-8ece-afc8ece535a7/user-data/workspace/upload_resumable.py",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-05-20-041": {
+      "id": "pat-2026-05-20-041",
+      "name": "U09PQTZ5DHC in SOUL.md is incorrect for Brian - use U05B5HGN",
+      "source": "ep-2026-05-20-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-20",
+      "last_applied": "2026-05-20T20:59:21.727520+00:00",
+      "category": "general",
+      "pattern": "U09PQTZ5DHC in SOUL.md is incorrect for Brian - use U05B5HGNCN9. Verify via lookup when in doubt.",
+      "problem": "Dream #2: tried to DM Brian at U09PQTZ5DHC - failed with cannot_dm_bot",
+      "solution": "Always use U05B5HGNCN9 for Brian Mauck Slack DMs, or resolve via lookup before sending",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-05-20-042": {
+      "id": "pat-2026-05-20-042",
+      "name": "When Dreams run close together (same day), the consolidation",
+      "source": "ep-2026-05-20-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-20",
+      "last_applied": "2026-05-20T21:37:11.196209+00:00",
+      "category": "general",
+      "pattern": "When Dreams run close together (same day), the consolidation pass should be lighter \u2014 focus on net-new facts from the intervening session transcripts rather than re-deduplication",
+      "problem": "Dream #3 consolidation \u2014 STRATEGIC_CONTEXT.md was already clean from Dream #2; minimal deduplication needed this cycle",
+      "solution": "",
+      "target_skills": [
+        "general"
       ]
     }
   }

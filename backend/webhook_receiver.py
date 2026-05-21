@@ -80,6 +80,11 @@ MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
 CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001'  # fast + cheap for classification
 RUN_TIMEOUT = 20 * 60  # seconds
 
+# Proposal feedback loop — paths and config
+PROPOSAL_LOG_PATH = Path(__file__).resolve().parent / '.deer-flow' / 'proposal_log.jsonl'
+PROPOSAL_PATTERNS_USER_ID = 'proposal-patterns'  # mem0 user_id namespace
+PROPOSAL_PATTERN_INJECTION_LIMIT = 5  # top-N patterns injected per classify call
+
 logging.basicConfig(
     level=logging.INFO,
     format='[Webhook %(asctime)s] %(levelname)s %(message)s',
@@ -126,54 +131,84 @@ borrowing bases, and portfolio analytics. He works directly with the CFO (Alex M
 - goodwinlaw.com — Goodwin (Jeeves' counsel)
 - tryjeeves.com — Internal Jeeves (usually not actionable unless from Alex Melikian or leadership)
 
-## What IS actionable (Brian needs an agent to handle this)
-- A lender requesting data, a portfolio tape, a report, or documents → DISPATCH as "diligence"
-- A counterparty asking a specific question that requires pulling data → DISPATCH as "diligence"
-- A lender following up on an open item from a checklist → DISPATCH as "diligence"
-- A term sheet, amendment, or legal document sent FOR BRIAN'S REVIEW → DISPATCH as "legal_review"
-- A meeting request or scheduling ask from a counterparty → DISPATCH as "scheduling"
-- An urgent item with a deadline mentioned → DISPATCH with high priority
+## What IS actionable (Brian needs to do something, or have the agent do it)
+- Lender/counterparty asks for data, a tape, a report, or documents
+- Counterparty asks a specific question that requires Brian's input or pulling data
+- Lender follows up on an open checklist item
+- Term sheet, amendment, redline, or legal doc sent for Brian's review
+- Meeting request, scheduling ask, or proposed time from a counterparty
+- C-suite (Alex Melikian, CFO) asks for something
+- Anything with an explicit deadline
 
-## What is NOT actionable (alert Brian but don't dispatch an agent)
-- W&C, Goodwin, or Akin Gump sending documents TO a counterparty on Jeeves' behalf (outbound legal)
+## What is NOT actionable (skip — no Slack post)
+- W&C, Goodwin, or Akin Gump sending docs TO a counterparty on Jeeves' behalf (outbound legal)
+- External counsel updating each other without asking Brian for anything
 - Automated notifications, receipts, calendar invites, SaaS alerts
-- Internal Jeeves emails that aren't from C-suite
+- Internal Jeeves emails that aren't from leadership
 - Newsletters, marketing, LinkedIn, recruiter emails
-- NB / any counsel sending revised docs back to a counterparty (not requesting anything from Brian)
-- Jeeves' own counsel updating each other (not requesting anything from Brian)
 
 ## Decision framework
-Ask yourself: "Does Brian need to DO something, or does someone need to DO something for Brian?"
-- If Brian (or an agent on his behalf) needs to produce something → DISPATCH
-- If it's just FYI / outbound / automated → ALERT ONLY
-- If genuinely ambiguous → lean toward ALERT ONLY (don't waste agent capacity)
+Ask: "Is there something specific Brian (or an agent on his behalf) needs to do?"
+- If yes → actionable, and you MUST name the concrete next step
+- If it's just FYI / outbound / automated → not actionable
+- If ambiguous → not actionable (avoid noise)
+
+## When actionable, the proposed action must be:
+- ONE concrete next step, starting with a verb
+- Specific enough that the agent (or Brian) could execute it immediately
+- Examples of good actions:
+    "Pull the May MX SOFOM borrowing base and reply with the file attached"
+    "Confirm Tuesday 2pm meeting and add to calendar"
+    "Review the redlined SBLC and reply to David García with comments"
+    "Forward to Goodwin for review and ask for turnaround by Friday"
+    "Draft a short reply confirming the Aforo amount is still pending"
+- Bad actions (too vague — never produce these):
+    "Respond to the email"
+    "Handle this request"
+    "Follow up"
 """
 
 # ---------------------------------------------------------------------------
 # LLM Classifier
 # ---------------------------------------------------------------------------
 
-def classify_with_llm(source: str, sender: str, subject: str, body_preview: str, 
+def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
                        extra_context: str = '') -> dict:
     """
     Call Claude to classify the message. Returns:
     {
       "actionable": bool,
-      "action_type": "diligence" | "legal_review" | "scheduling" | "alert_only",
       "priority": "high" | "medium" | "low",
-      "task_description": str,   # what the agent should do (if actionable)
-      "reasoning": str,           # brief explanation
+      "category": str,          # free-form short label, 2-5 words (e.g. "BBVA data request", "NB legal review")
+      "summary": str,           # 1-2 sentences of what the email actually says
+      "proposed_action": str,   # ONE concrete verb-led next step (empty if not actionable)
+      "reasoning": str,         # brief explanation of the classification
     }
     """
     if not ANTHROPIC_API_KEY:
-        log.error('No ANTHROPIC_API_KEY — cannot classify, defaulting to alert_only')
+        log.error('No ANTHROPIC_API_KEY — cannot classify, defaulting to non-actionable')
         return _default_classification('No API key configured')
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
+    # Pull mem0-learned proposal patterns relevant to this sender/subject.
+    import re
+    sender_match = re.search(r'<([^>]+)>', sender)
+    sender_email = sender_match.group(1).lower() if sender_match else sender.strip().lower()
+    sender_domain = sender_email.rsplit('@', 1)[-1] if '@' in sender_email else ''
+    learned_patterns = _get_proposal_patterns(sender_email, sender_domain, subject)
+    patterns_block = ''
+    if learned_patterns:
+        bullets = '\n'.join(f'- {p}' for p in learned_patterns)
+        patterns_block = (
+            "\n\n## Learned patterns from past proposals (most relevant first)\n"
+            "These come from labeled feedback on prior proposals. Apply them when relevant:\n"
+            f"{bullets}\n"
+        )
+
     prompt = f"""You are a classifier for Brian Mauck's inbound communications.
 
-{ANALYST_CONTEXT}
+{ANALYST_CONTEXT}{patterns_block}
 
 ---
 
@@ -182,22 +217,22 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
 Source: {source}
 Sender: {sender}
 Subject: {subject}
-Preview: {body_preview[:1000]}
+Body: {body_preview[:2000]}
 {f"Additional context: {extra_context}" if extra_context else ""}
 
 ---
 
-Classify this message and respond with ONLY valid JSON in this exact format:
+Respond with ONLY valid JSON in this exact format:
 {{
   "actionable": true or false,
-  "action_type": "diligence" | "legal_review" | "scheduling" | "alert_only",
   "priority": "high" | "medium" | "low",
-  "task_description": "specific description of what the DeerFlow agent should do (leave empty string if not actionable)",
-  "reasoning": "1-2 sentence explanation"
+  "category": "2-5 word free-form label naming the counterparty + nature (e.g. 'BBVA data request', 'NB redline', 'CFO ask', 'CIM amendment')",
+  "summary": "1-2 sentences describing what the email actually says — the substance, not 'an email about X'. Name the counterparty, what they sent or asked, and any deadline. Do not quote the email verbatim.",
+  "proposed_action": "ONE concrete verb-led next step that Brian or the agent should take. Empty string if not actionable. Must be specific enough to execute immediately. Re-read the action guidance above before writing this.",
+  "reasoning": "1 sentence: why this classification"
 }}
 
-Be decisive. If it's outbound legal work (counsel sending docs TO a counterparty), set actionable=false.
-If a lender is requesting something from Brian, set actionable=true."""
+Be decisive. Outbound legal work from Jeeves' counsel → actionable=false. Inbound asks from lenders/counterparties/leadership → actionable=true with a concrete proposed_action."""
 
     try:
         response = client.messages.create(
@@ -212,8 +247,9 @@ If a lender is requesting something from Brian, set actionable=true."""
             if text.startswith('json'):
                 text = text[4:]
         result = json.loads(text.strip())
-        log.info('LLM classification: %s | priority=%s | %s',
-                 result.get('action_type'), result.get('priority'), result.get('reasoning', '')[:80])
+        log.info('LLM classification: actionable=%s | priority=%s | category=%s | %s',
+                 result.get('actionable'), result.get('priority'),
+                 result.get('category', ''), result.get('reasoning', '')[:80])
         return result
     except Exception as e:
         log.error('LLM classification failed: %s', e)
@@ -223,48 +259,127 @@ If a lender is requesting something from Brian, set actionable=true."""
 def _default_classification(reason: str) -> dict:
     return {
         'actionable': False,
-        'action_type': 'alert_only',
         'priority': 'low',
-        'task_description': '',
+        'category': 'unclassified',
+        'summary': '',
+        'proposed_action': '',
         'reasoning': f'Classification failed: {reason}',
     }
+
+
+# ---------------------------------------------------------------------------
+# Proposal feedback loop — logging + mem0 pattern injection
+# ---------------------------------------------------------------------------
+
+def _log_proposal(classification: dict, from_header: str, subject: str,
+                  gmail_msg_id: str, slack_post: dict) -> None:
+    """Append a record of this proposal to proposal_log.jsonl.
+
+    Joined later by proposal_learner.py with the Slack thread replies to
+    label outcomes and synthesize patterns.
+    """
+    import re
+    if not slack_post.get('ts'):
+        # No Slack post means nothing to pair with later — skip logging.
+        return
+
+    sender_match = re.search(r'<([^>]+)>', from_header)
+    sender_email = sender_match.group(1).lower() if sender_match else from_header.strip().lower()
+    sender_domain = sender_email.rsplit('@', 1)[-1] if '@' in sender_email else ''
+    sender_display = from_header.split('<')[0].strip() or sender_email
+
+    entry = {
+        'posted_at': datetime.now(timezone.utc).isoformat(),
+        'gmail_msg_id': gmail_msg_id,
+        'slack_channel': slack_post.get('channel', ''),
+        'slack_ts': slack_post.get('ts', ''),
+        'sender_email': sender_email,
+        'sender_domain': sender_domain,
+        'sender_display': sender_display,
+        'subject': subject,
+        'category': classification.get('category', ''),
+        'priority': classification.get('priority', ''),
+        'actionable': bool(classification.get('actionable')),
+        'summary': classification.get('summary', ''),
+        'proposed_action': classification.get('proposed_action', ''),
+        'reasoning': classification.get('reasoning', ''),
+    }
+
+    try:
+        PROPOSAL_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with PROPOSAL_LOG_PATH.open('a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + '\n')
+    except Exception as e:
+        log.error('Failed to write proposal_log entry: %s', e)
+
+
+def _get_proposal_patterns(sender_email: str, sender_domain: str, subject: str) -> list[str]:
+    """Query mem0 for proposal_pattern facts matching this sender/subject.
+
+    Returns top-N pattern strings, or empty list on any error (graceful degradation).
+    """
+    try:
+        # Add harness package to path so we can import the shared mem0 client.
+        _harness = Path(__file__).resolve().parent / 'packages' / 'harness'
+        if _harness.exists() and str(_harness) not in sys.path:
+            sys.path.insert(0, str(_harness))
+
+        from deerflow.agents.memory.mem0_store import get_mem0
+
+        m = get_mem0()
+        query = f"email from {sender_email} ({sender_domain}) re: {subject}"
+        result = m.search(
+            query=query,
+            filters={'user_id': PROPOSAL_PATTERNS_USER_ID},
+            limit=PROPOSAL_PATTERN_INJECTION_LIMIT,
+        )
+        hits = result.get('results', []) if isinstance(result, dict) else (result or [])
+        patterns = [h.get('memory', '').strip() for h in hits if h.get('memory')]
+        return [p for p in patterns if p]
+    except Exception as e:
+        log.warning('mem0 pattern lookup failed (continuing without): %s', e)
+        return []
 
 
 # ---------------------------------------------------------------------------
 # DeerFlow Dispatch
 # ---------------------------------------------------------------------------
 
-def dispatch_to_deerflow(classification: dict, source: str, sender: str, 
+def dispatch_to_deerflow(classification: dict, source: str, sender: str,
                           subject: str, raw_context: str) -> bool:
     """Fire a DeerFlow agent run for an actionable message."""
-    action_type = classification.get('action_type', 'general')
     priority = classification.get('priority', 'medium')
-    task_desc = classification.get('task_description', '')
+    category = classification.get('category', 'inbound')
+    summary = classification.get('summary', '')
+    proposed_action = classification.get('proposed_action', '')
 
-    prompt = f"""AUTONOMOUS TASK — {action_type.upper()} ({priority.upper()} PRIORITY)
+    prompt = f"""AUTONOMOUS TASK — {category} ({priority.upper()} PRIORITY)
 
 Source: {source}
 From: {sender}
 Subject: {subject}
 Received: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
 
-## What the classifier determined
-{task_desc}
+## Summary
+{summary}
+
+## Proposed action
+{proposed_action}
 
 ## Raw message context
 {raw_context[:3000]}
 
 ---
 
-Handle this autonomously. Read the full message/thread first, gather any needed data, 
+Handle this autonomously. Read the full message/thread first, gather any needed data,
 then produce the output. Post a summary to Slack when done.
 """
 
     notification = (
-        f"*{action_type.replace('_', ' ').title()} detected* ({priority} priority)\n"
+        f"*{category}* ({priority} priority)\n"
         f"From: {sender}\n"
         f"Subject: {subject}\n"
-        f"_{task_desc[:120]}_\n\n"
+        f"_{proposed_action[:140]}_\n\n"
         f"_Working on it..._"
     )
 
@@ -307,18 +422,21 @@ then produce the output. Post a summary to Slack when done.
 # Slack notifications
 # ---------------------------------------------------------------------------
 
-def _post_slack(text: str, blocks: list | None = None) -> None:
+def _post_slack(text: str, blocks: list | None = None) -> dict:
+    """Post to Brian's DM. Returns {channel, ts} on success, empty dict on failure."""
     if not SLACK_BOT_TOKEN or not SLACK_OWNER_USER_ID:
         log.warning('Slack not configured')
-        return
+        return {}
     try:
         from slack_sdk import WebClient
         client = WebClient(token=SLACK_BOT_TOKEN)
         dm = client.conversations_open(users=[SLACK_OWNER_USER_ID])
         channel_id = dm['channel']['id']
-        client.chat_postMessage(channel=channel_id, text=text, blocks=blocks)
+        resp = client.chat_postMessage(channel=channel_id, text=text, blocks=blocks)
+        return {'channel': channel_id, 'ts': resp.get('ts', '')}
     except Exception as e:
         log.error('Slack post failed: %s', e)
+        return {}
 
 
 def _post_email_alert(sender: str, subject: str, snippet: str, 
@@ -343,36 +461,44 @@ def _post_email_alert(sender: str, subject: str, snippet: str,
     _post_slack(text)
 
 
-def _post_action_proposal(from_header: str, subject: str, date: str,
-                          snippet: str, body_text: str, classification: dict,
-                          raw_context: str) -> None:
+def _post_action_proposal(from_header: str, subject: str, classification: dict,
+                          gmail_msg_id: str = '') -> dict:
     """
     Post an actionable email to Slack as a *proposal* — no auto-dispatch.
-    Brian replies in the thread to direct the agent (or just ignores it).
-    The full email body is included so the agent has context if Brian replies "go" etc.
+    Brian replies in the thread to direct the agent.
+
+    Format is intentionally tight: summary + one concrete proposed action.
+    The full email body is NOT included — if Brian approves, the agent can
+    fetch the body via the Gmail tool using the message id in the footer.
     """
-    action_type = classification.get('action_type', 'general')
     priority = classification.get('priority', 'medium')
-    task_desc = classification.get('task_description', '').strip()
+    category = classification.get('category', '').strip() or 'inbound'
+    summary = classification.get('summary', '').strip()
+    proposed_action = classification.get('proposed_action', '').strip()
     reasoning = classification.get('reasoning', '').strip()
 
     pri_icon = {'high': ':rotating_light:', 'medium': ':bell:', 'low': ':envelope:'}.get(priority, ':envelope:')
-    body_clip = (body_text or snippet)[:1500].strip()
 
-    text = (
-        f"{pri_icon} *Actionable email* — _{action_type.replace('_', ' ')} / {priority}_\n"
-        f"*From:* {from_header}\n"
-        f"*Subject:* {subject}\n"
-        f"*Date:* {date}\n\n"
-        f"*Proposed action:*\n>{task_desc or '(classifier did not propose a specific action)'}\n"
-    )
-    if reasoning:
-        text += f"_Why:_ {reasoning}\n"
-    text += (
-        f"\n*Email body:*\n```\n{body_clip}\n```\n"
-        f"_Reply in this thread with what you want done — e.g. \"go\", \"draft a reply\", \"pull the data first\"._"
-    )
-    _post_slack(text)
+    lines = [
+        f"{pri_icon} *{category}* — _{priority}_",
+        f"*From:* {from_header} — _{subject}_",
+        "",
+    ]
+    if summary:
+        lines.append(summary)
+        lines.append("")
+    if proposed_action:
+        lines.append(f"*Proposed action:* {proposed_action}")
+    else:
+        lines.append("*Proposed action:* _(classifier could not name a concrete step — reply with direction)_")
+    if reasoning and not proposed_action:
+        lines.append(f"_Why surfaced:_ {reasoning}")
+    lines.append("")
+    lines.append("_Reply in thread to direct the agent (e.g. \"go\", \"draft the reply\", \"not now\")._")
+    if gmail_msg_id:
+        lines.append(f"_gmail_msg_id: {gmail_msg_id}_")
+
+    return _post_slack("\n".join(lines))
 
 
 # ---------------------------------------------------------------------------
@@ -558,11 +684,9 @@ def _handle_gmail_message(msg: dict) -> None:
 
     # Actionable: post a PROPOSAL to Slack so Brian can approve/redirect before any dispatch.
     # No auto-dispatch — the agent runs only when Brian replies in the proposal thread.
-    raw_context = (
-        f"From: {from_header}\nSubject: {subject}\nDate: {date}\n\n"
-        f"{snippet}\n\n{body_text[:3000]}"
-    )
-    _post_action_proposal(from_header, subject, date, snippet, body_text, classification, raw_context)
+    gmail_msg_id = full.get('id', '') or meta.get('id', '')
+    slack_post = _post_action_proposal(from_header, subject, classification, gmail_msg_id)
+    _log_proposal(classification, from_header, subject, gmail_msg_id, slack_post)
 
 
 def _extract_gmail_body(full_msg: dict) -> str:
@@ -719,7 +843,7 @@ def _handle_slack_event(event: dict, body: dict) -> None:
     # Dispatch if actionable
     if classification.get('actionable'):
         raw_context = f"From: {sender_name}\nChannel: {channel}\n\n{text}"
-        dispatch_to_deerflow(classification, 'Slack', sender_name, 
+        dispatch_to_deerflow(classification, 'Slack', sender_name,
                              f'Slack: {text[:60]}...', raw_context)
     else:
         # For non-actionable Slack messages, just log (Slack itself handles the notification)

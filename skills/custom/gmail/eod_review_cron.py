@@ -49,7 +49,10 @@ EOD_HOUR = int(os.environ.get('EOD_REVIEW_HOUR', '17'))   # 5 PM
 CHECK_INTERVAL_SECS = 3600  # Check every hour, skip if not EOD time
 
 BRIAN_EMAIL    = 'brian.mauck@tryjeeves.com'
-BRIAN_SLACK_ID = 'U09PQTZ5DHC'
+# Resolve from env at module load. The bot's own user_id is U09PQTZ5DHC —
+# do NOT confuse the two; using the bot's ID here would surface DMs the bot
+# received (Anish/Chin/Kacper etc.) as if they were addressed to Brian.
+BRIAN_SLACK_ID = os.environ.get('SLACK_OWNER_USER_ID', '').strip() or 'U05B5HGNCN9'
 
 # ------------------------------------------------------------------ #
 # State                                                                #
@@ -217,8 +220,32 @@ def _build_eod_prompt(review_number: int) -> str:
 # Dispatch                                                             #
 # ------------------------------------------------------------------ #
 
+def _run_proposal_learner() -> None:
+    """Pair yesterday's proposals with their thread outcomes and synthesize
+    classifier learnings into mem0. Runs as part of the EOD cycle.
+
+    Failures here are logged and swallowed — the rest of EOD must still run.
+    """
+    try:
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from proposal_learner import run_daily as _proposal_run
+        summary = _proposal_run()
+        log.info("Proposal learner finished: %s", summary)
+    except Exception as e:
+        log.error("Proposal learner failed (non-fatal): %s", e)
+        traceback.print_exc()
+
+
 def run_eod_review() -> None:
     log.info("Starting EOD review...")
+
+    # Step 0: refine the email classifier from yesterday's labeled outcomes
+    # before drafting today's review. Runs synchronously; cheap (a few LLM
+    # calls). If it fails it does not block the EOD agent dispatch.
+    _run_proposal_learner()
+
     state = load_state()
 
     review_number = state.get('review_count', 0) + 1

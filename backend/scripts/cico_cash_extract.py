@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""cico_cash_extract.py
+======================
+Pull the most recent CICO daily balances email from Gmail (sender: Axel
+Orendain), OCR the inlined bank-balance screenshots via Claude Vision,
+and write structured cash data to .deer-flow/_cico_state.json.
+
+Categories mirror the HTML wireframe:
+  - Operating Accounts
+  - Credit (Card & Jeeves Pay)
+  - Self-funded Prepaid
+  - AP Accounts
+  - Restricted Deposits
+  - DACA + Pledged Countries (feeds US BB)
+
+Plus a currency rollup for CIM Reporting Cash.
+"""
+from __future__ import annotations
+
+import base64
+import io
+import json
+import logging
+import os
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from anthropic import Anthropic
+from dotenv import load_dotenv
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+STATE_FILE = BACKEND_DIR / ".deer-flow" / "_cico_state.json"
+load_dotenv(BACKEND_DIR / ".env")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger("cico")
+
+
+def _gmail_service():
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+        token_uri="https://oauth2.googleapis.com/token",
+    )
+    creds.refresh(Request())
+    return build("gmail", "v1", credentials=creds, cache_discovery=False)
+
+
+def _fetch_latest_cico(svc):
+    res = svc.users().messages().list(
+        userId="me", q="subject:CICO from:axel@tryjeeves.com", maxResults=1
+    ).execute()
+    msgs = res.get("messages", [])
+    if not msgs:
+        raise RuntimeError("No CICO emails found")
+    return svc.users().messages().get(userId="me", id=msgs[0]["id"], format="full").execute()
+
+
+def _collect_image_attachments(payload, out: list, svc, msg_id: str):
+    if payload.get("mimeType", "").startswith("image/"):
+        body = payload.get("body", {})
+        att_id = body.get("attachmentId")
+        if att_id:
+            att = svc.users().messages().attachments().get(
+                userId="me", messageId=msg_id, id=att_id
+            ).execute()
+            data = att.get("data", "")
+            if data:
+                out.append(base64.urlsafe_b64decode(data))
+    for part in payload.get("parts", []) or []:
+        _collect_image_attachments(part, out, svc, msg_id)
+
+
+
+# ── Second-pass prompt: extract named summary totals ─────────────────────────
+_TOTALS_PROMPT = (
+    "This is a screenshot from a Jeeves daily CICO cash report. Some images show "
+    "named summary lines like DACA + pledged countries, Total cash, "
+    "Total restricted deposits accounts balance, etc.\n\n"
+    "Extract ONLY these named summary totals. Return a single JSON object:\n"
+    "{\n"
+    "  daca_pledged_usd: <number or null>,\n"
+    "  total_cash_usd: <number or null>,\n"
+    "  total_restricted_usd: <number or null>,\n"
+    "  total_cash_plus_restricted_usd: <number or null>\n"
+    "}\n\n"
+    "Rules:\n"
+    "- The line labeled DACA + pledged countries maps to daca_pledged_usd.\n"
+    "- The line labeled Total cash (main subtotal excl restricted) maps to total_cash_usd.\n"
+    "- Total restricted deposits accounts balance maps to total_restricted_usd.\n"
+    "- Total cash + restricted deposits maps to total_cash_plus_restricted_usd.\n"
+    "- Output valid JSON with double-quoted keys, plain numbers, no commas in numbers.\n"
+    "- If a field is not visible in this image, return null for that field.\n"
+    "- No prose, no markdown fences, just the raw JSON object."
+)
+
+
+def _extract_summary_totals(client, images: list) -> dict:
+    """Second pass: scan all images for named summary lines.
+
+    The CICO email shows 'DACA + pledged countries' as a pre-computed subtotal
+    (e.g. $21.78M on 2026-06-08) that cannot be reconstructed from individual
+    account rows — Claude OCR classifies them as 'operating', not 'pledged'.
+    This pass reads the summary line directly from the image.
+    """
+    import re as _re
+    merged: dict = {}
+    for i, img_bytes in enumerate(images):
+        b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": b64},
+                    },
+                    {"type": "text", "text": _TOTALS_PROMPT},
+                ],
+            }],
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        text = _re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=_re.MULTILINE).strip()
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        for key in (
+            "daca_pledged_usd",
+            "total_cash_usd",
+            "total_restricted_usd",
+            "total_cash_plus_restricted_usd",
+        ):
+            if key not in merged and isinstance(data.get(key), (int, float)):
+                merged[key] = float(data[key])
+                log.info("  Summary pass img %d: %s = %.0f", i + 1, key, data[key])
+    return merged
+
+
+_OCR_PROMPT = """\
+This is a screenshot of Jeeves bank-account balances from a daily CICO cash \
+report. Extract each row as JSON and classify into categories. Return STRICTLY \
+a single JSON object with this schema:
+
+{
+  "rows": [
+    {"bank": "<name>", "account": "<last 4 or label>", "currency": "USD|MXN|BRL|COP|...", "balance_native": <number>, "balance_usd": <number or null>, "category": "operating|credit|prepaid|ap|restricted|pledged|cim_reporting"}
+  ]
+}
+
+Category rules:
+- "operating": BofA, Citibank, JPM, BBVA, BTG, Monex, STP, general operating accounts
+- "credit": Card & Jeeves Pay funding (Routefusion, Banco de Bogotá, Cobre, Davivienda)
+- "prepaid": Self-funded prepaid (Bridge, Airwallex, Marqeta, Stripe, Dlocal)
+- "ap": AP accounts (Mercury, Jeeves internal)
+- "restricted": PNC restricted, BTG restricted, Airwallex restricted (anything labelled "restricted")
+- "pledged": Accounts marked DACA, pledged, or that feed US BB
+- "cim_reporting": Currency breakdowns specifically labelled CIM Reporting
+
+If you can't classify confidently, default to "operating". Only include rows \
+with numeric balances. No prose, no markdown, just the JSON object.\
+"""
+
+
+def _ocr_image(client: Anthropic, img_bytes: bytes) -> list[dict]:
+    b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+    resp = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2000,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+                    {"type": "text", "text": _OCR_PROMPT},
+                ],
+            }
+        ],
+    )
+    text = "".join(b.text for b in resp.content if b.type == "text").strip()
+    # Strip code fences if present
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
+    try:
+        data = json.loads(text)
+        return data.get("rows", [])
+    except json.JSONDecodeError as e:
+        log.warning("OCR JSON parse failed: %s — first 200 chars: %r", e, text[:200])
+        return []
+
+
+def main() -> int:
+    svc = _gmail_service()
+    msg = _fetch_latest_cico(svc)
+    hdrs = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
+    subject = hdrs.get("Subject", "")
+    date = hdrs.get("Date", "")
+    log.info("Latest CICO email: %s (%s)", subject, date)
+
+    images: list[bytes] = []
+    _collect_image_attachments(msg["payload"], images, svc, msg["id"])
+    log.info("Found %d image attachments", len(images))
+    if not images:
+        log.warning("No images to OCR; aborting")
+        return 1
+
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    all_rows: list[dict] = []
+    for i, img in enumerate(images):
+        log.info("OCR image %d/%d (%d bytes)", i + 1, len(images), len(img))
+        rows = _ocr_image(client, img)
+        log.info("  → %d rows extracted", len(rows))
+        all_rows.extend(rows)
+
+    # Approximate FX rates for balances without explicit USD equivalent.
+    # Sourced from the SOFOM hedge sheet (USDMXN ≈ 17.35) and standard
+    # market spot for others. Acceptable for at-a-glance dashboard.
+    _FX = {"USD": 1.0, "MXN": 1.0 / 17.35, "BRL": 1.0 / 5.5, "COP": 1.0 / 4100.0,
+           "EUR": 1.08, "GBP": 1.27, "CAD": 1.0 / 1.37, "ARS": 1.0 / 1000.0,
+           "CLP": 1.0 / 950.0, "PEN": 1.0 / 3.75}
+
+    # Aggregate by category
+    by_cat: dict[str, dict] = {}
+    for row in all_rows:
+        cat = row.get("category", "operating")
+        bal_usd = row.get("balance_usd")
+        if not isinstance(bal_usd, (int, float)):
+            # Convert from native if possible
+            native = row.get("balance_native")
+            ccy = row.get("currency", "USD")
+            if isinstance(native, (int, float)) and ccy in _FX:
+                bal_usd = round(native * _FX[ccy], 2)
+                row["balance_usd"] = bal_usd
+                row["balance_usd_estimated"] = True
+            else:
+                continue
+        entry = by_cat.setdefault(cat, {"balance_usd": 0.0, "rows": []})
+        entry["balance_usd"] += bal_usd
+        entry["rows"].append(row)
+    # Round
+    for c, e in by_cat.items():
+        e["balance_usd"] = round(e["balance_usd"], 2)
+
+    total_cash = sum(by_cat[c]["balance_usd"] for c in by_cat if c != "restricted")
+    restricted = by_cat.get("restricted", {}).get("balance_usd", 0.0)
+    pledged_daca = by_cat.get("pledged", {}).get("balance_usd", 0.0)
+
+    # ── Summary-totals override ────────────────────────────────────────────────
+    # "DACA + pledged countries" is a pre-computed subtotal in the email image.
+    # Individual rows don't carry a "pledged" tag so the row-sum is always 0.
+    # A second Claude pass reads the summary line directly from the images.
+    log.info("Running summary-totals extraction pass...")
+    summary = _extract_summary_totals(client, images)
+    if summary.get("daca_pledged_usd") is not None:
+        pledged_daca = summary["daca_pledged_usd"]
+        log.info("DACA/pledged from summary pass: $%.0f", pledged_daca)
+    if summary.get("total_cash_usd") is not None:
+        total_cash = summary["total_cash_usd"]
+        log.info("Total cash from summary pass: $%.0f", total_cash)
+    if summary.get("total_restricted_usd") is not None:
+        restricted = summary["total_restricted_usd"]
+        log.info("Restricted from summary pass: $%.0f", restricted)
+
+    state = {
+        "source_subject": subject,
+        "source_date": date,
+        "extracted_at": datetime.now().isoformat(),
+        "by_category": {c: by_cat[c]["balance_usd"] for c in by_cat},
+        "rows": all_rows,
+        "total_cash_usd": round(total_cash, 2),
+        "restricted_deposits_usd": round(restricted, 2),
+        "daca_pledged_usd": round(pledged_daca, 2),
+        "total_cash_plus_restricted_usd": round(total_cash + restricted, 2),
+    }
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    log.info("Wrote %s", STATE_FILE)
+    log.info("Total cash: $%.2f, Restricted: $%.2f, DACA/Pledged: $%.2f",
+             total_cash, restricted, pledged_daca)
+    return 0
+
+
+def run_loop():
+    """Cron entry — refresh daily after Axel typically sends (22:30 local).
+    Brian's gateway cron polls every 30 min."""
+    import time
+    interval = int(os.environ.get("CICO_REFRESH_SECONDS", "1800"))
+    log.info("cico-cash cron starting (interval=%ds)", interval)
+    while True:
+        try:
+            main()
+        except Exception as e:
+            log.exception("cico iteration failed: %s", e)
+        time.sleep(interval)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

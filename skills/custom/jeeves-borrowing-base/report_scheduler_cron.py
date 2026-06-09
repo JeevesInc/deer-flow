@@ -2,9 +2,9 @@
 """Scheduled Report Cron — auto-generates recurring reports via the agent.
 
 Schedule:
-  - 2nd–5th of each month, 8am+: Portfolio report for the 1st (retries if
-    process was down on the 2nd)
-  - Every Monday, 8am+:          US Borrowing Base (yesterday's date)
+  - 2nd of each month, 8am+:     Portfolio report for the 1st (once per month)
+  - Every weekday, 8am+:         US Borrowing Base (yesterday's date, for dashboard)
+  - Every day, 8:30am+ PST:      MX Borrowing Base (yesterday's date)
   - Weekdays only, hourly 8am+:  SOFOM distribution tape reply to Axel
 
 Mechanism:
@@ -72,8 +72,15 @@ def save_state(state: dict):
 
 
 def _state_completed_today(state: dict, key: str, today_str: str) -> bool:
-    """True only when the task completed successfully today (not just started)."""
-    return state.get(key) == today_str
+    """True when the task completed OR is already running today.
+
+    Treating '_running' as blocking prevents re-fires on process restart:
+    a new process has an empty _running_tasks dict, so the in-memory
+    thread check can't guard against duplicate launches — the state file
+    is the only persistent guard.
+    """
+    val = state.get(key, '')
+    return val == today_str or val == f"{today_str}_running"
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +188,7 @@ def _run_agent_task(task_message: str) -> str | None:
                     "input": {"messages": [{"role": "human", "content": task_message}]},
                     "config": {"recursion_limit": 500},
                     "context": {
+                        "thread_id": thread_id,
                         "thinking_enabled": True,
                         "is_plan_mode": False,
                         "subagent_enabled": False,
@@ -317,7 +325,7 @@ def run_sofom_distribution(message_id: str, subject: str):
     )
 
     log.info(f'Running SOFOM tape for {message_id} ({subject}), {three_days_ago}→{yesterday}')
-    _post_slack(f':mexico: Running SOFOM distribution tape for *{subject}*...')
+    _post_slack(f':flag-mx: Running SOFOM distribution tape for *{subject}*...')
 
     SKILLS = str(Path(__file__).resolve().parent.parent)
 
@@ -417,28 +425,239 @@ def run_portfolio_report():
         log.error("Portfolio report failed.")
 
 
-def run_weekly_bb():
-    """Trigger US Borrowing Base using yesterday's date."""
+def run_mx_bb():
+    """Trigger MX (SOFOM) Borrowing Base using yesterday's date. Runs daily at 8:30am PST."""
     yesterday = (datetime.now().date() - timedelta(days=1)).isoformat()
 
-    log.info(f"Triggering weekly US BB for {yesterday}")
-    _post_slack(f":calendar: Running scheduled *US Borrowing Base* for {yesterday}...")
+    log.info(f"Triggering daily MX BB for {yesterday}")
+    _post_slack(f":flag-mx: Running scheduled *MX Borrowing Base* for {yesterday}...")
 
     task = (
-        f"Run the US borrowing base for {yesterday}. "
-        f"Upload the completed file to Drive and share the link here."
+        f"Run the MX borrowing base for {yesterday}. "
+        f"Upload the completed file to Drive in the Debt/CIM folder and share the link here."
     )
     result = _run_agent_task(task)
 
     if result:
-        _post_slack(f":white_check_mark: *US Borrowing Base — {yesterday}*\n{result[:3000]}")
-        log.info("Weekly BB completed.")
+        _post_slack(f":white_check_mark: *MX Borrowing Base -- {yesterday}*\n{result[:3000]}")
+        log.info("MX BB completed.")
     else:
         _post_slack(
-            f":warning: *US Borrowing Base — {yesterday}* failed to generate. "
+            f":warning: *MX Borrowing Base -- {yesterday}* failed to generate. "
             f"Run it manually."
         )
-        log.error("Weekly BB failed.")
+        log.error("MX BB failed.")
+
+
+def run_weekly_bb():
+    """Build US Borrowing Base directly (no agent) to avoid 90-min LangGraph timeout.
+
+    Pipeline:
+      1. build_us.py  → $OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx
+      2. merge_template.py (most-recent Bridge BB on Drive as template)
+         → $OUTPUTS_PATH/Jeeves Bridge Borrowing Base - {YYYYMMDD}.xlsx
+      3. upload_to_drive.py → Debt/CIM/{YYYYMM}/ folder
+      4. Post Slack with Drive link + key stats
+    """
+    import subprocess, re as _re
+
+    yesterday   = (datetime.now().date() - timedelta(days=1)).isoformat()
+    yyyymmdd    = yesterday.replace('-', '')
+    yyyymm      = yyyymmdd[:6]
+    outputs_dir = os.environ.get('OUTPUTS_PATH', '/mnt/user-data/outputs')
+    skills_dir  = os.path.dirname(os.path.abspath(__file__))
+
+    log.info(f"run_weekly_bb: building US BB for {yesterday} (direct pipeline)")
+    _post_slack(f":calendar: Running scheduled *US Borrowing Base* for {yesterday}...")
+
+    def _run(cmd, step, timeout=600):
+        log.info(f"  [{step}] {' '.join(cmd)}")
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           encoding='utf-8', errors='replace', env=env)
+        out = ((r.stdout or '') + (r.stderr or '')).strip()
+        if r.returncode != 0:
+            raise RuntimeError(f"Step '{step}' failed (rc={r.returncode}):\n{out[-1000:]}")
+        log.info(f"  [{step}] OK: {out[-300:]}")
+        return out
+
+    try:
+        # ── 1. Generate raw data workbook ──────────────────────────────────
+        build_script = os.path.join(skills_dir, 'build_us.py')
+        _run([sys.executable, build_script, '--date', yesterday], 'build_us', timeout=900)
+
+        raw_wb = os.path.join(outputs_dir, f'Borrowing Base - US - {yyyymmdd}.xlsx')
+        if not os.path.exists(raw_wb):
+            raise FileNotFoundError(f"build_us.py did not produce {raw_wb}")
+
+        # ── 2. Find most-recent Bridge BB on Drive to use as template ──────
+        # CIM parent folder: 1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU
+        list_script = os.path.join(skills_dir, '..', 'google-drive', 'list_drive_folder.py')
+        listing = _run(
+            [sys.executable, list_script, '1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU',
+             '--recursive', '--max-depth', '4'],
+            'list_drive', timeout=120
+        ) or ""
+
+        # Pick the most-recent Jeeves Bridge BB file (by filename date, must be prior to today)
+        bridge_lines = [l for l in listing.splitlines() if 'Jeeves Bridge Borrowing Base' in l]
+        if not bridge_lines:
+            raise RuntimeError("No existing Bridge BB found on Drive to use as template")
+
+        best_date, template_id = '', ''
+        for line in bridge_lines:
+            m_date = _re.search(r'(\d{8})\.xlsx', line)
+            m_id   = _re.search(r'id:\s*([A-Za-z0-9_-]+)', line)
+            if m_date and m_id:
+                d = m_date.group(1)
+                if d < yyyymmdd and d > best_date:
+                    best_date, template_id = d, m_id.group(1)
+
+        if not template_id:
+            raise RuntimeError(f"Could not find a prior Bridge BB template on Drive")
+
+        log.info(f"  Template: Jeeves Bridge Borrowing Base - {best_date}.xlsx ({template_id})")
+
+        # ── 3. Merge into template ─────────────────────────────────────────
+        merge_script = os.path.join(skills_dir, 'merge_template.py')
+        final_wb = os.path.join(outputs_dir, f'Jeeves Bridge Borrowing Base - {yyyymmdd}.xlsx')
+        _run([sys.executable, merge_script, raw_wb, template_id, '--output', final_wb],
+             'merge_template', timeout=300)
+
+        if not os.path.exists(final_wb):
+            raise FileNotFoundError(f"merge_template.py did not produce {final_wb}")
+
+        # ── 4. Find the correct CIM month folder ──────────────────────────
+        month_folder_id = ''
+        for line in listing.splitlines():
+            m_f  = _re.search(r'\[folder\]\s+' + yyyymm + r'/', line)
+            m_id = _re.search(r'id:\s*([A-Za-z0-9_-]+)', line)
+            if m_f and m_id:
+                month_folder_id = m_id.group(1)
+                break
+
+        if not month_folder_id:
+            raise RuntimeError(f"Could not find the {yyyymm}/ folder under Debt/CIM in Drive")
+
+        log.info(f"  Upload target: {yyyymm}/ ({month_folder_id})")
+
+        # ── 5. Upload ──────────────────────────────────────────────────────
+        upload_script = os.path.join(skills_dir, '..', 'google-drive', 'upload_to_drive.py')
+        upload_out = _run(
+            [sys.executable, upload_script, final_wb, '--folder', month_folder_id],
+            'upload', timeout=120
+        )
+
+        drive_link = ''
+        m_link = _re.search(r'https://drive\.google\.com/\S+', upload_out)
+        if m_link:
+            drive_link = m_link.group(0).rstrip(')')
+
+        # ── 6. Parse key stats from raw workbook ──────────────────────────
+        try:
+            import openpyxl
+            wb_data = openpyxl.load_workbook(raw_wb, read_only=True, data_only=True)
+            ws = wb_data['eligibility_summary']
+            rows = list(ws.iter_rows(values_only=True))
+            eop_balance = elig_balance = elig_accounts = None
+            for row in rows[1:]:
+                if row and str(row[0]).startswith('EOP'):
+                    eop_balance   = row[2]
+                    elig_balance  = row[4]
+                    elig_accounts = row[3]
+                    break
+            wb_data.close()
+            stats = (
+                f"EOP balance: *${eop_balance:,.0f}*  |  "
+                f"Eligible: *${elig_balance:,.0f}* ({elig_accounts:,} accts)"
+                if eop_balance else ""
+            )
+        except Exception as e:
+            log.warning(f"Could not parse stats: {e}")
+            stats = ""
+
+        msg = (
+            f":white_check_mark: *US Borrowing Base — {yesterday}*\n"
+            + (f"{stats}\n" if stats else "")
+            + (f"<{drive_link}|Open in Drive>" if drive_link else f"Uploaded to Drive/CIM/{yyyymm}/")
+        )
+        _post_slack(msg)
+        log.info(f"run_weekly_bb: done. {stats}")
+
+    except Exception as exc:
+        log.error(f"run_weekly_bb failed: {exc}", exc_info=True)
+        _post_slack(
+            f":warning: *US Borrowing Base — {yesterday}* failed.\n"
+            f"`{exc}`\nRun manually: `build_us.py --date {yesterday}`"
+        )
+
+
+
+def run_morning_brief():
+    """Post daily Capital Markets brief to Brian's Slack DM (~8am weekdays)."""
+    import subprocess
+    log.info("Posting morning Capital Markets brief...")
+    script = str(pathlib.Path(__file__).resolve().parent.parent / 'scripts' / 'cm_morning_brief.py')
+    try:
+        result = subprocess.run(
+            [sys.executable, script],
+            capture_output=True, timeout=60
+        )
+        if result.returncode == 0:
+            log.info("Morning brief sent.")
+        else:
+            err = result.stderr.decode('utf-8', errors='replace')[:200]
+            log.error(f"Morning brief failed: {err}")
+            _post_slack(f":warning: Morning brief failed: `{err[:120]}`")
+    except Exception as e:
+        log.error(f"Morning brief error: {e}")
+
+
+def run_cico_dashboard():
+    """Full dashboard update — BB files, CICO email, Redshift strats, ops pulse.
+    Runs every weekday after 8am via dashboard_full_update.py.
+    """
+    import subprocess, re as _re
+    log.info("Triggering full dashboard update...")
+
+    script = os.path.normpath(os.path.join(
+        os.path.dirname(__file__), '..', 'jeeves-capital-markets', 'dashboard_full_update.py'
+    ))
+
+    if not os.path.exists(script):
+        log.error(f"dashboard_full_update.py not found at {script}")
+        _post_slack(":warning: Dashboard update failed — script not found.")
+        return
+
+    try:
+        result = subprocess.run(
+            [sys.executable, script],
+            capture_output=True, text=True, timeout=300
+        )
+        output = (result.stdout + result.stderr).strip()
+        log.info(f"Dashboard update output: {output[-500:]}")
+
+        m = _re.search(r'https://drive\.google\.com/\S+', output)
+        link = m.group(0) if m else None
+
+        if link:
+            _post_slack(
+                f":bar_chart: *Capital Markets Dashboard updated*\n"
+                f"CICO data refreshed from today's email.\n{link}"
+            )
+            log.info(f"CICO dashboard updated: {link}")
+        else:
+            _post_slack(
+                f":warning: CICO dashboard update ran but no Drive link found.\n"
+                f"```{output[-300:]}```"
+            )
+    except subprocess.TimeoutExpired:
+        log.error("CICO dashboard update timed out after 5 minutes")
+        _post_slack(":warning: CICO dashboard update timed out.")
+    except Exception as e:
+        log.error(f"CICO dashboard update error: {e}")
+        _post_slack(f":warning: CICO dashboard update error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -460,20 +679,43 @@ def run_loop():
             if now.hour >= 8:
 
                 # ── Portfolio report ──────────────────────────────────────
-                # Fire on days 2–5 of the month so a down-day on the 2nd
-                # doesn't silently miss the whole month.
+                # Fire once per month on the 2nd only.
                 month_key = f"portfolio_{now.strftime('%Y%m')}"
-                if (2 <= now.day <= 5
+                if (now.day == 2
                         and not _state_completed_today(state, month_key, today_str)
                         and not state.get(month_key, '').endswith('_running')):
                     _launch_background('portfolio_report', run_portfolio_report, month_key, today_str)
 
                 # ── US Borrowing Base ─────────────────────────────────────
-                # Mondays only.
-                if (weekday == 0
+                # Every weekday (used by dashboard).
+                if (not is_weekend
                         and not _state_completed_today(state, 'last_bb', today_str)
                         and not state.get('last_bb', '').endswith('_running')):
                     _launch_background('weekly_bb', run_weekly_bb, 'last_bb', today_str)
+
+                # ── MX Borrowing Base (SOFOM) ──────────────────
+                # Every day at 8:30am PST.
+                if (now.hour > 8 or (now.hour == 8 and now.minute >= 30)):
+                    if not _state_completed_today(state, 'last_mx_bb', today_str) \
+                            and not state.get('last_mx_bb', '').endswith('_running'):
+                        _launch_background('mx_bb', run_mx_bb, 'last_mx_bb', today_str)
+
+
+                # ── Morning Capital Markets Brief ─────────────────────────
+                # Weekdays only, once per day at 8am — posts BB + CICO snapshot to Brian.
+                if (not is_weekend
+                        and not _state_completed_today(state, 'last_morning_brief', today_str)
+                        and not state.get('last_morning_brief', '').endswith('_running')):
+                    _launch_background('morning_brief', run_morning_brief,
+                                       'last_morning_brief', today_str)
+
+                # ── CICO Dashboard ───────────────────────────────────────
+                # Weekdays only — update after 8am using previous day's email.
+                if (not is_weekend
+                        and not _state_completed_today(state, 'last_cico_dashboard', today_str)
+                        and not state.get('last_cico_dashboard', '').endswith('_running')):
+                    _launch_background('cico_dashboard', run_cico_dashboard,
+                                       'last_cico_dashboard', today_str)
 
                 # ── SOFOM distribution tape ───────────────────────────────
                 # Weekdays only — Axel doesn't send on weekends.
@@ -515,7 +757,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Report Scheduler Cron')
     parser.add_argument('mode', nargs='?',
-                        choices=['portfolio', 'bb', 'sofom-distribution'],
+                        choices=['portfolio', 'bb', 'mx-bb', 'sofom-distribution'],
                         help='Run once in this mode instead of looping')
     args = parser.parse_args()
 
@@ -523,6 +765,8 @@ if __name__ == '__main__':
         run_portfolio_report()
     elif args.mode == 'bb':
         run_weekly_bb()
+    elif args.mode == 'mx-bb':
+        run_mx_bb()
     elif args.mode == 'sofom-distribution':
         today_str = datetime.now().date().isoformat()
         eml = _find_axel_distribution_email(today_str)

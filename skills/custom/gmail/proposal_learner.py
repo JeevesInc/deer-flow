@@ -258,7 +258,10 @@ Label the outcome with EXACTLY one of:
                or paraphrases the proposed action affirmatively)
   redirected — Brian's reply gives different OR additional instructions; the agent
                should NOT just execute the proposed_action as-is
-  rejected   — Brian's reply declines ("skip", "not now", "no", "ignore")
+  rejected   — Brian's reply declines or says the email shouldn't have been surfaced.
+               Examples: "skip", "not now", "no", "ignore", "this isn't for me",
+               "this doesn't require a response", "fyi only", "not actionable",
+               "wrong person", "ignore this", "I don't need to act on this"
   ignored    — Brian never replied in the thread
 
 Also extract:
@@ -357,17 +360,37 @@ proposed vs what Brian actually wanted.
 
 ---
 
-Focus on REDIRECTED and IGNORED cases. They tell you where the classifier
-got it wrong. Extract at most {MAX_PATTERNS_PER_DAY} concrete patterns to apply next time.
+Focus on REJECTED, REDIRECTED, and IGNORED cases. They tell you where the
+classifier got it wrong. Extract at most {MAX_PATTERNS_PER_DAY} concrete patterns
+to apply next time.
 
-Each pattern must be ONE sentence, specific enough to act on. Examples of good patterns:
-  - "When David García at BBVA follows up on Aforo, Brian usually wants a holding reply rather than data pulled."
-  - "NB counsel-to-counsel CCs are not actionable even when Brian is on them."
-  - "Internal Jeeves stand-up summaries are FYI even when phrased as questions."
+CRITICAL — patterns must bind the EMAIL CONTEXT (topic, content type, what's
+being asked), not just the sender. A pattern that says "ignore emails from X"
+will blanket-block real future asks from X. Always pair sender with the
+specific kind of email being rejected/redirected.
 
-Bad patterns (do not produce these):
-  - "Be more careful with low-priority emails."
-  - "Read the email carefully."
+Look at Brian's actual reply to understand WHY he rejected/redirected:
+  - "this isn't for me"           → the wrong person was on the email; pattern: sender + topic
+  - "doesn't require a response"  → email is informational; pattern: sender + email TYPE
+  - "fyi only"                    → CC/BCC notification; pattern: sender + delivery shape
+  - "actually just acknowledge"   → action was over-scoped; pattern: sender + topic + lighter action
+
+Each pattern must be ONE sentence, specific enough to act on. Good patterns:
+  - "Status update CCs from David García at BBVA (no direct ask) are FYI, not actionable."
+  - "Calendar-share emails from neuberger.com domain are not actionable even when Brian is the recipient."
+  - "When BBVA mentions Aforo without a deadline, Brian wants a holding reply, not a data pull."
+  - "Counsel-to-counsel CCs on the NB facility (akingump.com → goodwinlaw.com) are not actionable."
+  - "Internal Jeeves stand-up summaries that mention Brian are FYI even when phrased as questions."
+
+BAD patterns (never produce these — too blunt):
+  - "Emails from David García are not actionable."                  ← blankets the sender
+  - "BBVA emails are FYI."                                          ← blankets the counterparty
+  - "Be more careful with low-priority emails."                     ← not concrete
+  - "Read the email carefully."                                     ← not actionable
+
+If Brian rejected one email from a sender who usually IS actionable, the
+pattern should describe the rejected SUB-TYPE (e.g. "CC updates with no ask"),
+not the sender as a whole.
 
 If no clear pattern emerges from this batch, output exactly: NONE
 

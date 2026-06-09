@@ -27,19 +27,37 @@ from deerflow.models import create_chat_model
 logger = logging.getLogger(__name__)
 
 
-def _resolve_model_name(requested_model_name: str | None = None) -> str:
-    """Resolve a runtime model name safely, falling back to default if invalid. Returns None if no models are configured."""
+def _resolve_model_name(requested_model_name: str | None = None, thinking_enabled: bool = False) -> str:
+    """Resolve a runtime model name, routing to reasoning_model when thinking is enabled.
+
+    Priority:
+    1. Explicit requested_model_name (validated against config)
+    2. reasoning_model from config.yaml (when thinking_enabled=True)
+    3. basic_model from config.yaml (when thinking_enabled=False)
+    4. models[0] as final fallback
+    """
     app_config = get_app_config()
-    default_model_name = app_config.models[0].name if app_config.models else None
-    if default_model_name is None:
+    if not app_config.models:
         raise ValueError("No chat models are configured. Please configure at least one model in config.yaml.")
 
-    if requested_model_name and app_config.get_model_config(requested_model_name):
-        return requested_model_name
+    # Honour explicit per-request model override
+    if requested_model_name:
+        if app_config.get_model_config(requested_model_name):
+            return requested_model_name
+        logger.warning(f"Model '{requested_model_name}' not found in config; falling back to routing rules.")
 
-    if requested_model_name and requested_model_name != default_model_name:
-        logger.warning(f"Model '{requested_model_name}' not found in config; fallback to default model '{default_model_name}'.")
-    return default_model_name
+    # Route by thinking mode using named config fields (basic_model / reasoning_model)
+    extra = app_config.model_extra or {}
+    if thinking_enabled:
+        named = extra.get("reasoning_model") or extra.get("coding_model")
+    else:
+        named = extra.get("basic_model")
+
+    if named and app_config.get_model_config(named):
+        return named
+
+    # Final fallback: first model in list
+    return app_config.models[0].name
 
 
 def _create_summarization_middleware() -> SummarizationMiddleware | None:
@@ -349,7 +367,7 @@ def make_lead_agent(config: RunnableConfig):
 
     agent_config = load_agent_config(agent_name) if not is_bootstrap else None
     # Custom agent model or fallback to global/default model resolution
-    agent_model_name = agent_config.model if agent_config and agent_config.model else _resolve_model_name()
+    agent_model_name = agent_config.model if agent_config and agent_config.model else _resolve_model_name(thinking_enabled=thinking_enabled)
 
     # Final model name resolution with request override, then agent config, then global default
     model_name = requested_model_name or agent_model_name

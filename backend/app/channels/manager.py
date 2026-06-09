@@ -29,6 +29,19 @@ DEFAULT_LANGGRAPH_URL = "http://localhost:2024"
 DEFAULT_GATEWAY_URL = "http://localhost:8001"
 DEFAULT_ASSISTANT_ID = "lead_agent"
 
+
+def _build_human_content(stamped_text: str, msg: InboundMessage) -> str | list[dict[str, Any]]:
+    """Build the HumanMessage content payload.
+
+    Returns a plain string for text-only messages, or a list of multimodal
+    content blocks (text + image_url) when the channel attached images via
+    ``metadata["image_blocks"]``.
+    """
+    image_blocks = msg.metadata.get("image_blocks") if msg.metadata else None
+    if not image_blocks:
+        return stamped_text
+    return [{"type": "text", "text": stamped_text}, *image_blocks]
+
 # Maximum wall-clock time (seconds) a single runs.wait() call may block
 # before the gateway cancels the run and returns an error to the user.
 RUN_TIMEOUT_SECONDS = 20 * 60  # 20 minutes
@@ -443,13 +456,15 @@ class ChannelManager:
             return
 
         stamped_text = stamp_message(msg.text)
-        logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r)", thread_id, msg.text[:100])
+        human_content = _build_human_content(stamped_text, msg)
+        n_images = len(msg.metadata.get("image_blocks", [])) if msg.metadata else 0
+        logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r, images=%d)", thread_id, msg.text[:100], n_images)
         try:
             result = await asyncio.wait_for(
                 client.runs.wait(
                     thread_id,
                     assistant_id,
-                    input={"messages": [{"role": "human", "content": stamped_text}]},
+                    input={"messages": [{"role": "human", "content": human_content}]},
                     config=run_config,
                     context=run_context,
                 ),
@@ -500,7 +515,9 @@ class ChannelManager:
         run_context: dict[str, Any],
     ) -> None:
         stamped_text = stamp_message(msg.text)
-        logger.info("[Manager] invoking runs.stream(thread_id=%s, text=%r)", thread_id, msg.text[:100])
+        human_content = _build_human_content(stamped_text, msg)
+        n_images = len(msg.metadata.get("image_blocks", [])) if msg.metadata else 0
+        logger.info("[Manager] invoking runs.stream(thread_id=%s, text=%r, images=%d)", thread_id, msg.text[:100], n_images)
 
         last_values: dict[str, Any] | list | None = None
         streamed_buffers: dict[str, str] = {}
@@ -554,7 +571,7 @@ class ChannelManager:
             async for chunk in client.runs.stream(
                 thread_id,
                 assistant_id,
-                input={"messages": [{"role": "human", "content": stamped_text}]},
+                input={"messages": [{"role": "human", "content": human_content}]},
                 config=run_config,
                 context=run_context,
                 stream_mode=["messages-tuple", "values"],

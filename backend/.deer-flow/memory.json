@@ -1,32 +1,32 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-05-20T22:06:45.239681Z",
+  "lastUpdated": "2026-06-09T22:07:16.939914Z",
   "user": {
     "workContext": {
       "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Work spans lender negotiations, analytics, ML, and structured credit. Key tools: Taktile, Redshift, Metabase, python-pptx, loc_tape, Linear, DeerFlow, LangGraph.",
-      "updatedAt": "2026-05-15T02:10:53.157407Z"
+      "updatedAt": "2026-06-09T20:34:47.106061Z"
     },
     "personalContext": {
-      "summary": "Direct, zero tolerance for hallucination or unrequested work. Requires AI to inspect actual data before writing queries. Payment amounts in loc_tape are negative; use WHERE payment_amount_usd < 0 and -SUM(). Always provide clickable Drive links. Output in Google Docs/Sheets.",
-      "updatedAt": "2026-05-19T22:33:51.175844Z"
+      "summary": "Direct, zero tolerance for hallucination or speculation without data. Always retrieve data — never reason about it. No workarounds; fix root causes. Expects browser automation attempted before declaring impossible. Prefers Fable 5 for coding and reasoning tasks.",
+      "updatedAt": "2026-06-09T18:33:05.051448Z"
     },
     "topOfMind": {
-      "summary": "1) NB diligence: ODD complete; draft docs expected next week; ping Melissa on MX warehouse\n2) BBVA/SBLC: Personal diligence docs for Dileep Thazhmon — draft reply to Brandon/Andres/Jorge staged, asking them to send directly to BBVA\n3) BBVA/CIM: 7 open commercial items from W&C\n4) CIM 5th Amendment: Section 7b cap dispute; Hayes Hyde (Goodwin litigator) engaged\n5) CBIZ audit: GL recons for RBC 8958, BCI 8291, BBVA 8927 blocking gate",
-      "updatedAt": "2026-05-20T22:06:45.232202Z"
+      "summary": "1) Vista diligence: PwC/Vista shared QoE workstream active\n2) NB: 3 agreed steps post Jun 8 call; close end of June\n3) GTV/Liquidity tension: potential end-of-month cash deficit\n4) BBVA SOFOM wind-down: internal sync Thu Jun 11\n5) Cap Markets dashboard: CICO→bank_accts wiring complete; daca_pledged_usd extraction still broken\n6) DeerFlow agent multi-laptop sync: memory.json to git; mem0_data via manual rsync; local uncommitted changes need pushing",
+      "updatedAt": "2026-06-09T22:07:16.930905Z"
     }
   },
   "history": {
     "recentMonths": {
-      "summary": "Active lender negotiations across NB, CIM, Gramercy, BBVA, Francisco Partners, and Vista Credit. NB: $100MM facility (expandable $150MM), SOFR+7.5%, 24mo; ODD completed May 20; draft legal docs expected following week. BBVA: $14MM SBLC in diligence; personal docs for Dileep Thazhmon requested by Daniel Alejandro Bernal; Brandon/Andres/Jorge asked to send directly to BBVA; 7 open commercial items flagged; W&C + Goodwin confirmed no CIM conflict. CIM 5th Amendment: Hayes Hyde (Goodwin litigator) engaged; Section 7b dispute and 5% prepayment fee active. CBIZ audit close-out blocked on GL reconciliations for three accounts. April 2026 SOFOM charge-offs confirmed at 4 companies, $62,507 USD.",
-      "updatedAt": "2026-05-20T22:06:45.232202Z"
+      "summary": "In June 2026, Brian built a Capital Markets intelligence surface: morning Slack brief plus localhost:8100 credit health dashboard covering BB snapshot, DQ 30+ trends, roll rate heatmap, NCO trend, and covenant tracker. Dashboard refactored to no-scroll 4-row layout. US BB pipeline extended with CICO email image extraction. Brian runs a local DeerFlow agent with Redshift, Slack, and Google integrations; memory portability via git-tracked memory.json and manual rsync of mem0_data SQLite. Agent repo has local uncommitted changes (capital-markets dashboard JSON, zscaler_reauth.py, start.sh, .gitignore) pending push for multi-laptop sync.",
+      "updatedAt": "2026-06-09T22:07:16.930905Z"
     },
     "earlierContext": {
       "summary": "",
       "updatedAt": ""
     },
     "longTermBackground": {
-      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Key stakeholders include Alexander Melikian (CFO/direct manager), Brandon McGathy (GC), Andres Leal, Jorge Hurrle, Kacper Chrobot (new hire), and Hayes Hyde (Goodwin litigator). Enforces strict standards: zero tolerance for fabrication, unrequested work, or over-explaining. Never include counterparty names in externally shared file names.",
-      "updatedAt": "2026-05-20T22:05:12.360796Z"
+      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Key stakeholders include Alexander Melikian (CFO), Brandon McGathy (GC), Jorge Hurrle, Kacper Chrobot, Hayes Hyde, Melissa Schwab Wright, Tyler Garaffa (Goodwin), Avia Cohen (Goodwin), Victor Garrido, Joe Raia, Jay Berger (NB), Dryden Liddle (CIM), Luis Antonio Gomez Lara (BBVA), Axel García Ortiz (Pérez Lloréa), Gustavo Villarreal (CXC), Eugenio Bernal (BBVA), Aaron Terwey (Proskauer), Rodrigo Cue (Monex), Jorge Olivares (W&C), Max Fernandez (NB), Lu Zhengyuan (NB deal lead)...",
+      "updatedAt": "2026-06-09T20:16:43.670686Z"
     }
   }
 }

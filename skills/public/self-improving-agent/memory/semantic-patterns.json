@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 8,
+      "applications": 11,
       "created": "2026-04-07",
-      "last_applied": "2026-05-07T00:40:41.972429+00:00",
+      "last_applied": "2026-06-05T01:08:22.840298+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -670,6 +670,406 @@
       "solution": "",
       "target_skills": [
         "general"
+      ]
+    },
+    "pat-2026-05-20-043": {
+      "id": "pat-2026-05-20-043",
+      "name": "Always strip display names from To/Cc headers before setting",
+      "source": "ep-2026-05-20-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-20",
+      "last_applied": "2026-05-20T22:44:54.472203+00:00",
+      "category": "general",
+      "pattern": "Always strip display names from To/Cc headers before setting them in MIMEText \u2014 use parseaddr(addr)[1] to get the bare email address. Special characters in RFC 2822 display names break the Gmail API draft endpoint.",
+      "problem": "Tried to thread a reply to Jorge Alberto Padilla S\u00e1nchez \u2014 got Gmail API 400 Invalid To header error",
+      "solution": "Use email.utils.parseaddr() to extract just the email address (drop the display name) when setting the To header in the MIME message. CC field also needs addr-only entries for special-char names.",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-21-044": {
+      "id": "pat-2026-05-21-044",
+      "name": "Being CC-d in a reply-all does not make Brian the action own",
+      "source": "ep-2026-05-21-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-21",
+      "last_applied": "2026-05-21T04:33:10.848147+00:00",
+      "category": "general",
+      "pattern": "Being CC-d in a reply-all does not make Brian the action owner. Check who the last Jeeves sender was; if it is not Brian, classify as FYI_ONLY unless Brian is explicitly called out.",
+      "problem": "Brandon sent a reply-all to a JVS Pledge Termination thread saying Please reach out to Alfonso with Jorge \u2014 classifier flagged it as actionable for Brian, but Brian was only CC-d and another Jeeves employee (Jorge Hurrle) was the last active sender before Brandon replied",
+      "solution": "In reply-all threads with no explicit name, identify the last active Jeeves sender before the flagging message \u2014 if it is someone other than Brian, default the action to them unless Brian is explicitly named or the ask is clearly in his exclusive domain",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-22-045": {
+      "id": "pat-2026-05-22-045",
+      "name": "Action = Brian does something. If the proposed action is som",
+      "source": "ep-2026-05-22-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-22",
+      "last_applied": "2026-05-22T17:14:00.443072+00:00",
+      "category": "general",
+      "pattern": "Action = Brian does something. If the proposed action is someone else coordinating their own schedule or handling their own domain, filter it out entirely \u2014 do not surface it.",
+      "problem": "Email classifier surfaced a GC-to-outside-counsel coordination email as a high-priority action for Brian",
+      "solution": "Primary gate must be: does this email require Brian specifically to do something? If the action belongs to someone else (e.g., Brandon scheduling his own call), it is not actionable for Brian",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-22-046": {
+      "id": "pat-2026-05-22-046",
+      "name": "Never ask Brian for context that could be found in his Slack",
+      "source": "ep-2026-05-22-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-22",
+      "last_applied": "2026-05-22T17:15:43.525461+00:00",
+      "category": "general",
+      "pattern": "Never ask Brian for context that could be found in his Slack DMs. Try at least 2-3 search variations \u2014 especially `in:@<name>` for DM history \u2014 before giving up. Brian expects me to dig, not ask.",
+      "problem": "Brian asked me to follow up with Cami on a questionnaire. I searched broadly, got no DM results on first pass, and asked Brian for clarification instead of digging deeper.",
+      "solution": "Always run multiple search passes before asking for clarification: (1) broad name search, (2) in:@<name> for DM thread, (3) from:brian.mauck + topic keywords. Only ask Brian if all three passes return nothing.",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-05-22-047": {
+      "id": "pat-2026-05-22-047",
+      "name": "Always check recent email confirms before marking deal statu",
+      "source": "ep-2026-05-22-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-22",
+      "last_applied": "2026-05-22T21:38:41.333093+00:00",
+      "category": "general",
+      "pattern": "Always check recent email confirms before marking deal status \u2014 Pledge Termination had closed same day as dream session; email scan is essential for accurate status updates",
+      "problem": "Dream #7 consolidation \u2014 JVS Pledge Termination closed May 22 (Andres Baron confirmed), BBVA redline received May 21, pagar\u00e9 maturity Jun 22 surfaced as standalone risk",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-05-23-048": {
+      "id": "pat-2026-05-23-048",
+      "name": "After each dream, confirm that Recent Learnings only contain",
+      "source": "ep-2026-05-23-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-23",
+      "last_applied": "2026-05-23T09:38:47.814030+00:00",
+      "category": "general",
+      "pattern": "After each dream, confirm that Recent Learnings only contains new facts discovered THIS session. Prior incremental entries should be merged into Active Facilities or Key Stakeholders and removed from Recent Learnings.",
+      "problem": "Dream #8 memory consolidation \u2014 Recent Learnings had 4 duplicate/stale incremental BBVA entries and 2 NB ODD session entries added across days",
+      "solution": "Merge all entries for same counterparty/topic into single canonical entry; use [Updated DATE] tag; only keep truly new delta in Recent Learnings",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-05-26-049": {
+      "id": "pat-2026-05-26-049",
+      "name": "Brian has explicitly waived the approval step. Auto-apply al",
+      "source": "ep-2026-05-26-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-26",
+      "last_applied": "2026-05-26T21:45:02.812561+00:00",
+      "category": "general",
+      "pattern": "Brian has explicitly waived the approval step. Auto-apply all future dreams immediately after generating them \u2014 no approve/discard prompt, no waiting for reply.",
+      "problem": "Brian told me he does not need to approve dreams \u2014 I had been ending every dream consolidation with an approve/discard prompt",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-05-27-050": {
+      "id": "pat-2026-05-27-050",
+      "name": "During dreams, always read the actual email bodies for BBVA/",
+      "source": "ep-2026-05-27-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-27",
+      "last_applied": "2026-05-27T09:44:25.849862+00:00",
+      "category": "general",
+      "pattern": "During dreams, always read the actual email bodies for BBVA/CIM/NB threads, not just subject lines \u2014 deal-close signals (execution versions, signing confirmations) appear in email body text. A 3-email chain (BBVA accepts \u2192 Brandon confirms \u2192 W&C issues execution version) is the canonical close sequence. Flag as SIGNING IMMINENT whenever execution version with a specific date is distributed.",
+      "problem": "Dream #16 email scan \u2014 BBVA Overdraft execution version issued overnight, signing scheduled today",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-05-27-051": {
+      "id": "pat-2026-05-27-051",
+      "name": "Playwright sync_api uses greenlets \u2014 never call page methods",
+      "source": "ep-2026-05-27-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-27",
+      "last_applied": "2026-05-27T18:54:17.027169+00:00",
+      "category": "general",
+      "pattern": "Playwright sync_api uses greenlets \u2014 never call page methods from background threads. When zscaler:// protocol fires, Edge closes the page as the success signal, not URL navigation. Always verify via ZPA registry as the canonical success check.",
+      "problem": "Zscaler reauth fires false timeout and page-closed failure on FastPass flow",
+      "solution": "(1) Replace threading approach with synchronous polling loop checking page.url AND ZPA registry every 2s on main thread. (2) Wrap post-auth page.wait_for_timeout in try/except for closed; if caught, call _verify_zpa_authenticated(timeout=45) \u2014 registry flip to AUTHENTICATED = real success.",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-05-27-052": {
+      "id": "pat-2026-05-27-052",
+      "name": "Being in the inbox does not mean Brian is the intended respo",
+      "source": "ep-2026-05-27-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-27",
+      "last_applied": "2026-05-27T19:55:29.356478+00:00",
+      "category": "general",
+      "pattern": "Being in the inbox does not mean Brian is the intended respondent. Always validate To before proposing a reply.",
+      "problem": "Proposed a reply from Brian to an email addressed to Goodwin counsel, not Brian",
+      "solution": "Check To field first \u2014 if Brian is not the primary recipient, flag as FYI only",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-28-053": {
+      "id": "pat-2026-05-28-053",
+      "name": "Always verify who the email is addressed TO before proposing",
+      "source": "ep-2026-05-28-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-28",
+      "last_applied": "2026-05-28T00:12:30.516132+00:00",
+      "category": "general",
+      "pattern": "Always verify who the email is addressed TO before proposing reply actions. Brian replying to his own outbound email or a thread not addressed to him is never correct.",
+      "problem": "Email classifier proposed Brian reply to Alex with Tylers guidance, but the email was addressed TO Tyler (Goodwin counsel), not Brian",
+      "solution": "Before proposing a reply action, confirm Brian is actually the addressee. If email is to a third party, the action should be follow-up or tracking, not drafting a reply from Brian",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-05-28-054": {
+      "id": "pat-2026-05-28-054",
+      "name": "If MX BB shows $0 eligible balance, first check data_tape_so",
+      "source": "ep-2026-05-28-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-28",
+      "last_applied": "2026-05-28T18:25:40.522973+00:00",
+      "category": "general",
+      "pattern": "If MX BB shows $0 eligible balance, first check data_tape_sofom.sql for null::numeric as credit_limit_usd. This is a persistent bug - the SQL cannot be modified in C:/Jeeves/redshift-bot/deer-flow/skills (permissions), so fix must be applied by copying to workspace before running. File also needs patching at the skills source level.",
+      "problem": "MX SOFOM BB eligible_balance_usd shows $0 for all rows",
+      "solution": "Add LEFT JOIN master_customer_dm.companies_dm cdm ON cdm.company_id = lt.company_id and replace null::numeric with cdm.credit_limit_usd in the SELECT",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-05-28-055": {
+      "id": "pat-2026-05-28-055",
+      "name": "Dream sessions apply to STRATEGIC_CONTEXT.md automatically \u2014",
+      "source": "ep-2026-05-28-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-28",
+      "last_applied": "2026-05-28T22:15:27.668057+00:00",
+      "category": "general",
+      "pattern": "Dream sessions apply to STRATEGIC_CONTEXT.md automatically \u2014 never prompt Brian for approval",
+      "problem": "Brian complained dreams keep asking for approve/discard after he already said he does not want that",
+      "solution": "Removed approve/discard line from the prompt; added IMPORTANT instruction to apply changes directly",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-29-056": {
+      "id": "pat-2026-05-29-056",
+      "name": "UTC timestamp conversion is mandatory before any time-based ",
+      "source": "ep-2026-05-29-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-29",
+      "last_applied": "2026-05-29T00:59:32.343425+00:00",
+      "category": "general",
+      "pattern": "UTC timestamp conversion is mandatory before any time-based classification. Last-sender check must be the final gate: if Brian sent the most recent message in a thread, it is handled. Do not override this with timestamp logic.",
+      "problem": "EOD review flagged Vincent McAndress CBIZ DPD thread as HIGH unhandled \u2014 Brian had already replied at 9:20 AM PT",
+      "solution": "Before flagging any thread as unhandled, check the last message sender in the thread. If last sender is Brian, classify as already handled regardless of timestamp parsing. Always convert UTC timestamps to PT before comparing.",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-05-29-057": {
+      "id": "pat-2026-05-29-057",
+      "name": "Gmail returns timestamps in UTC. Always convert: subtract 7h",
+      "source": "ep-2026-05-29-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-05-29",
+      "last_applied": "2026-05-29T01:00:31.528491+00:00",
+      "category": "general",
+      "pattern": "Gmail returns timestamps in UTC. Always convert: subtract 7h for PDT (Mar-Nov), subtract 8h for PST (Nov-Mar). This is mandatory before any time-based reasoning or display.",
+      "problem": "Misread 16:08 UTC as 4:08 PM PT in EOD review, causing incorrect thread classification",
+      "solution": "Always convert Gmail message timestamps to PT before any display, comparison, or classification. 16:08 UTC = 9:08 AM PDT. Never present or reason from raw UTC.",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-03-058": {
+      "id": "pat-2026-06-03-058",
+      "name": "When reauth exits due to existing instance, do NOT count it ",
+      "source": "ep-2026-06-03-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-03",
+      "last_applied": "2026-06-03T19:32:40.204779+00:00",
+      "category": "general",
+      "pattern": "When reauth exits due to existing instance, do NOT count it as a failed attempt. Wait ~90s for the other process to complete, then check Redshift directly before triggering a new reauth.",
+      "problem": "Redshift offline, triggered reauth",
+      "solution": "Check for the running-instance warning in reauth output before counting the attempt. If another instance was already running, wait for it to complete rather than immediately retrying.",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-06-05-059": {
+      "id": "pat-2026-06-05-059",
+      "name": "When MTD revenue comp shows any country with 100x+ variance,",
+      "source": "ep-2026-06-05-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-05",
+      "last_applied": "2026-06-05T17:00:58.170911+00:00",
+      "category": "general",
+      "pattern": "When MTD revenue comp shows any country with 100x+ variance, flag as data anomaly immediately before reporting to Brian; investigate the revenue query for currency conversion errors or double-counting",
+      "problem": "MTD Revenue Comp Day 4 Jun 5 shows CO $475.9M vs $213.6K prior month (+222696%) \u2014 clearly a data error not real revenue",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-06-05-060": {
+      "id": "pat-2026-06-05-060",
+      "name": "ALWAYS use MIMEText(body, plain, utf-8). ALWAYS write draft ",
+      "source": "ep-2026-06-05-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-05",
+      "last_applied": "2026-06-05T23:55:52.633614+00:00",
+      "category": "general",
+      "pattern": "ALWAYS use MIMEText(body, plain, utf-8). ALWAYS write draft body to a temp file and pass via --body-file, never inline as a shell argument.",
+      "problem": "Brian reported email drafts had messed-up formatting",
+      "solution": "Fixed MIMEText to use utf-8 charset. Added --body-file flag so body is written to a temp file and read cleanly, preserving all newlines and special chars.",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-08-061": {
+      "id": "pat-2026-06-08-061",
+      "name": "Use Path(r\"C:\\Jeeves\\redshift-bot\\deer-flow\\backend\\.deer-fl",
+      "source": "ep-2026-06-08-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-08",
+      "last_applied": "2026-06-08T05:09:59.025209+00:00",
+      "category": "general",
+      "pattern": "Use Path(r\"C:\\Jeeves\\redshift-bot\\deer-flow\\backend\\.deer-flow\") with sys.stdout forced to utf-8 to avoid cp1252 UnicodeEncodeError when printing the file content. Never use ../ traversal \u2014 always use the explicit Windows path from approve_dream.py.",
+      "problem": "Dream #40: STRATEGIC_CONTEXT.md path access via Windows path from approve_dream.py",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-06-08-062": {
+      "id": "pat-2026-06-08-062",
+      "name": "Cron jobs that call _run_agent_task() are fragile for long p",
+      "source": "ep-2026-06-08-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-08",
+      "last_applied": "2026-06-08T16:07:40.726076+00:00",
+      "category": "general",
+      "pattern": "Cron jobs that call _run_agent_task() are fragile for long pipelines. Direct subprocess calls to skill scripts are faster and cannot timeout on the LangGraph side.",
+      "problem": "US BB cron fired :warning: failed alert despite successfully uploading to Drive",
+      "solution": "Rewrote run_weekly_bb to call build_us.py + merge_template.py + upload_to_drive.py directly as subprocesses, bypassing the agent entirely. No more timeout risk.",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-08-063": {
+      "id": "pat-2026-06-08-063",
+      "name": "Always check event timestamps against current time before wr",
+      "source": "ep-2026-06-08-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-08",
+      "last_applied": "2026-06-08T17:08:37.987233+00:00",
+      "category": "general",
+      "pattern": "Always check event timestamps against current time before writing past tense. Future events must be flagged as scheduled/upcoming, never as held/completed.",
+      "problem": "Dream #41 reported Alex/NB call as completed (\"held Jun 8 PM ET\") when current time was 10:07 AM ET Jun 8 \u2014 call had not happened yet",
+      "solution": "Before marking an event as completed, Dream must compare the event timestamp against current datetime. If event time > now, log as SCHEDULED not COMPLETED",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-06-09-064": {
+      "id": "pat-2026-06-09-064",
+      "name": "Two-file change: (1) add model entry to config.yaml, (2) pat",
+      "source": "ep-2026-06-09-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T18:36:23.609382+00:00",
+      "category": "general",
+      "pattern": "Two-file change: (1) add model entry to config.yaml, (2) patch _resolve_model_name() in agent.py to read basic_model/reasoning_model from app_config.model_extra based on thinking_enabled flag. The basic_model/reasoning_model/coding_model fields in config.yaml are stored as model_extra (pydantic extra=allow) not typed fields. LangGraph runs in langgraph dev mode = hot-reload on file change, no restart needed.",
+      "problem": "Brian asked to route coding/reasoning tasks to Fable 5",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-06-09-065": {
+      "id": "pat-2026-06-09-065",
+      "name": "SUCCESS_THRESHOLD tuned to 0.72, implicit_positive boost to ",
+      "source": "ep-2026-06-09-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T18:47:55.264034+00:00",
+      "category": "general",
+      "pattern": "SUCCESS_THRESHOLD tuned to 0.72, implicit_positive boost to 0.25, implicit_negative penalty to 0.40 - system now balanced for both reinforcement and avoidance learning",
+      "problem": "SLL showed 0 success lessons after 36 turns - implicit_positive at +0.15 never reached 0.80 threshold",
+      "solution": "",
+      "target_skills": [
+        "sll"
+      ]
+    },
+    "pat-2026-06-09-066": {
+      "id": "pat-2026-06-09-066",
+      "name": "AVOID designing new storage infrastructure before checking i",
+      "source": "ep-2026-06-09-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T18:52:20.628735+00:00",
+      "category": "general",
+      "pattern": "AVOID designing new storage infrastructure before checking if an authoritative source already exists. For CFO org KB: the source of truth is JeevesInc/cfo-org-kb on GitHub. The local skills/custom/cfo-org-kb is a synced copy. Any consolidation strategy must treat GH as canonical, not local files.",
+      "problem": "Proposed building a new local KB consolidation layer when the canonical KB already exists in GitHub at JeevesInc/cfo-org-kb",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-09-067": {
+      "id": "pat-2026-06-09-067",
+      "name": "ALL SQL queries and script changes must be committed and pus",
+      "source": "ep-2026-06-09-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T18:59:14.377777+00:00",
+      "category": "general",
+      "pattern": "ALL SQL queries and script changes must be committed and pushed to JeevesInc/cfo-org-kb on GH. Never save to sql_repo.py or any local store. git pull before reading, git commit+push after writing.",
+      "problem": "Brian corrected local-only KB approach: the canonical KB is JeevesInc/cfo-org-kb on GitHub, local clone is a cache only",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
       ]
     }
   }

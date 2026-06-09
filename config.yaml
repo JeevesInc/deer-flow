@@ -20,8 +20,24 @@ models:
       type: enabled
       budget_tokens: 10000
 
+  - name: claude-fable-5
+    display_name: Claude Fable 5
+    use: langchain_anthropic:ChatAnthropic
+    model: claude-fable-5
+    api_key: $ANTHROPIC_API_KEY
+    max_tokens: 64000
+    temperature: 1.0
+    supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: enabled
+      budget_tokens: 10000
+
+# claude-sonnet = general / conversational tasks
+# claude-fable-5 = coding and reasoning tasks
 basic_model: claude-sonnet
-reasoning_model: claude-sonnet
+reasoning_model: claude-fable-5
+coding_model: claude-fable-5
 
 # ── Tools ──────────────────────────────────────────────────────────
 tool_groups:

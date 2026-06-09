@@ -127,7 +127,7 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
     """Build a MIME message, with attachments if provided."""
     if attachments:
         mime = MIMEMultipart('mixed')
-        mime.attach(MIMEText(body_text))
+        mime.attach(MIMEText(body_text, 'plain', 'utf-8'))
 
         for att_source in attachments:
             filename, content, content_type = _resolve_attachment(att_source)
@@ -140,7 +140,7 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
             mime.attach(part)
             print(f"  Attached: {filename} ({content_type}, {len(content) / 1024:.1f} KB)")
     else:
-        mime = MIMEText(body_text)
+        mime = MIMEText(body_text, 'plain', 'utf-8')
 
     mime['to'] = to_addr
     mime['from'] = from_addr
@@ -382,17 +382,37 @@ def main():
 
     elif command == 'draft':
         if len(sys.argv) < 4:
-            print('Usage: python gmail_tool.py draft <message_id> "reply body" [--attach file]', file=sys.stderr)
+            print('Usage: python gmail_tool.py draft <message_id> "reply body"|--body-file <path> [--attach file]', file=sys.stderr)
             sys.exit(1)
-        _, attachments = _parse_attachments(sys.argv[4:])
-        cmd_draft_reply(sys.argv[2], sys.argv[3], attachments=attachments)
+        body_arg = sys.argv[3]
+        if body_arg == '--body-file':
+            if len(sys.argv) < 5:
+                print('--body-file requires a path argument', file=sys.stderr)
+                sys.exit(1)
+            with open(sys.argv[4], 'r', encoding='utf-8') as _bf:
+                body_text_arg = _bf.read()
+            _, attachments = _parse_attachments(sys.argv[5:])
+        else:
+            body_text_arg = body_arg
+            _, attachments = _parse_attachments(sys.argv[4:])
+        cmd_draft_reply(sys.argv[2], body_text_arg, attachments=attachments)
 
     elif command == 'draft-new':
         if len(sys.argv) < 5:
-            print('Usage: python gmail_tool.py draft-new "to" "subject" "body" [--attach file]', file=sys.stderr)
+            print('Usage: python gmail_tool.py draft-new "to" "subject" "body"|--body-file <path> [--attach file]', file=sys.stderr)
             sys.exit(1)
-        _, attachments = _parse_attachments(sys.argv[5:])
-        cmd_draft_new(sys.argv[2], sys.argv[3], sys.argv[4], attachments=attachments)
+        body_arg = sys.argv[4]
+        if body_arg == '--body-file':
+            if len(sys.argv) < 6:
+                print('--body-file requires a path argument', file=sys.stderr)
+                sys.exit(1)
+            with open(sys.argv[5], 'r', encoding='utf-8') as _bf:
+                body_text_arg = _bf.read()
+            _, attachments = _parse_attachments(sys.argv[6:])
+        else:
+            body_text_arg = body_arg
+            _, attachments = _parse_attachments(sys.argv[5:])
+        cmd_draft_new(sys.argv[2], sys.argv[3], body_text_arg, attachments=attachments)
 
     elif command == 'download':
         if len(sys.argv) < 3:

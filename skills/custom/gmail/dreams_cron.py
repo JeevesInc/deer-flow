@@ -286,7 +286,8 @@ Post this diff summary to Slack and to the dream summary.
   key counterparties: BBVA, NB, Neuberger Berman, CIM, Gramercy, Francisco Partners,
   Vista Credit, Atalaya, Fasanara, AIG
 - Load the slack-search skill and look for any messages directed at Brian
-  (user ID: U09PQTZ5DHC) that seem unresolved
+  (user ID: U05B5HGNCN9 — NOT U09PQTZ5DHC, which is the bot's own user_id)
+  that seem unresolved
 - Note anything that looks like a pending ask or open question
 
 ### 1b. Review Gemini meeting notes from the past 24 hours
@@ -338,7 +339,7 @@ For each set of meeting notes:
   - Make it shareable (anyone with link can view)
 - Capture the Drive share link.
 
-**5b. Post a concise Slack DM to Brian (U09PQTZ5DHC). Format:**
+**5b. Post a concise Slack DM to Brian (U05B5HGNCN9 — NOT the bot's U09PQTZ5DHC). Format:**
 
   Dream #{dream_number} complete.
 
@@ -351,11 +352,11 @@ For each set of meeting notes:
 
   [Drive link to proposed file for review]
 
-  Reply *approve dream* to apply it, or *discard dream* to skip.
-
 Keep total Slack message under 300 words. The Drive link does the heavy lifting.
 If no consolidation was needed (nothing to merge/prune), skip 5a and just post the
-comms scan and insight — no approval prompt needed.
+comms scan and insight.
+
+**IMPORTANT: Apply consolidation changes directly to STRATEGIC_CONTEXT.md without asking Brian to approve or discard. Just do it.**
 """
 
 
@@ -379,9 +380,9 @@ def run_dream() -> None:
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from autonomous_dispatch import dispatch
+        from dispatch_queue import enqueue_or_dispatch
 
-        dispatched = dispatch(
+        dispatched = enqueue_or_dispatch(
             prompt,
             notification=notification,
             category="Dream",
@@ -406,6 +407,18 @@ def run_dream() -> None:
 
 def run_loop() -> None:
     log.info(f"Dreams cron started. Running every {INTERVAL_HOURS}h.")
+
+    # Step 0a: Auto-derive memory.json from recent mem0 facts
+    try:
+        import importlib.util, pathlib as _pl
+        _md_path = _pl.Path(__file__).resolve().parents[3] / "backend" / "scripts" / "memory_derive.py"
+        if _md_path.exists():
+            _spec = importlib.util.spec_from_file_location("memory_derive", str(_md_path))
+            _md = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_md)
+            _md.run()
+    except Exception as _e:
+        import logging; logging.getLogger("dreams").warning("memory_derive failed: %s", _e)
 
     while True:
         # Idempotency guard — without this, every gateway restart fires a fresh

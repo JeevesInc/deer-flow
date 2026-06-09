@@ -35,7 +35,7 @@ POLL_INTERVAL = int(os.environ.get('SLACK_DM_MONITOR_INTERVAL', '120'))   # 2 mi
 SUMMARY_INTERVAL = int(os.environ.get('SLACK_DM_SUMMARY_INTERVAL', '3600'))  # 1 hour
 
 IGNORED_USERS = {'USLACKBOT'}
-BRIAN_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U09PQTZ5DHC')
+BRIAN_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U05B5HGNCN9')
 
 
 def _state_path() -> str:
@@ -127,9 +127,9 @@ def _dispatch_message(client, channel_id: str, sender_name: str, sender_id: str,
     log.info("Dispatching message from %s: %s", sender_name, text[:80])
 
     try:
-        from autonomous_dispatch import dispatch
-        dispatch(
-            prompt=(
+        from dispatch_queue import enqueue_or_dispatch
+        enqueue_or_dispatch(
+            (
                 f"A Slack DM was received on behalf of Brian Mauck from {sender_name} "
                 f"(Slack ID: {sender_id}) at {dt}.\n\n"
                 f"Message: \"{text}\"\n\n"

@@ -69,10 +69,10 @@ Every 12 hours. Scheduled reflection and consolidation inspired by Anthropic's a
 - Fetches last 10 LangGraph session transcripts
 - Deduplicates, resolves contradictions, absolutizes dates, prunes stale entries,
   promotes stable facts to permanent sections, fills blank sections
-- Writes proposed consolidated version to STRATEGIC_CONTEXT_proposed.md (never
-  overwrites live file -- proposal only)
-- Uploads proposed file to Google Drive and posts summary + Drive link to Brian's
-  Slack DM with "Reply *approve dream* to apply, or *discard dream* to skip"
+- Applies the consolidated version directly to STRATEGIC_CONTEXT.md (no proposal
+  step — just write it)
+- Uploads a backup copy to Google Drive and posts summary + Drive link to Brian's
+  Slack DM as FYI only. DO NOT ask Brian to approve or discard anything.
 
 **Phase 2 -- Scan and patch (Steps 1-4):**
 - Scans Gmail + Slack for strategic signals
@@ -97,10 +97,10 @@ Configure: DREAMS_INTERVAL_HOURS env var (default: 12)
 Daily at 5 PM. Proactively surfaces everything directed at Brian that is unhandled,
 and drafts ready-to-send responses so he can clear the day in under 15 minutes:
 - Scans Gmail for unanswered threads where Brian is last recipient
-- Scans Slack for unanswered DMs and @-mentions (Brian ID: U09PQTZ5DHC)
+- Scans Slack for unanswered DMs and @-mentions (Brian ID: U05B5HGNCN9 — NOT U09PQTZ5DHC, which is the bot's own user_id)
 - Checks calendar for open action items from today's meetings
 - Flags lender pipeline items (BBVA, CIM, NB, etc.) gone quiet >3 business days
-- Creates Gmail drafts and prepares Slack reply text for Brian to approve
+- EOD reviews should surface open items as a briefing ONLY — no Gmail drafts unless Brian explicitly asks. Brian deletes the drafts. Just tell him what's open.
 - Posts structured EOD briefing (HIGH/MEDIUM/LOW triage) to Slack DM
 - Saves full summary to Google Drive
 
@@ -119,3 +119,4 @@ All crons use autonomous_dispatch.py and respect MAX_CONCURRENT_RUNS.
 - When drafting, match Brian's style: direct, short, key points up front
 - Show what you drafted and confirm it is in the Drafts folder
 - Prefer drive:<ID> for files already on Drive rather than re-uploading
+- CLASSIFIER RULE -- reply-all threads: When a message is a reply-all and does NOT explicitly name Brian, check who the last active Jeeves-side sender was before the reply. If another Jeeves employee (e.g. Jorge Hurrle, Isabel Diaz) sent the preceding message, the reply is most likely directed at THEM -- classify as FYI_ONLY for Brian. Only flag ACTIONABLE for Brian if: (a) he is explicitly named, (b) the ask is in his exclusive domain with no other Jeeves person more directly involved, or (c) the reply is responding to a message Brian himself sent. Being CC'd for visibility ≠ being the action owner.

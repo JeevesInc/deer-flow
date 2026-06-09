@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import os
 import re
@@ -1017,12 +1018,18 @@ class SlackChannel(Channel):
         # noted but can't be accessed until a future upload integration.
         _TEXT_MIMETYPES = {"text/", "application/json", "application/xml", "application/csv"}
         _TEXT_EXTENSIONS = {".html", ".htm", ".txt", ".eml", ".csv", ".json", ".xml", ".md", ".log"}
+        # Anthropic vision: jpeg/png/gif/webp, max 5 MB per image (base64 inflates ~33%,
+        # so cap raw bytes at 3.75 MB).
+        _IMAGE_MIMETYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+        _IMAGE_MAX_BYTES = 3_750_000
+        image_blocks: list[dict] = []
         if downloaded_files:
             for df in downloaded_files:
                 mime = df.get("mimetype", "") or ""
                 name = df.get("name", "")
                 ext = os.path.splitext(name)[1].lower() if name else ""
                 is_text = any(mime.startswith(t) for t in _TEXT_MIMETYPES) or ext in _TEXT_EXTENSIONS
+                is_image = mime in _IMAGE_MIMETYPES
 
                 if is_text and df.get("path") and os.path.isfile(df["path"]):
                     try:
@@ -1042,6 +1049,35 @@ class SlackChannel(Channel):
                     except Exception as exc:
                         logger.error("[Slack] Failed to read text file %s: %s", df["path"], exc)
                         text = f"{text}\n\n(Attached file {name} could not be read: {exc})" if text else f"(Attached file {name} could not be read: {exc})"
+                elif is_image and df.get("path") and os.path.isfile(df["path"]):
+                    raw_size = os.path.getsize(df["path"])
+                    if raw_size > _IMAGE_MAX_BYTES:
+                        size_mb = raw_size / 1_000_000
+                        note = f"(Image {name} too large to inline: {size_mb:.1f} MB > 3.75 MB cap)"
+                        text = f"{text}\n\n{note}" if text else note
+                        logger.warning("[Slack] Image %s too large to inline (%d bytes)", name, raw_size)
+                        continue
+                    try:
+                        from deerflow.utils.images import downscale_for_anthropic
+                        with open(df["path"], "rb") as fh:
+                            raw_bytes = fh.read()
+                        # Anthropic rejects images >2000px on any side in many-image
+                        # requests. Downscale before base64 so we don't poison the thread.
+                        safe_bytes, mime = downscale_for_anthropic(raw_bytes, mime)
+                        b64 = base64.b64encode(safe_bytes).decode("ascii")
+                        image_blocks.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{b64}"},
+                        })
+                        label = f"Attached image: {name}"
+                        text = f"{text}\n\n{label}" if text else label
+                        logger.info(
+                            "[Slack] Inlined image: %s (%d -> %d bytes, %s)",
+                            name, raw_size, len(safe_bytes), mime,
+                        )
+                    except Exception as exc:
+                        logger.error("[Slack] Failed to read image %s: %s", df["path"], exc)
+                        text = f"{text}\n\n(Image {name} could not be read: {exc})" if text else f"(Image {name} could not be read: {exc})"
                 else:
                     size_str = f"{df['size'] / 1024:.1f} KB" if df.get('size') else "unknown size"
                     note = f"(Attached binary file: {name}, {mime or df.get('filetype', 'unknown')}, {size_str} — cannot be read directly, ask user to share via Google Drive)"
@@ -1094,6 +1130,8 @@ class SlackChannel(Channel):
             thread_ts=thread_ts,
         )
         inbound.topic_id = thread_ts
+        if image_blocks:
+            inbound.metadata["image_blocks"] = image_blocks
 
         # Structured log line for Loki/Grafana — emit once per dispatched inbound.
         # Tile "Conversations with non-owner users" filters this on user_id.

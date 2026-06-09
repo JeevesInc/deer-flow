@@ -14,28 +14,23 @@ allowed-tools:
 
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
-## Workflow: Always Check Repo First
+## Workflow: Always Check the KB First
 
-**Before writing any SQL from scratch**, search the query repo for an existing query:
+**Before writing any SQL from scratch**, pull and search `JeevesInc/cfo-org-kb`:
 
 ```bash
-# Search the repo by keyword
-python /mnt/skills/custom/jeeves-redshift/sql_repo.py search "portfolio balance"
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb && git pull origin main
+ls C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/*.sql/ngrep -rl "rollforward" C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/ncat C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/total_portfolio_balance.sql/n```
 
-# List all saved queries
-python /mnt/skills/custom/jeeves-redshift/sql_repo.py list
+If an existing query covers 80%+ of what is needed, start from it and adapt.
 
-# Get the full SQL for a saved query
-python /mnt/skills/custom/jeeves-redshift/sql_repo.py get "total_portfolio_balance"
+**Do NOT use `sql_repo.py`.** When a query is worth keeping, commit it to GH:
 
-# Run a saved query directly (tracks usage)
-python /mnt/skills/custom/jeeves-redshift/sql_repo.py run "total_portfolio_balance"
-
-# Run with output options
-python /mnt/skills/custom/jeeves-redshift/sql_repo.py run "total_portfolio_balance" --output /mnt/user-data/outputs/results.xlsx
+```bash
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/ngit add sql/new_query.sql
+git commit -m "Add new_query: description"
+git push origin main
 ```
-
-If a saved query covers 80%+ of what's needed, start from it and adapt rather than writing from scratch.
 
 ## Running Queries
 

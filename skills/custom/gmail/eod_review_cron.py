@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """End of Day Review Cron — proactively surfaces unhandled items directed at Brian
-and drafts responses so he can review and send with one click.
+and surfaces what is open. No drafts are created.
 
 Runs once daily at 5:00 PM local time (configurable).
 
@@ -9,12 +9,12 @@ What it does:
   2. Uses LLM classification on each item to determine if it is a genuine
      action item (reads full content -- NOT a 'last recipient' heuristic)
   3. Reads Gemini meeting notes and classifies action items from today's meetings
-  4. Drafts ready-to-send responses for all ACTIONABLE items
+  4. Lists ACTIONABLE items with context Brian needs to respond
   5. Posts a structured HIGH/MEDIUM/LOW EOD briefing to Brian's Slack DM
   6. Saves full summary to Google Drive
 
 The goal: Brian should be able to clear his day in < 15 minutes by reviewing
-this brief and approving/sending the pre-drafted responses.
+this brief and acting on open items.
 
 Env vars required:
   - SLACK_BOT_TOKEN, SLACK_OWNER_USER_ID
@@ -100,8 +100,8 @@ def _build_eod_prompt(review_number: int) -> str:
         "END OF DAY REVIEW #" + str(review_number) + " -- " + today + "\n\n"
         "You are DeerFlow-Analyst. This is Brian Mauck's automated end-of-day review.\n"
         "Surface every genuine action item directed at Brian today that has not been\n"
-        "handled, and draft ready-to-send responses so he can clear the day in under\n"
-        "15 minutes.\n\n"
+        "handled. DO NOT create Gmail drafts or Slack reply texts -- Brian only wants\n"
+        "to know what is open. He will handle responses himself.\n\n"
         "Brian's email: " + BRIAN_EMAIL + "\n"
         "Brian's Slack ID: " + BRIAN_SLACK_ID + "\n"
         "Today: " + today_short + "\n"
@@ -119,7 +119,7 @@ def _build_eod_prompt(review_number: int) -> str:
         "  FYI_ONLY        -- informational only, no response required\n"
         "  ALREADY_HANDLED -- Brian already replied or acted on this\n"
         "  UNCLEAR         -- genuinely ambiguous; list separately for Brian to decide\n\n"
-        "Only ACTIONABLE items get drafted and included in the briefing.\n"
+        "Only ACTIONABLE items are included in the briefing.\n"
         "FYI_ONLY and ALREADY_HANDLED are silently dropped -- do not mention them.\n\n"
         "CRITICAL: do NOT use last-recipient-in-thread as a proxy for actionability.\n"
         "An email where Brian is last recipient may still be FYI_ONLY.\n"
@@ -134,20 +134,21 @@ def _build_eod_prompt(review_number: int) -> str:
         "        python /mnt/skills/custom/gmail/gmail_tool.py read <message_id>\n\n"
         "  1b. Apply the CLASSIFIER STANDARD above.\n"
         "      Ask: what is this person actually asking Brian to do, specifically?\n\n"
-        "  1c. Thread check: look for a reply from Brian AFTER the inbound message.\n"
-        "      If Brian already replied -> ALREADY_HANDLED, drop it.\n\n"
+        "  1c. Thread check -- MANDATORY before flagging ANYTHING as ACTIONABLE:\n"
+        "      Search Brian's Sent folder for replies in the same thread:\n"
+        "        python /mnt/skills/custom/gmail/gmail_tool.py search \"from:brian.mauck@tryjeeves.com in:sent after:" + lookback_dt + "\"\n"
+        "      Match on threadId (shown in cmd_read output). If Brian sent ANY message\n"
+        "      in the same thread AFTER the inbound timestamp -> ALREADY_HANDLED, drop silently.\n"
+        "      Do NOT rely on snippets — read the actual sent messages to confirm.\n"
+        "      This step is not optional. Missing it causes false-positive action items.\n\n"
         "  1d. For ACTIONABLE items only:\n"
         "      - Quote the specific ask verbatim (paraphrase only if very long)\n"
         "      - Urgency:\n"
         "          HIGH   = external counterparty (lender, investor, auditor, legal)\n"
         "          MEDIUM = internal Jeeves colleague\n"
         "          LOW    = soft ask, no deadline, low stakes\n"
-        "      - Draft a reply in Gmail Drafts:\n"
-        "            python /mnt/skills/custom/gmail/gmail_tool.py draft <id> '<reply>'\n"
-        "      - If the reply needs data (numbers, dates, portfolio figures) pull it first.\n"
-        "      - If too complex to complete fully, create a placeholder draft and note\n"
-        "        what Brian needs to add: [CONFIRM AMOUNT], [CHECK WITH ALEX], etc.\n"
-        "      - Voice: short, direct, no over-explaining. Match Brian's style.\n\n"
+        "      - Note what data or context Brian would need to respond.\n"
+        
         "## Step 2: Slack -- fetch and classify\n\n"
         "Load the slack-search skill. Search for:\n"
         "  - DMs to Brian (" + BRIAN_SLACK_ID + ") in the past 24 hours\n"
@@ -156,8 +157,14 @@ def _build_eod_prompt(review_number: int) -> str:
         "Read the full message AND thread context -- not just the notification text.\n\n"
         "For ACTIONABLE Slack items:\n"
         "  - Note: sender, channel, the specific ask\n"
-        "  - Prepare copy-pasteable reply text Brian can send himself\n"
-        "  - Do NOT send on Brian's behalf\n\n"
+        "  - Note the channel/DM and specific ask\n\n"
+        "Slack reply check -- MANDATORY before flagging ANYTHING as ACTIONABLE:\n"
+        "  Search for Brian's own outbound messages in the same conversation:\n"
+        "    python /mnt/skills/custom/slack-search/slack_tool.py search \"from:@Brian\" --days 2\n"
+        "  Brian's Slack user ID is " + BRIAN_SLACK_ID + ". Any message in the thread\n"
+        "  with that user_id AFTER the inbound timestamp means he already replied.\n"
+        "  -> ALREADY_HANDLED, drop silently. This step is not optional.\n"
+        "  Missing it causes false-positive action items.\n\n"
         "Common FYI_ONLY false positives to drop:\n"
         "  - @mentions that loop Brian in for awareness with no explicit ask\n"
         "  - Messages Brian has already replied to in the thread\n"
@@ -192,18 +199,17 @@ def _build_eod_prompt(review_number: int) -> str:
         "Post to Brian's Slack DM using this format:\n\n"
         "  EOD Review #" + str(review_number) + " -- " + today + "\n\n"
         "  HIGH (action today):\n"
-        "  - [Email/Slack/Meeting] [person] -- [specific ask] -> [draft created / next step]\n\n"
+        "  - [Email/Slack/Meeting] [person] -- [specific ask] -> [what Brian needs to do]\n\n"
         "  MEDIUM (action tomorrow AM):\n"
         "  - ...\n\n"
         "  LOW:\n"
         "  - ...\n\n"
         "  UNCLEAR (Brian to decide):\n"
         "  - [item] -- [why it's ambiguous]\n\n"
-        "  Drafted: [N] Gmail drafts in Drafts folder | [N] Slack replies in Drive doc\n"
-        "  Lender pipeline: [any items at risk or gone quiet]\n\n"
+                "  Lender pipeline: [any items at risk or gone quiet]\n\n"
         "Bullets only. No paragraphs. Under 400 words total.\n\n"
         "## Step 6: Save to Google Drive\n\n"
-        "Save the full summary (including Slack reply texts) as a Google Doc.\n"
+        "Save the open items briefing as a Google Doc.\n"
         "File name: EOD Review - " + today_short + ".md\n"
         "Upload and include the Drive link in the Slack message.\n\n"
         "---\n\n"
@@ -259,9 +265,9 @@ def run_eod_review() -> None:
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from autonomous_dispatch import dispatch
+        from dispatch_queue import enqueue_or_dispatch
 
-        dispatched = dispatch(
+        dispatched = enqueue_or_dispatch(
             prompt,
             notification=notification,
             category="EOD Review",

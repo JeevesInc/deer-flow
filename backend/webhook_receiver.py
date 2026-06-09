@@ -27,6 +27,7 @@ Required env vars (same .env as the rest of the stack):
   SLACK_SIGNING_SECRET    — for verifying Slack payloads
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -34,6 +35,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,6 +95,14 @@ logging.basicConfig(
 log = logging.getLogger('webhook')
 
 app = FastAPI(title='DeerFlow Webhook Receiver')
+
+# Serializes Gmail state reads/writes across concurrent Pub/Sub pushes.
+# `_process_gmail_notification` runs in `asyncio.to_thread` so two near-
+# simultaneous pushes (message-arrived + IMPORTANT-label-added) end up
+# in different threads from the default pool. Without this lock they
+# both read the same `last_history_id`, both fetch the same messageAdded
+# record, and both classify + post to Slack.
+_gmail_state_lock = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # ANALYST CONTEXT — injected into every LLM classification call
@@ -548,55 +558,74 @@ async def gmail_webhook(request: Request, x_goog_channel_token: str = Header(def
     email_address = notification.get('emailAddress', MY_EMAIL)
     log.info('Gmail push: historyId=%s email=%s', history_id, email_address)
 
-    # Fetch the new message(s) using Gmail API
-    new_messages = _fetch_new_gmail_messages(history_id)
-    if not new_messages:
-        return JSONResponse({'status': 'no_new_messages'})
+    # Hand off all blocking work (Gmail API, mem0/Qdrant lookups, classifier
+    # LLM call, LangGraph dispatch) to a background task so the event loop
+    # stays free for /health probes. Pub/Sub only needs a 200 within ~10s and
+    # doesn't care about the processed count. Holding the loop here was the
+    # root cause of the /health flap that the supervisor kept restarting.
+    asyncio.create_task(asyncio.to_thread(_process_gmail_notification, history_id))
+    return JSONResponse({'status': 'accepted'})
 
-    for msg in new_messages:
-        _handle_gmail_message(msg)
 
-    return JSONResponse({'status': 'ok', 'processed': len(new_messages)})
+def _process_gmail_notification(history_id: str | None) -> None:
+    try:
+        new_messages = _fetch_new_gmail_messages(history_id)
+        for msg in new_messages or []:
+            try:
+                _handle_gmail_message(msg)
+            except Exception:
+                log.exception('Gmail message handler failed')
+    except Exception:
+        log.exception('Gmail notification processing failed')
 
 
 def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
-    """Fetch new messages from Gmail using history API."""
-    try:
-        # Add parent dir to path for google_auth
-        _shared = Path(__file__).resolve().parent / 'skills' / 'custom' / '_shared'
-        if _shared.exists() and str(_shared) not in sys.path:
-            sys.path.insert(0, str(_shared))
+    """Fetch new messages from Gmail using history API.
 
-        from google_auth import get_credentials
-        from googleapiclient.discovery import build
+    Serialized by `_gmail_state_lock` so two concurrent Pub/Sub pushes
+    (e.g. message-arrived + Gmail's IMPORTANT label-added, which fire
+    ~1s apart) don't both read the same `last_history_id` and double-
+    classify the same message.
+    """
+    with _gmail_state_lock:
+        try:
+            # Add parent dir to path for google_auth
+            _shared = Path(__file__).resolve().parent / 'skills' / 'custom' / '_shared'
+            if _shared.exists() and str(_shared) not in sys.path:
+                sys.path.insert(0, str(_shared))
 
-        creds = get_credentials(required=False)
-        if not creds:
-            log.error('Gmail: no credentials')
-            return []
+            from google_auth import get_credentials
+            from googleapiclient.discovery import build
 
-        service = build('gmail', 'v1', credentials=creds)
+            creds = get_credentials(required=False)
+            if not creds:
+                log.error('Gmail: no credentials')
+                return []
 
-        # Load last known historyId from state
-        state = _load_gmail_state()
-        last_history_id = state.get('last_history_id')
+            service = build('gmail', 'v1', credentials=creds)
 
-        new_messages = []
+            # Load last known historyId from state
+            state = _load_gmail_state()
+            last_history_id = state.get('last_history_id')
 
-        if last_history_id and history_id:
-            # Use history API to get only new messages since last check
-            try:
-                history_resp = service.users().history().list(
-                    userId='me',
-                    startHistoryId=last_history_id,
-                    historyTypes=['messageAdded'],
-                    labelId='INBOX',
-                ).execute()
+            new_messages = []
 
-                for record in history_resp.get('history', []):
-                    for added in record.get('messagesAdded', []):
-                        msg_id = added['message']['id']
-                        if msg_id not in state.get('seen_ids', []):
+            if last_history_id and history_id:
+                # Use history API to get only new messages since last check
+                try:
+                    history_resp = service.users().history().list(
+                        userId='me',
+                        startHistoryId=last_history_id,
+                        historyTypes=['messageAdded'],
+                        labelId='INBOX',
+                    ).execute()
+
+                    for record in history_resp.get('history', []):
+                        for added in record.get('messagesAdded', []):
+                            msg_id = added['message']['id']
+                            if msg_id in state.get('seen_ids', []):
+                                log.info('Gmail: skipping already-seen msg %s', msg_id)
+                                continue
                             try:
                                 msg = service.users().messages().get(
                                     userId='me', id=msg_id, format='metadata',
@@ -609,18 +638,18 @@ def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
                                 state.setdefault('seen_ids', []).append(msg_id)
                             except Exception as e:
                                 log.error('Failed to fetch message %s: %s', msg_id, e)
-            except Exception as e:
-                log.warning('History API failed (%s), falling back to recent search', e)
+                except Exception as e:
+                    log.warning('History API failed (%s), falling back to recent search', e)
 
-        # Update state
-        if history_id:
-            state['last_history_id'] = history_id
-        _save_gmail_state(state)
-        return new_messages
+            # Update state
+            if history_id:
+                state['last_history_id'] = history_id
+            _save_gmail_state(state)
+            return new_messages
 
-    except Exception as e:
-        log.error('_fetch_new_gmail_messages failed: %s', e)
-        return []
+        except Exception as e:
+            log.error('_fetch_new_gmail_messages failed: %s', e)
+            return []
 
 
 def _handle_gmail_message(msg: dict) -> None:
@@ -775,11 +804,12 @@ async def slack_webhook(request: Request, x_slack_signature: str = Header(defaul
     event = body.get('event', {})
     event_type = event.get('type', '')
 
-    # Handle DMs and app mentions
+    # Handle DMs and app mentions off the event loop. Slack retries if we're
+    # slow (3s budget), and the handler chain calls into mem0/Qdrant + the
+    # classifier LLM — synchronous work that would otherwise stall /health.
     if event_type in ('message', 'app_mention'):
-        _handle_slack_event(event, body)
+        asyncio.create_task(asyncio.to_thread(_handle_slack_event, event, body))
 
-    # Always return 200 quickly — Slack retries if we're slow
     return JSONResponse({'status': 'ok'})
 
 

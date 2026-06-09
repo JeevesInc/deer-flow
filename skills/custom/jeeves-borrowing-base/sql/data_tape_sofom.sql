@@ -146,25 +146,34 @@ select
     , lt.prior_balance
     , lt.prior_spot_rate
     , lt.currency_switch_adjustment_usd
-    , c.credit_limit_approved_date as onboarding_date
+    , c.creditlineassignationdate as onboarding_date
     , sofom_transfer.assignment_dt
     , md.max_dpd
     , jursf.jur_loss_rate_grade as uw_score
     , c.name
-    , c.credit_limit_usd
-    , c.state_name
-    , c.city_name
-    , coalesce(c.naics_industry_id, 9999) as naics_industry_id
+    , cdm.credit_limit_usd
+    , s.statename as state_name
+    , ci.cityname as city_name
+    , coalesce(c.naicsindustryid, 9999) as naics_industry_id
     , case when td.company_type = 'Startup' then 1 else 0 end as is_startup
     , cr.total_collateral_amount_usd
 from
     capital_markets_dm.loc_tape lt
 left join
-    master_customer_dm.companies_dm c
-    on c.company_id = lt.company_id
+    dms_mysql_jeeves_raw.companies c
+    on c.id = lt.company_id
+left join
+    dms_mysql_jeeves_raw.states s
+    on s.id = c.stateid
+left join
+    dms_mysql_jeeves_raw.cities ci
+    on ci.id = c.cityid
 left join
     collateral_totals cr
     on cr.companyid = lt.company_id
+left join
+    master_customer_dm.companies_dm cdm
+    on cdm.company_id = lt.company_id
 left join
     max_dq md
     on md.company_id = lt.company_id

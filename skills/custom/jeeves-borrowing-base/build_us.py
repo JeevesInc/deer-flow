@@ -4,8 +4,11 @@
 Usage:
     python build_us.py [--date YYYY-MM-DD]
 
-Defaults to yesterday. Produces a 4-tab Excel workbook:
-  tape_start, tape_end, rollforward, eligibility_summary
+Defaults to yesterday. Produces a 5-tab Excel workbook:
+  tape_start, tape_end, rollforward, eligibility_summary, bank_accts
+
+The bank_accts tab is populated from the latest CICO daily email (Claude vision).
+Pass --no-cico to skip this step (offline/testing)., bank_accts (from CICO email)
 
 Output saved to $OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx
 """
@@ -31,6 +34,10 @@ def main():
     parser = argparse.ArgumentParser(description='Build US borrowing base')
     parser.add_argument('--date', type=str, default=None,
                         help='Target date YYYY-MM-DD (default: yesterday)')
+    parser.add_argument('--with-cico', dest='with_cico', action='store_true', default=True,
+                        help='Fetch cash balances from latest CICO email and write bank_accts tab (default: on)')
+    parser.add_argument('--no-cico', dest='with_cico', action='store_false',
+                        help='Skip CICO email fetch (use when offline / testing)')
     args = parser.parse_args()
 
     ensure_deps('xlsxwriter')
@@ -144,12 +151,34 @@ def main():
     filename = f"Borrowing Base - US - {date_str}.xlsx"
     output_path = os.path.join(output_dir, filename)
 
+
+    # ── CICO bank_accts ─────────────────────────────────────────────────────
+    bank_accts_df = None
+    if args.with_cico:
+        print("  Fetching CICO cash balances from latest email...")
+        try:
+            from cico_fetch_balances import fetch_balances, build_bank_accts_df
+            balances = fetch_balances(verbose=False)
+            email_date = balances.pop('__email_date__', '')
+            email_subject = balances.pop('__email_subject__', '')
+            bank_accts_df = build_bank_accts_df(balances)
+            print(f"    CICO: {email_subject} ({email_date})")
+            print(f"    {len(bank_accts_df)} accounts written to bank_accts tab")
+        except Exception as _cico_err:
+            import traceback; traceback.print_exc()
+            print(f"    WARNING: CICO fetch failed ({_cico_err}) -- bank_accts tab omitted", file=sys.stderr)
+            bank_accts_df = None
+    else:
+        print("  Skipping CICO fetch (--no-cico)")
+
     print(f"  Writing {filename}...")
     with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
         df_beg.to_excel(writer, sheet_name='tape_start', index=False)
         df_end.to_excel(writer, sheet_name='tape_end', index=False)
         rollforward.to_excel(writer, sheet_name='rollforward', index=False)
         elig_summary.to_excel(writer, sheet_name='eligibility_summary', index=False)
+        if bank_accts_df is not None:
+            bank_accts_df.to_excel(writer, sheet_name='bank_accts', index=False)
 
     print(f"\nDone! Output: {output_path}")
     print(f"Total EOP balance: ${df_end['balance_usd'].sum():,.2f}")

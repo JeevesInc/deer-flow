@@ -288,6 +288,15 @@ def main() -> int:
     return 0
 
 
+def _state_age_seconds(path, ts_field):
+    """Seconds since path's ts_field timestamp, or None if missing/unreadable."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return (datetime.now() - datetime.fromisoformat(data[ts_field])).total_seconds()
+    except Exception:
+        return None
+
+
 def run_loop():
     """Cron entry — refresh daily after Axel typically sends (22:30 local).
     Brian's gateway cron polls every 30 min."""
@@ -295,6 +304,17 @@ def run_loop():
     interval = int(os.environ.get("CICO_REFRESH_SECONDS", "1800"))
     log.info("cico-cash cron starting (interval=%ds)", interval)
     while True:
+        # Skip-if-fresh: a gateway restart re-instantiates this cron, which would
+        # otherwise immediately re-OCR the CICO email (~14 Anthropic Vision
+        # calls). That burst starves the gateway's async /health probe →
+        # supervisor false-kills the gateway → restart → fresh burst (the
+        # 2026-06-16 flap). Reuse still-fresh state across restarts.
+        age = _state_age_seconds(STATE_FILE, "extracted_at")
+        if age is not None and age < interval:
+            wait = interval - age
+            log.info("CICO state fresh (%.0fs old < %ds) — skipping run, sleeping %.0fs", age, interval, wait)
+            time.sleep(wait)
+            continue
         try:
             main()
         except Exception as e:

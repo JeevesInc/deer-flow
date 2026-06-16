@@ -41,9 +41,10 @@ def _slack_alert(text: str) -> None:
 class CronSupervisor:
     """Supervises a blocking cron function in a daemon thread with auto-restart."""
 
-    def __init__(self, name: str, target: callable):
+    def __init__(self, name: str, target: callable, startup_delay: float = 0.0):
         self.name = name
         self._target = target
+        self._startup_delay = startup_delay
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._restart_delay = _INITIAL_RESTART_DELAY
@@ -69,6 +70,14 @@ class CronSupervisor:
             logger.info("[CronSupervisor] %s stopped", self.name)
 
     def _supervised_loop(self) -> None:
+        # Staggered startup: every cron used to fire its first iteration the
+        # instant the gateway started, so ~15 crons (Redshift, Anthropic Vision,
+        # mem0 derivation) hammered at once and starved the async /health probe
+        # on startup → the supervisor SIGKILLed a healthy-but-busy gateway →
+        # restart → same thundering herd (the 2026-06-16 flap). Spread the first
+        # runs out (interruptible so stop() is still responsive).
+        if self._startup_delay > 0 and self._stop_event.wait(timeout=self._startup_delay):
+            return
         while not self._stop_event.is_set():
             started_at = time.monotonic()
             try:
@@ -114,8 +123,14 @@ class CronSupervisor:
 
 _supervisors: list[CronSupervisor] = []
 
+# Seconds between each cron's first run, to avoid a thundering-herd startup
+# burst that starves the gateway's /health probe (see _supervised_loop).
+_STAGGER_SECONDS = 8.0
+_stagger_index = 0
+
 
 def _load_and_start(name: str, script_path: Path) -> None:
+    global _stagger_index
     if not script_path.exists():
         logger.info("[CronSupervisor] %s not found at %s, skipping", name, script_path)
         return
@@ -123,7 +138,8 @@ def _load_and_start(name: str, script_path: Path) -> None:
         spec = importlib.util.spec_from_file_location(name, str(script_path))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        sv = CronSupervisor(name, mod.run_loop)
+        sv = CronSupervisor(name, mod.run_loop, startup_delay=_stagger_index * _STAGGER_SECONDS)
+        _stagger_index += 1
         _supervisors.append(sv)
         sv.start()
     except Exception:
@@ -157,10 +173,21 @@ def start_crons() -> None:
     _load_and_start("bot-dm-history", backend_dir / "scripts" / "bot_dm_history_cron.py")
     _load_and_start("cap-markets-refresh", backend_dir / "scripts" / "cap_markets_metrics_refresh.py")
     _load_and_start("cico-cash", backend_dir / "scripts" / "cico_cash_extract.py")
+    _load_and_start("diligence-registry", skills_dir / "jeeves-diligence" / "diligence_registry_cron.py")
     _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
-    _load_and_start("cm-dashboard", backend_dir / "scripts" / "cm_credit_health_app.py")
+    # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
+    # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
+    # top level executed the full dashboard render + 3 synchronous Redshift
+    # queries (load_dq_history / load_roll_rate / load_nco_history) on the
+    # gateway's main thread at EVERY startup. Under slow Redshift/Zscaler that
+    # blocked /health past the supervisor's 60s readiness gate, so the
+    # supervisor kill/restart-looped the gateway (171 "unhealthy" events on
+    # 2026-06-16) and orphaned a Streamlit subprocess each cycle. The dashboard
+    # now runs as a supervised, log-isolated service launched from start.sh
+    # (start_dashboard), decoupled from the gateway lifecycle.
+    # _load_and_start("cm-dashboard", backend_dir / "scripts" / "cm_credit_health_app.py")
 
 
 def stop_crons() -> None:

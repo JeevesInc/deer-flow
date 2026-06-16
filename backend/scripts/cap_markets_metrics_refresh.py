@@ -1092,12 +1092,33 @@ def main() -> int:
     return 0
 
 
+def _state_age_seconds(path, ts_field):
+    """Seconds since path's ts_field timestamp, or None if missing/unreadable."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return (datetime.now() - datetime.fromisoformat(data[ts_field])).total_seconds()
+    except Exception:
+        return None
+
+
 def run_loop():
     """Cron-supervisor entry point — refresh metrics every hour forever."""
     import time
     interval = int(os.environ.get("CAP_MARKETS_REFRESH_SECONDS", "3600"))
     log.info("cap-markets-refresh cron starting (interval=%ds)", interval)
     while True:
+        # Skip-if-fresh: every gateway restart re-instantiates this cron, which
+        # would otherwise immediately re-run ~100s of Redshift queries. During
+        # that burst the gateway's async /health probe gets starved → the
+        # supervisor false-kills the gateway → restart → fresh burst (the
+        # 2026-06-16 flap). Reusing still-fresh state lets a restarted gateway
+        # pass its health checks before doing heavy work.
+        age = _state_age_seconds(OUT_FILE, "updated_at")
+        if age is not None and age < interval:
+            wait = interval - age
+            log.info("BB metrics fresh (%.0fs old < %ds) — skipping run, sleeping %.0fs", age, interval, wait)
+            time.sleep(wait)
+            continue
         try:
             main()
         except Exception as e:

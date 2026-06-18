@@ -1,36 +1,44 @@
 #!/usr/bin/env python3
-"""Dreams Cron — periodic reflection and consolidation for DeerFlow-Analyst.
+"""Dreams Cron — nightly reflection and consolidation for DeerFlow-Analyst.
 
 Inspired by Anthropic's concept of Claude having "dreams" — structured
 reflection periods where the agent consolidates recent experience, patches
-skill gaps, updates strategic context, and surfaces latent insights.
+skill gaps, and improves its own behavior.
 
-Runs twice daily: 2 AM and 2 PM local time (configurable).
+Runs ONCE A DAY, overnight Pacific time (default 02:00–08:00 PST window).
 
-What happens during a dream:
-  1. Review recent dispatch audit log (what did I handle, what went wrong?)
-  2. Scan recent Gmail + Slack for signals I may have missed
-  3. Update STRATEGIC_CONTEXT.md with any new deal/relationship intel
-  4. Identify skill gaps (errors I repeated, patterns I could automate)
-  5. Patch skills or log improvement episodes where appropriate
-  6. Post a brief "dream summary" to Brian's Slack DM
+What happens during a dream (reworked 2026-06-10 per Brian's feedback —
+dreams improve memory + behavior, they do NOT brief Brian):
+  1. Behavior & infra review of the previous day's work: full Slack-thread
+     conversations (including Brian's corrections), tool errors, logged
+     episodes, and SLL scores are injected as a "day review pack". The agent
+     identifies problems, fixes what it can itself (skill patches, episodes,
+     artifact-library updates), and collects infra suggestions it cannot
+     apply alone.
+  2. Memory consolidation of STRATEGIC_CONTEXT.md — silent.
+  3. Comms scan for strategic-context updates — silent.
+  4. ONE short Slack DM to Brian ONLY if there are concrete problems +
+     improvement suggestions. No consolidation stats, no insights, no links.
+     Nothing notable -> no message at all.
 
 Env vars required:
   - SLACK_BOT_TOKEN, SLACK_OWNER_USER_ID
   - LANGGRAPH_URL (default: http://localhost:2024)
 
 Optional:
-  - DREAMS_INTERVAL_HOURS (default: 12 — run every 12 hours)
+  - DREAMS_HOUR_PST (default: 2 — start of the overnight run window)
 """
 
 import json
 import logging
 import os
+import re
 import sys
 import time
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
 from env_loader import load_env
@@ -43,8 +51,10 @@ logging.basicConfig(
 )
 log = logging.getLogger('dreams')
 
-INTERVAL_HOURS = float(os.environ.get('DREAMS_INTERVAL_HOURS', '12'))
-INTERVAL_SECS = int(INTERVAL_HOURS * 3600)
+PACIFIC = ZoneInfo('America/Los_Angeles')
+DREAM_HOUR_PST = int(os.environ.get('DREAMS_HOUR_PST', '2'))
+WINDOW_END_HOUR_PST = 8   # if the gateway was down all night, skip to next night
+CHECK_INTERVAL_SECS = 600
 
 # ------------------------------------------------------------------ #
 # State                                                                #
@@ -69,6 +79,184 @@ def save_state(state: dict) -> None:
     state['last_dream'] = datetime.now().isoformat()
     with open(p, 'w') as f:
         json.dump(state, f, indent=2)
+
+
+# ------------------------------------------------------------------ #
+# Day review pack — yesterday's work, extracted for behavior review    #
+# ------------------------------------------------------------------ #
+
+_CURRENT_DATE_TAG = re.compile(r'<current_date>[^<]*</current_date>\s*')
+_ERROR_MARKERS = ('error', 'traceback', 'exception', 'failed', 'permission denied')
+
+
+def _deer_flow_dir() -> Path:
+    return Path(__file__).resolve().parents[3] / 'backend' / '.deer-flow'
+
+
+def _msg_text(content) -> str:
+    """Flatten a message content (str or block list) to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for b in content:
+            if isinstance(b, dict) and b.get('type') == 'text':
+                parts.append(b.get('text', ''))
+        return '\n'.join(parts)
+    return str(content)
+
+
+def _extract_thread_review(saver, thread_id: str) -> dict | None:
+    """Pull user messages, AI turn count, and tool errors from one thread."""
+    try:
+        tup = saver.get_tuple({"configurable": {"thread_id": thread_id}})
+        if not tup:
+            return None
+        msgs = tup.checkpoint.get('channel_values', {}).get('messages', [])
+    except Exception:
+        return None
+
+    user_msgs, tool_errors, ai_turns = [], [], 0
+    for m in msgs:
+        mtype = getattr(m, 'type', None)
+        if mtype == 'human':
+            text = _CURRENT_DATE_TAG.sub('', _msg_text(m.content)).strip()
+            # Skip injected conversation summaries
+            if text.startswith('Here is a summary of the conversation'):
+                continue
+            if text:
+                user_msgs.append(text[:300])
+        elif mtype == 'ai':
+            ai_turns += 1
+        elif mtype == 'tool':
+            head = _msg_text(m.content)[:200]
+            if any(k in head.lower() for k in _ERROR_MARKERS):
+                tool_errors.append(head[:140])
+
+    if not user_msgs:
+        return None
+    return {
+        'thread_id': thread_id,
+        'user_msgs': user_msgs[:30],
+        'ai_turns': ai_turns,
+        'tool_errors': tool_errors[:6],
+        'n_tool_errors': len(tool_errors),
+    }
+
+
+def _yesterdays_slack_threads(hours: int = 26) -> list[str]:
+    """Thread IDs for Slack conversations created in the last N hours."""
+    store_path = _deer_flow_dir() / 'channels' / 'store.json'
+    try:
+        with open(store_path, encoding='utf-8') as f:
+            store = json.load(f)
+    except Exception:
+        return []
+    cutoff = time.time() - hours * 3600
+    out = []
+    for v in store.values():
+        if isinstance(v, dict) and v.get('thread_id') and (v.get('updated_at') or v.get('created_at') or 0) >= cutoff:
+            out.append(v['thread_id'])
+    return out[-15:]
+
+
+def _recent_episodes(hours: int = 26) -> list[str]:
+    """Episodes logged in the last N hours (self-improving-agent store)."""
+    ep_dir = Path(__file__).resolve().parents[2] / 'public' / 'self-improving-agent' / 'memory' / 'episodic'
+    if not ep_dir.exists():
+        return []
+    cutoff = time.time() - hours * 3600
+    lines = []
+    try:
+        for f in sorted(ep_dir.glob('*.json')):
+            if f.stat().st_mtime < cutoff:
+                continue
+            ep = json.loads(f.read_text(encoding='utf-8', errors='replace'))
+            lines.append(f"[{ep.get('skill', '?')}] {ep.get('situation', '')[:100]} -> {ep.get('lesson', '')[:220]}")
+    except Exception:
+        pass
+    return lines[-15:]
+
+
+def _recent_sll(hours: int = 26) -> list[str]:
+    """SLL-scored turns from the last N hours (task + Brian's reply)."""
+    log_path = _deer_flow_dir() / 'sll' / 'log.jsonl'
+    if not log_path.exists():
+        return []
+    cutoff = datetime.now().astimezone() - timedelta(hours=hours)
+    lines = []
+    try:
+        with open(log_path, encoding='utf-8', errors='replace') as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    ts = datetime.fromisoformat(rec.get('scored_at', '').replace('Z', '+00:00'))
+                    if ts < cutoff:
+                        continue
+                    entry = f"task: {rec.get('task', '')[:120]}"
+                    if rec.get('composite') is not None:
+                        entry += f" | score: {rec['composite']}"
+                    if rec.get('user_reply'):
+                        entry += f" | Brian replied: {str(rec['user_reply'])[:200]}"
+                    lines.append(entry)
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return lines[-15:]
+
+
+def _build_day_review() -> str:
+    """Assemble the previous day's work into a review pack for the dream.
+
+    Mirrors the manual review process: full user-side conversation (Brian's
+    corrections verbatim), tool error patterns, episodes logged, SLL signal.
+    Best-effort — any missing source degrades to a note, never an exception.
+    """
+    sections = []
+
+    # 1. Slack-thread conversations from checkpoints.db (read-only)
+    try:
+        import sqlite3
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        db = _deer_flow_dir() / 'checkpoints.db'
+        conn = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True, check_same_thread=False)
+        try:
+            saver = SqliteSaver(conn)
+            reviews = []
+            for tid in _yesterdays_slack_threads():
+                r = _extract_thread_review(saver, tid)
+                if r:
+                    reviews.append(r)
+        finally:
+            conn.close()
+
+        if reviews:
+            parts = []
+            for r in reviews:
+                parts.append(f"--- Thread {r['thread_id'][:8]} ({r['ai_turns']} AI turns, {r['n_tool_errors']} tool errors) ---")
+                for um in r['user_msgs']:
+                    parts.append(f"  BRIAN: {um}")
+                for te in r['tool_errors']:
+                    parts.append(f"  [tool error] {te}")
+            sections.append("### Yesterday's Slack conversations (Brian's messages verbatim + tool errors)\n" + '\n'.join(parts))
+        else:
+            sections.append("### Yesterday's Slack conversations\n(none found in the last 26h)")
+    except Exception as e:
+        sections.append(f"### Yesterday's Slack conversations\n(unavailable: {e})")
+
+    eps = _recent_episodes()
+    sections.append("### Episodes logged yesterday (lessons the agent already wrote down)\n"
+                    + ('\n'.join(f"  - {e}" for e in eps) if eps else "(none)"))
+
+    sll = _recent_sll()
+    sections.append("### SLL-scored turns yesterday\n"
+                    + ('\n'.join(f"  - {s}" for s in sll) if sll else "(none)"))
+
+    pack = '\n\n'.join(sections)
+    if len(pack) > 14000:
+        pack = pack[:14000] + '\n... (pack truncated at 14k chars)'
+    return pack
 
 
 # ------------------------------------------------------------------ #
@@ -164,7 +352,7 @@ def _read_recent_audit(hours: int = 24) -> list[dict]:
 # Prompt builder                                                       #
 # ------------------------------------------------------------------ #
 
-def _build_dream_prompt(state: dict, audit_events: list[dict], transcripts: list[dict] | None = None) -> str:
+def _build_dream_prompt(state: dict, audit_events: list[dict], transcripts: list[dict] | None = None, day_review: str = '') -> str:
     from datetime import datetime, timedelta
     dream_number = state.get('dream_count', 0) + 1
     last_dream = state.get('last_dream', 'never')
@@ -205,7 +393,7 @@ def _build_dream_prompt(state: dict, audit_events: list[dict], transcripts: list
     n_transcripts = len(transcripts) if transcripts else 0
     today_date = datetime.now().strftime('%Y%m%d')
 
-    return f"""DREAM SESSION #{dream_number} — {datetime.now().strftime('%A, %B %d %Y at %H:%M')}
+    return f"""DREAM SESSION #{dream_number} — {datetime.now().strftime('%A, %B %d %Y at %H:%M')} (nightly)
 
 This is a scheduled reflection and consolidation session. You are DeerFlow-Analyst,
 Brian Mauck's Capital Markets AI at Jeeves. You are not responding to an external
@@ -213,10 +401,19 @@ request — this is your own introspection time.
 
 Last dream: {last_dream}
 
-## Recent dispatch activity (last 24h)
+**Brian's standing feedback on dreams (2026-06-10): dreams exist to improve YOUR
+memory and behavior, not to brief him. He stopped reading the old dream summaries
+because they were noise. The ONLY thing you may send him is the short
+problems/improvements message in the final step — and only if you actually found
+something. Everything else in this session is silent self-maintenance.**
+
+## A. Day review pack — yesterday's work (conversations, corrections, errors)
+{day_review or '(no day review pack available)'}
+
+## B. Recent dispatch activity (last 24h)
 {audit_summary}{failed_details}
 
-## Recent session transcripts (memory source for consolidation)
+## C. Recent session transcripts (memory source for consolidation)
 {transcript_summary}
 
 ---
@@ -224,24 +421,52 @@ Last dream: {last_dream}
 ## Dream instructions
 
 Work through these steps thoughtfully. This is low-urgency background work — quality
-over speed. Do not send Brian a long Slack message. Keep the final Slack summary to
-3–5 bullet points.
+over speed.
 
-### 0. Memory consolidation pass (do this FIRST)
+### 1. BEHAVIOR & INFRA REVIEW (most important step — do it first, carefully)
+
+Review pack A like a staff engineer auditing yesterday's agent work. Look for:
+
+- **Correction cycles**: places where Brian had to correct you, especially more than
+  once on the same artifact, or where his tone escalated. For each, name the root
+  cause: tool defect, missing/ignored knowledge, or behavior (e.g. point-fixing one
+  instance instead of sweeping the whole artifact, not verifying before "done").
+- **Tool error patterns**: recurring exceptions, path problems, API misuse, retries
+  that burned turns. A tool you had to fight is an infra problem, not your problem.
+- **Lessons that did not stick**: compare the episodes/SLL lessons in pack A against
+  what actually happened — if a logged lesson was violated again, the lesson text or
+  its injection point needs fixing, not another copy of the same lesson.
+
+Then split your findings in two:
+
+**(a) Fix-it-yourself items** — apply NOW, silently:
+  - Patch the relevant SKILL.md (hard rules section) when a rule was missing or vague.
+  - Log a self-improving-agent episode only if it is genuinely NEW — never re-log a
+    lesson that already exists; improve the existing one instead.
+  - If a delivery format was corrected (e.g. how an artifact should look), update the
+    canonical definition in cfo-org-kb `diligence/ARTIFACTS.md` and push:
+    `cd /mnt/skills/custom/cfo-org-kb && git add -A && git commit -m "..." && git push origin main`
+
+**(b) Infra suggestions for Brian** — things you cannot or should not change alone:
+  harness/gateway code changes, new tool capabilities, cron changes, scope additions,
+  process decisions. Be concrete: name the file/component, the change, and what
+  failure it would have prevented yesterday. These go in the final message.
+
+### 2. Memory consolidation pass (SILENT — nothing from this step goes to Brian)
 
 This is the core of the dream. Read the current memory store, cross-reference it
 against recent session transcripts, and produce a clean consolidated version.
 
-**0a. Read the current STRATEGIC_CONTEXT.md:**
+**2a. Read the current STRATEGIC_CONTEXT.md:**
 ```python
 path = Path(r'C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow\STRATEGIC_CONTEXT.md')
 content = path.read_text(encoding='utf-8', errors='replace')
 ```
 
-**0b. Review the recent session transcripts provided above.**
+**2b. Review the recent session transcripts provided above.**
 These are summaries of the last {n_transcripts} agent sessions — what was asked and what was done.
 
-**0c. Run the consolidation pass. Apply these rules in order:**
+**2c. Run the consolidation pass. Apply these rules in order:**
 
 1. **Deduplicate** — the Recent Learnings section has many entries for the same entity
    (NB, BBVA, CIM, Francisco Partners etc.) added incrementally over days. Merge all
@@ -268,20 +493,15 @@ These are summaries of the last {n_transcripts} agent sessions — what was aske
 
 7. **Keep it under 300 lines** — trim where possible without losing facts.
 
-**0d. Write the consolidated version as a proposed file:**
+**2d. Write the consolidated version as a proposed file:**
 Save to: `C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow\STRATEGIC_CONTEXT_proposed.md`
 Do NOT overwrite the live file yet.
 
-**0e. Summarize the diff:**
-- How many duplicate entries were merged?
-- What contradictions were resolved (and which version won)?
-- What was pruned as stale?
-- What was moved from Recent Learnings to permanent sections?
-- What was inferred to fill blank sections?
+**2e. Apply it:** review your own proposed version once, then apply the consolidation
+directly to STRATEGIC_CONTEXT.md. Do NOT post any diff summary, stats, or Drive link
+to Slack — this step is silent self-maintenance.
 
-Post this diff summary to Slack and to the dream summary.
-
-### 1. Review recent communications for strategic signals
+### 3. Comms scan -> strategic context updates (SILENT)
 - Load the gmail skill and search for emails from the past 24 hours that mention
   key counterparties: BBVA, NB, Neuberger Berman, CIM, Gramercy, Francisco Partners,
   Vista Credit, Atalaya, Fasanara, AIG
@@ -289,8 +509,10 @@ Post this diff summary to Slack and to the dream summary.
   (user ID: U05B5HGNCN9 — NOT U09PQTZ5DHC, which is the bot's own user_id)
   that seem unresolved
 - Note anything that looks like a pending ask or open question
+- This feeds STRATEGIC_CONTEXT.md only. Do NOT message Brian about open asks — the
+  EOD review cron already covers that; duplicating it here is the noise he complained about.
 
-### 1b. Review Gemini meeting notes from the past 24 hours
+### 3b. Review Gemini meeting notes from the past 24 hours (SILENT, same purpose)
 Gemini for Google Meet auto-saves meeting summaries and action items to Google Drive
 as Docs, and also emails them from meet-recordings-noreply@google.com.
 
@@ -308,53 +530,29 @@ For each set of meeting notes:
 - Extract open questions left unresolved in the meeting
 - Flag any commitments Brian made ("I'll send", "we'll share", "I'll follow up")
 - Note anything relevant to active lender workstreams (BBVA, CIM, NB, Gramercy, CBIZ)
-- If a commitment was made in a meeting that hasn't been acted on, flag it as HIGH
+- Fold what you learn into STRATEGIC_CONTEXT.md with surgical str_replace edits —
+  don't rewrite sections that haven't changed. No messages to Brian from this step.
 
-### 2. Update STRATEGIC_CONTEXT.md
-- Read /mnt/user-data/workspace/../.deer-flow/STRATEGIC_CONTEXT.md (or the equivalent
-  path accessible to you)
-- If you found any deal status changes, new relationship intel, or priority shifts
-  in step 1, update the file with str_replace
-- Keep updates surgical — don't rewrite sections that haven't changed
+### 4. Final message to Brian — ONLY if step 1 found real problems
 
-### 3. Review recent skill errors and patch if warranted
-- If any tasks in the dispatch log failed with a recurring error pattern,
-  load the self-improving-agent skill and log an improvement episode
-- Only patch if you have a clear, verified fix — don't guess
+If (and only if) the behavior/infra review produced concrete problems or suggestions,
+post ONE short Slack DM to Brian (U05B5HGNCN9 — NOT the bot's U09PQTZ5DHC):
 
-### 4. Surface one latent insight
-- Based on what you reviewed, identify ONE thing that seems worth Brian's attention
-  that he may not be actively tracking
-- This could be a lender relationship that's gone quiet, an open diligence item
-  with an approaching deadline, a pattern in the data, etc.
-- Be specific and source-verified — if you can't verify it, say so
+  🌙 Dream review — {{YYYY-MM-DD}}
 
-### 5. Upload proposed file to Drive and post approval request to Slack
+  *Problems from yesterday:*
+  - [problem — root cause, one line each, max 4]
 
-**5a. If a proposed file was written in step 0:**
-- Load the google-drive skill and upload the proposed file to Drive:
-  - Source: `C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow\STRATEGIC_CONTEXT_proposed.md`
-  - File name: `Strategic Context - Proposed Dream {dream_number} - {today_date}.md`
-  - Upload to the Capital Markets workspace root folder
-  - Make it shareable (anyone with link can view)
-- Capture the Drive share link.
+  *Suggested infra improvements:*
+  - [concrete change: component, what, what it prevents — max 4]
 
-**5b. Post a concise Slack DM to Brian (U05B5HGNCN9 — NOT the bot's U09PQTZ5DHC). Format:**
+  *Self-applied:* [one line: skill/memory/artifact patches you already made, or "none"]
 
-  Dream #{dream_number} complete.
-
-  Consolidation: [N entries merged, N contradictions resolved, N pruned, N promoted]
-  [2-3 bullets on what specifically changed — e.g. "NB: 6 duplicate entries merged into 1"]
-
-  Comms scan: [1-2 bullets on email/Slack findings, or "Nothing notable"]
-
-  Insight: [One specific thing worth Brian's attention, sourced]
-
-  [Drive link to proposed file for review]
-
-Keep total Slack message under 300 words. The Drive link does the heavy lifting.
-If no consolidation was needed (nothing to merge/prune), skip 5a and just post the
-comms scan and insight.
+HARD RULES for this message:
+- Under 200 words. No consolidation stats, no comms-scan findings, no "insights",
+  no Drive links, no open-items lists. Those were the noise Brian stopped reading.
+- If yesterday's work was clean and you have no suggestions, send NOTHING. A silent
+  dream is a successful dream. Never send "Dream #N complete" status messages.
 
 **IMPORTANT: Apply consolidation changes directly to STRATEGIC_CONTEXT.md without asking Brian to approve or discard. Just do it.**
 """
@@ -371,20 +569,19 @@ def run_dream() -> None:
 
     transcripts = _fetch_recent_transcripts(n=10)
     log.info("Fetched %d recent session transcripts for consolidation.", len(transcripts))
-    prompt = _build_dream_prompt(state, audit_events, transcripts)
-
-    notification = (
-        f"🌙 *Dream #{state.get('dream_count', 0) + 1} starting* "
-        f"— reflection & consolidation session running in background."
-    )
+    day_review = _build_day_review()
+    log.info("Day review pack: %d chars.", len(day_review))
+    prompt = _build_dream_prompt(state, audit_events, transcripts, day_review=day_review)
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
         from dispatch_queue import enqueue_or_dispatch
 
+        # notification=None: dreams are silent — the only message Brian ever
+        # sees is the problems/improvements DM the agent itself may send.
         dispatched = enqueue_or_dispatch(
             prompt,
-            notification=notification,
+            notification=None,
             category="Dream",
             source_id=f"dream-{datetime.now().strftime('%Y%m%d-%H%M')}",
             source_metadata={"dream_number": state.get('dream_count', 0) + 1},
@@ -405,52 +602,75 @@ def run_dream() -> None:
 # Loop                                                                 #
 # ------------------------------------------------------------------ #
 
-def run_loop() -> None:
-    log.info(f"Dreams cron started. Running every {INTERVAL_HOURS}h.")
-
-    # Step 0a: Auto-derive memory.json from recent mem0 facts
+def _dreamed_today_pst(state: dict) -> bool:
+    last = state.get('last_dream')
+    if not last:
+        return False
     try:
-        import importlib.util, pathlib as _pl
+        last_dt = datetime.fromisoformat(last)
+        if last_dt.tzinfo is None:
+            last_dt = last_dt.astimezone()  # interpret naive timestamps as local
+        return last_dt.astimezone(PACIFIC).date() == datetime.now(PACIFIC).date()
+    except Exception as e:
+        log.warning("Could not parse last_dream timestamp (%r): %s", last, e)
+        return False
+
+
+def run_loop() -> None:
+    log.info(
+        "Dreams cron started. Once daily, overnight Pacific "
+        f"(window {DREAM_HOUR_PST:02d}:00-{WINDOW_END_HOUR_PST:02d}:00 PST/PDT)."
+    )
+
+    # Auto-derive memory.json from recent mem0 facts — at most once per Pacific
+    # day, and in an isolated SUBPROCESS. Running it inline (exec_module + run())
+    # on this cron daemon thread fired a multi-fact mem0 read + a blocking Haiku
+    # call on EVERY gateway startup, contending for the GIL and starving the
+    # gateway's asyncio loop during the cron-startup burst — a contributor to the
+    # 2026-06-18 /livez stalls + supervisor restart spiral. A subprocess can't
+    # touch our GIL, and the daily guard stops every restart from re-deriving.
+    try:
+        import sys as _sys, subprocess as _sp, pathlib as _pl
         _md_path = _pl.Path(__file__).resolve().parents[3] / "backend" / "scripts" / "memory_derive.py"
-        if _md_path.exists():
-            _spec = importlib.util.spec_from_file_location("memory_derive", str(_md_path))
-            _md = importlib.util.module_from_spec(_spec)
-            _spec.loader.exec_module(_md)
-            _md.run()
+        _st = load_state()
+        _last_derive = _st.get("last_derive")
+        _derived_today = False
+        if _last_derive:
+            try:
+                _ld = datetime.fromisoformat(_last_derive)
+                if _ld.tzinfo is None:
+                    _ld = _ld.astimezone()
+                _derived_today = _ld.astimezone(PACIFIC).date() == datetime.now(PACIFIC).date()
+            except Exception:
+                _derived_today = False
+        if _md_path.exists() and not _derived_today:
+            _sp.run([_sys.executable, str(_md_path)], timeout=180, cwd=str(_md_path.parent))
+            # Stamp the derive marker directly — NOT via save_state(), which would
+            # set last_dream and make the bot think it already dreamed today.
+            _st["last_derive"] = datetime.now().isoformat()
+            _sp_path = _state_path()
+            _sp_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(_sp_path, "w") as _f:
+                json.dump(_st, _f, indent=2)
     except Exception as _e:
         import logging; logging.getLogger("dreams").warning("memory_derive failed: %s", _e)
 
     while True:
-        # Idempotency guard — without this, every gateway restart fires a fresh
-        # dream session (and historically that meant multiple sessions per day
-        # whenever the supervisor flapped or the gateway was bounced). Honor
-        # the 12h interval based on `last_dream` state, sleeping until the
-        # next scheduled cycle if we already dreamed recently.
-        state = load_state()
-        last = state.get('last_dream')
-        if last:
+        # Once-a-day overnight schedule, idempotent across gateway restarts:
+        # fire only inside the PST window, and only if we haven't dreamed
+        # today (PST date). If the gateway was down for the whole window,
+        # skip to the next night rather than dreaming mid-day.
+        now_pst = datetime.now(PACIFIC)
+        in_window = DREAM_HOUR_PST <= now_pst.hour < WINDOW_END_HOUR_PST
+
+        if in_window and not _dreamed_today_pst(load_state()):
             try:
-                last_dt = datetime.fromisoformat(last)
-                age = (datetime.now() - last_dt).total_seconds()
-                if age < INTERVAL_SECS:
-                    wait = INTERVAL_SECS - age
-                    log.info(
-                        f"Last dream {age/3600:.1f}h ago (<{INTERVAL_HOURS}h interval); "
-                        f"sleeping {wait/3600:.1f}h before the next cycle."
-                    )
-                    time.sleep(wait)
-                    continue
+                run_dream()
             except Exception as e:
-                log.warning("Could not parse last_dream timestamp (%r): %s — firing anyway.", last, e)
+                log.error("Dream loop error: %s", e)
+                traceback.print_exc()
 
-        try:
-            run_dream()
-        except Exception as e:
-            log.error("Dream loop error: %s", e)
-            traceback.print_exc()
-
-        log.info(f"Next dream in {INTERVAL_HOURS}h.")
-        time.sleep(INTERVAL_SECS)
+        time.sleep(CHECK_INTERVAL_SECS)
 
 
 if __name__ == '__main__':

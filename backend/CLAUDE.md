@@ -59,7 +59,7 @@ deer-flow/
 ├── frontend/                   # Next.js frontend application
 └── skills/                     # Agent skills directory
     ├── public/                # Public skills (committed)
-    └── custom/                # Custom skills (gitignored)
+    └── custom/                # Custom skills (tracked in this repo)
 ```
 
 ## Important Development Guidelines

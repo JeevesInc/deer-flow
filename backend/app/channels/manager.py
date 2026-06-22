@@ -11,6 +11,7 @@ from typing import Any
 
 from app.channels.manager_helpers import (
     accumulate_stream_text,
+    checkpoint_age_seconds,
     extract_artifacts,
     extract_response_text,
     extract_tool_call_name,
@@ -45,6 +46,38 @@ def _build_human_content(stamped_text: str, msg: InboundMessage) -> str | list[d
 # Maximum wall-clock time (seconds) a single runs.wait() call may block
 # before the gateway cancels the run and returns an error to the user.
 RUN_TIMEOUT_SECONDS = 20 * 60  # 20 minutes
+
+
+def classify_error_text(exc: BaseException) -> str:
+    """Map an exception raised during a run into a short, user-facing message.
+
+    Shared by the non-streaming (``runs.wait``) and streaming error paths so
+    both surface the same friendly text instead of a raw stack trace.
+    """
+    import httpx
+
+    err_str = str(exc).lower()
+    if isinstance(exc, TimeoutError) and "timed out" in err_str:
+        return (
+            "This task took too long and was cancelled after "
+            f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
+            "Try breaking it into smaller steps, or reply **continue** "
+            "to pick up where I left off."
+        )
+    if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
+        return "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
+    if "usage limit" in err_str or "specified api usage" in err_str:
+        return (
+            "I've hit the Anthropic API usage limit for this billing period, so "
+            "I can't respond right now. Access resets at the start of next month — "
+            "or raise the cap in the Anthropic Console to restore it sooner."
+        )
+    if "recursion" in err_str or "recursion_limit" in err_str:
+        return (
+            "I hit my step limit before finishing. "
+            "Reply **continue** in this thread and I'll pick up where I left off."
+        )
+    return "An internal error occurred. Please try again."
 
 DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 50}
 DEFAULT_RUN_CONTEXT: dict[str, Any] = {
@@ -282,6 +315,26 @@ class ChannelManager:
                                                     tid, thread_age, run["run_id"], run_age,
                                                 )
                                                 break
+                                    if not any_run_active:
+                                        # Run rows freeze their updated_at at run start, so a
+                                        # long healthy run looks idle. Consult the real progress
+                                        # signal before killing: the latest checkpoint write time
+                                        # (a checkpoint lands on every graph superstep).
+                                        try:
+                                            state = await client.threads.get_state(tid)
+                                            ckpt_age = checkpoint_age_seconds(state, now)
+                                            if ckpt_age is not None and ckpt_age < STUCK_THRESHOLD:
+                                                any_run_active = True
+                                                logger.info(
+                                                    "[Monitor] thread %s run-row stale (%.0fs) but "
+                                                    "checkpoint written %.0fs ago — skipping",
+                                                    tid, thread_age, ckpt_age,
+                                                )
+                                        except Exception:
+                                            logger.warning(
+                                                "[Monitor] checkpoint freshness check failed for thread %s — falling back to run age",
+                                                tid, exc_info=True,
+                                            )
                                     if any_run_active:
                                         continue
 
@@ -384,25 +437,7 @@ class ChannelManager:
                     msg.channel_name,
                     msg.chat_id,
                 )
-                import httpx
-                err_str = str(exc).lower()
-                if isinstance(exc, TimeoutError) and "timed out" in err_str:
-                    error_text = (
-                        "This task took too long and was cancelled after "
-                        f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
-                        "Try breaking it into smaller steps, or reply **continue** "
-                        "to pick up where I left off."
-                    )
-                elif isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
-                    error_text = "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
-                elif "recursion" in err_str or "recursion_limit" in err_str:
-                    error_text = (
-                        "I hit my step limit before finishing. "
-                        "Reply **continue** in this thread and I'll pick up where I left off."
-                    )
-                else:
-                    error_text = "An internal error occurred. Please try again."
-                await self._send_error(msg, error_text)
+                await self._send_error(msg, classify_error_text(exc))
 
     # -- chat handling -----------------------------------------------------
 
@@ -629,21 +664,7 @@ class ChannelManager:
                 if attachments:
                     response_text = format_artifact_text([attachment.virtual_path for attachment in attachments])
                 elif stream_error:
-                    err_str = str(stream_error).lower()
-                    if isinstance(stream_error, TimeoutError) and "timed out" in err_str:
-                        response_text = (
-                            "This task took too long and was cancelled after "
-                            f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
-                            "Try breaking it into smaller steps, or reply **continue** "
-                            "to pick up where I left off."
-                        )
-                    elif "recursion" in err_str or "recursion_limit" in err_str:
-                        response_text = (
-                            "I hit my step limit before finishing. "
-                            "Reply **continue** in this thread and I'll pick up where I left off."
-                        )
-                    else:
-                        response_text = "An error occurred while processing your request. Please try again."
+                    response_text = classify_error_text(stream_error)
                 else:
                     response_text = latest_text or "(No response from agent)"
 

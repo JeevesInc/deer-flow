@@ -373,6 +373,43 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == ""
 
 
+class TestClassifyErrorText:
+    """classify_error_text maps run exceptions to short user-facing messages."""
+
+    def test_usage_limit(self):
+        from app.channels.manager import classify_error_text
+
+        exc = Exception(
+            "Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', "
+            "'message': 'You have reached your specified API usage limits. "
+            "You will regain access on 2026-07-01 at 00:00 UTC.'}}"
+        )
+        text = classify_error_text(exc)
+        assert "usage limit" in text.lower()
+        assert "Anthropic Console" in text
+        # Short, single user-facing message — no stack trace / raw error code.
+        assert "Traceback" not in text
+        assert "400" not in text
+
+    def test_recursion_limit(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(Exception("GraphRecursionError: recursion_limit reached"))
+        assert "continue" in text.lower()
+
+    def test_timeout(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("Run timed out after 20 minutes"))
+        assert "too long" in text.lower()
+
+    def test_generic_fallback(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(ValueError("something unexpected"))
+        assert text == "An internal error occurred. Please try again."
+
+
 # ---------------------------------------------------------------------------
 # ChannelManager tests
 # ---------------------------------------------------------------------------

@@ -165,7 +165,7 @@ def _setup_dspy():
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set")
 
-    model = os.environ.get("DSPY_MODEL", "anthropic/claude-sonnet-4-20250514")
+    model = os.environ.get("DSPY_MODEL", "anthropic/claude-sonnet-4-6")
     lm = dspy.LM(model, api_key=api_key, max_tokens=1024)
     dspy.configure(lm=lm)
     return lm

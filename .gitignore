@@ -98,3 +98,6 @@ backend/deerflow/
 
 # Runtime logs
 *.log
+
+# Box skill secrets (local only)
+skills/custom/box/box_secrets.json

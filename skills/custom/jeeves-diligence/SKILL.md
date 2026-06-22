@@ -12,6 +12,59 @@ allowed-tools:
 
 <!-- Created: 2026-04-18 | source: self-improving-agent -->
 <!-- Updated: 2026-04-17 | source: BBVA + Vista Credit DD processes -->
+<!-- Updated: 2026-06-10 | preflight, canonical artifacts (cfo-org-kb), dd_verify gate, update-in-place uploads -->
+
+---
+
+## Start-of-Task Preflight (mandatory, before ANY diligence work)
+
+1. **Pull the kb and read the artifact definitions**:
+   `cd /mnt/skills/custom/cfo-org-kb && git pull origin main && cat diligence/ARTIFACTS.md`
+   Every DDQ request maps to a generic artifact there (loan tape, DQ/CO monthly,
+   rollforward, ...). Counterparty item codes (VCP-1, FDD-10, ...) are ephemeral —
+   the artifact definitions are not. Identify what is being asked for in artifact
+   terms BEFORE building or requesting anything.
+2. **Check the canonical Diligence Registry in Drive** before building or
+   requesting any item: latest `Diligence Registry - Capital Markets - YYYYMMDD.xlsx`
+   in `Debt/` root (folder `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU`). Most diligence items
+   already exist from a prior counterparty's process — reuse/refresh, don't rebuild.
+3. **Re-read the Hard Rules below.** They each cost real rework when violated.
+
+## Hard Rules — Tracker + Correspondence (learned Jun 9-10 2026, hours of rework)
+
+1. **Never produce a *content* file without being explicitly asked** (data answering
+   a DD item — financials, revenue, DQ tables). Ownership stays with the named person;
+   a Redshift reconstruction of an accounting record is a fabrication. (FDD-3 and
+   FDD-10 were built unsolicited — both wrong, both reverted.)
+   **But DO proactively handle *logistics*** — creating/organizing the DD folder,
+   keeping the tracker current, verifying links, chasing owners, AND finding+filing documents we already have rather than emailing for them. Brian was explicit
+   that deferring the obvious DD folder was wrong. Content = ask first. Logistics = just do it.
+2. **Read the full email thread AND Brians sent mail (in:sent) before drafting any follow-up or setting tracker statuses - statuses must reflect what Brian actually sent/answered, not just agent drafts.** Fetch every reply,
+   identify what has been received vs. outstanding, then draft. Never draft from the
+   original request alone. (Brandon/Thiago follow-up missed all the delivered items.)
+3. **Match the format of the last communication.** Find the most recent email Brian
+   sent and mirror its structure exactly. Do not invent a new format. (Alex reply was
+   by status; correct was by person — visible in the thread.)
+4. **State recipients whenever you create a draft.** `gmail_tool.py draft` prints a
+   RECIPIENTS block — repeat To/Cc in your reply to Brian. A threaded reply inherits
+   the WHOLE group (including external counterparties) unless you pass `--to`/`--cc`.
+   Replies stay on the thread (never switch to `draft-new` for a conversation). BUT a NEW topic going to counsel/counterparty gets its OWN clean standalone email — do NOT append it to an unrelated existing thread (e.g. another item's punch-list thread) just to consolidate. And never reuse a topical thread that is internal-only, or its quoted internal chatter leaks to external counsel. Check both the topic and the participants before reusing any thread.
+   (A draft to Alex nearly went to Vista's entire team.)
+5. **Run `dd_verify.py` before reporting tracker/VDR work as done**:
+   `python dd_verify.py --tracker <xlsx> --folder <VDR_FOLDER_ID>`
+   It verifies every link resolves and every uploaded file actually opens, and flags
+   duplicates. An API call returning 200 is not verification. (Broken FDD-11 link,
+   corrupted VCP-2 upload — both would have been caught.)
+6. **Fix the class, not the instance.** When Brian flags one defect (an unlinked item,
+   a broken link, a wrong status), sweep the ENTIRE artifact for every other instance
+   of that defect class and fix them all before replying. (Half of the Jun 9
+   back-and-forth was Brian manually iterating an audit the agent should have run itself.)
+7. **Never delete-and-reupload a counterparty-facing Drive file.** `upload_to_drive.py`
+   now updates in place by default (same file ID, same link). Deleting changes the ID,
+   breaks every link already shared, and risks corruption. External-facing workbooks
+   with formulas: upload converted to a native Google Sheet so formulas evaluate.
+8. **Deliver complete work once.** Think from "what does correct finished work look
+   like?" before starting. Back-and-forth is unacceptable.
 
 ---
 
@@ -136,10 +189,16 @@ When writing a DDQ response document that will be shared externally (e.g., Vista
 
 Lessons from BBVA DD reconciliation:
 
-- **Tracker and Folder alignment is mandatory**: Every item in the tracker must map to exactly one folder. Every folder must have a corresponding tracker row. Reconcile before declaring complete.
+- **Trackers are ALWAYS native Google Sheets shared via link, never .xlsx** (Brian, 2026-06-17 explicit correction). upload_to_drive.py uploads xlsx-as-xlsx with NO conversion; instead create the file with mimeType 'application/vnd.google-apps.spreadsheet' (Drive converts the xlsx on import), share the link (domain writer for tryjeeves.com), and trash the prior xlsx so there is one canonical Sheet.\n- **Tracker and Folder alignment is mandatory**: Every item in the tracker must map to exactly one folder. Every folder must have a corresponding tracker row. Reconcile before declaring complete.
 - **No duplicate files**: When a new version of a file is uploaded, delete the old version. Drive folders must contain exactly one copy of each document.
+- **Duplicates are always deconflicted (Brian, 2026-06-10)**: Whenever discovery,
+  triage, or any audit surfaces the same document under multiple Drive IDs,
+  deconflict immediately — pick one canonical copy, remove/archive the rest, and
+  never present duplicate copies to Brian as independent triage rows. The registry
+  refresh script now groups duplicates into a "DUPLICATES TO DECONFLICT" section
+  and flags each affected item.
 - **No cross-contamination**: Never reference BBVA DD folder links in a Vista tracker (or vice versa). Each counterparty tracker must reference only that counterparty VDR/folder structure.
-- **Empty folders are not done**: A folder with no file is an open item, not a placeholder. Either upload the file or mark the tracker row RED.
+- **When updating a tracker, delete any notes Brian left for the agent (e.g. "Draft an email", "Ask X") once actioned - they are directives to the assistant, not durable tracker content. Empty folders are not done**: A folder with no file is an open item, not a placeholder. Either upload the file or mark the tracker row RED.
 - **When a reconciliation reveals a fixable gap** (file ID + folder ID both known): execute the fix immediately -- do not list it as a user action item. Only put items on the user's plate when they require a human decision or a document Brian must provide.
 
 ---
@@ -213,28 +272,43 @@ The registry has three tabs:
 - **Counterparty Summary** — one-row-per-lender stage/status overview
 - **Monthly Update Runbook** — 8-step procedure for the monthly refresh
 
-### Monthly Update Job
+### Monthly Update Job (AUTOMATED as of 2026-06-10)
 
-Run on the 1st of each month (or when Brian asks):
+`diligence_registry_cron.py` runs inside the gateway (cron_supervisor) — on the
+1st of each month (or if >35 days stale) it crawls all counterparty folders,
+diffs against the **canonical registry downloaded from Drive Debt/ root**, and
+DMs Brian a summary of NEW items for triage. Discovery only: the registry Excel
+is hand-curated, so the cron never overwrites it.
+
+Manual runs (when Brian asks):
 
 ```bash
-# Dry run — discover new items, no rebuild/upload
+# Discovery only — crawl + summary, no rebuild/upload
 python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py --dry-run
 
-# Full refresh — discover + rebuild Excel + upload to Drive
+# Full refresh — discover + rebuild Excel + upload to Drive (updates the
+# canonical file in place — only run after new items are triaged into the builder)
 python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py
-
-# Rebuild without Drive upload
-python C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-diligence/diligence_registry_refresh.py --no-upload
 ```
 
 The refresh script:
-1. Reads the latest registry Excel in `C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/5480aa25-b99c-4e54-893f-0fadd433bbb5/user-data/outputs/` to get all known Drive IDs
+1. Downloads the latest canonical registry Excel from Drive Debt/ root (falls back to `backend/.deer-flow/diligence/`)
 2. Crawls all active counterparty folders (BBVA DD, NB Diligence, FP Diligence, Vista, CIM, Covalto, Gramercy, Fasanara, Debt Root)
 3. Identifies NEW files not yet in the registry and RECENT files (last 45 days)
-4. Saves a `Diligence Refresh Summary - YYYYMMDD.txt` with actionable item list
-5. Rebuilds the registry Excel with today's date and uploads to Drive Debt/ root
+4. Saves a `Diligence Refresh Summary - YYYYMMDD.txt` with actionable item list (in `backend/.deer-flow/diligence/`)
+5. (full mode only) Rebuilds the registry Excel with today's date and uploads to Drive Debt/ root
 6. Logs a self-improvement episode if new items were found
+
+### Verification Gate (`dd_verify.py`)
+
+```bash
+python dd_verify.py --tracker <path/to/tracker.xlsx> --folder <VDR_FOLDER_ID>
+```
+
+Verifies every hyperlink in a tracker resolves (Drive API + HTTP), downloads
+and opens every file in a VDR folder (catches corrupt uploads), and flags
+duplicate documents and stray subfolders. Exit 0 = clean. **Mandatory before
+reporting any tracker/VDR work as done.**
 
 ### Rebuilding the Registry from Scratch
 

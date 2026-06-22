@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import mimetypes
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.channels.message_bus import ResolvedAttachment
@@ -20,6 +20,31 @@ def stamp_message(text: str) -> str:
     """Prepend the current date/time to a user message so the agent always knows 'now'."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M, %A")
     return f"<current_date>{now}</current_date>\n{text}"
+
+
+def checkpoint_age_seconds(state: Any, now: datetime) -> float | None:
+    """Seconds since the latest checkpoint write, from a ``threads.get_state`` response.
+
+    LangGraph writes a checkpoint on every graph superstep, so the state's
+    ``created_at`` is the only reliable activity signal for a running run —
+    run-level and thread-level ``updated_at`` freeze when the run starts,
+    which makes any healthy run longer than the stuck threshold look idle.
+
+    Returns None when the timestamp is missing or unparseable so the caller
+    can fall back to other heuristics.
+    """
+    raw = state.get("created_at") if isinstance(state, Mapping) else None
+    if not raw:
+        return None
+    try:
+        ts = datetime.fromisoformat(raw.replace("Z", "+00:00")) if isinstance(raw, str) else raw
+        if not isinstance(ts, datetime):
+            return None
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (now - ts).total_seconds()
+    except (ValueError, TypeError):
+        return None
 
 
 def extract_response_text(result: dict | list) -> str:

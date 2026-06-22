@@ -2,8 +2,11 @@
 
 Exposes lightweight gauges/counters over /metrics so the local Grafana stack
 (monitoring/docker-compose.yml at repo root) can render an at-a-glance
-dashboard.  All collectors here are pull-based: the metric is computed on
-each scrape so there are no background timers competing with cron jobs.
+dashboard.  All collectors here are pull-based: metrics are computed on each
+scrape so there are no background timers competing with cron jobs.  The one
+exception is the paginated LangGraph thread sweep, which is memoized for
+_THREAD_STATUS_TTL_SEC to stay under the Prometheus scrape timeout — still
+pull-driven, just rate-limited.
 """
 
 from __future__ import annotations
@@ -334,33 +337,73 @@ def _parse_ts(ts: str | None) -> datetime | None:
         return None
 
 
+# /threads/search returns at most one page per call. Paginate to get the true
+# count, but cap pages and total wall-clock so a slow LangGraph can't make the
+# /metrics scrape exceed Prometheus' scrape_timeout (default 10s).
+_THREAD_PAGE_SIZE = 200
+_THREAD_MAX_PAGES = 50  # safety cap: counts up to 10k threads per status
+_THREAD_COLLECT_BUDGET_SEC = 6.0
+_THREAD_REQUEST_TIMEOUT_SEC = 4.0
+
+
 def _collect_thread_status(langgraph_url: str) -> dict[str, Any]:
-    """Returns {counts: {status: n}, oldest_busy_age_seconds: float|None, busy_threads: [...]}.
+    """Returns {counts, collected, oldest_busy_age_seconds, busy_threads}.
+
+    ``counts[status]`` is the true thread count (paginated, not capped at a
+    single 200-row page). ``collected[status]`` is True only when that status
+    was counted end-to-end; on a non-200/timeout/budget-exhausted sub-request
+    the count is left at 0 and ``collected[status]`` stays False, so callers can
+    skip the gauge update rather than publish a spurious zero.
 
     Pure-sync via httpx so it works from both the FastAPI async /metrics
     handler (which already runs inside a loop and can't call asyncio.run())
-    and from sync admin scripts.
+    and from sync admin scripts. A wall-clock budget keeps the whole sweep
+    under the Prometheus scrape timeout even when LangGraph is slow.
     """
+    statuses = ("busy", "idle", "error", "interrupted")
     out: dict[str, Any] = {
-        "counts": {s: 0 for s in ("busy", "idle", "error", "interrupted")},
+        "counts": {s: 0 for s in statuses},
+        "collected": {s: False for s in statuses},
         "oldest_busy_age_seconds": None,
         "busy_threads": [],
     }
     now = datetime.now(timezone.utc)
     url = f"{langgraph_url.rstrip('/')}/threads/search"
+    deadline = time.monotonic() + _THREAD_COLLECT_BUDGET_SEC
     try:
-        with httpx.Client(timeout=5.0) as client:
-            for status in ("busy", "idle", "error", "interrupted"):
-                resp = client.post(url, json={"status": status, "limit": 200})
-                if resp.status_code != 200:
+        with httpx.Client(timeout=_THREAD_REQUEST_TIMEOUT_SEC) as client:
+            for status in statuses:
+                total = 0
+                offset = 0
+                ok = True
+                busy_threads: list[dict[str, Any]] = []  # busy is small; keep full set for age
+                while True:
+                    if time.monotonic() >= deadline:
+                        ok = False
+                        break
+                    resp = client.post(url, json={"status": status, "limit": _THREAD_PAGE_SIZE, "offset": offset})
+                    if resp.status_code != 200:
+                        ok = False
+                        break
+                    batch = resp.json()
+                    if not isinstance(batch, list):
+                        ok = False
+                        break
+                    total += len(batch)
+                    if status == "busy":
+                        busy_threads.extend(batch)
+                    if len(batch) < _THREAD_PAGE_SIZE:
+                        break
+                    offset += _THREAD_PAGE_SIZE
+                    if offset // _THREAD_PAGE_SIZE >= _THREAD_MAX_PAGES:
+                        break
+                if not ok:
                     continue
-                threads = resp.json()
-                if not isinstance(threads, list):
-                    continue
-                out["counts"][status] = len(threads)
+                out["counts"][status] = total
+                out["collected"][status] = True
                 if status == "busy":
                     ages: list[tuple[float, dict[str, Any]]] = []
-                    for t in threads:
+                    for t in busy_threads:
                         ts = _parse_ts(t.get("updated_at") or t.get("created_at"))
                         if ts is None:
                             continue
@@ -380,15 +423,32 @@ def _collect_thread_status(langgraph_url: str) -> dict[str, Any]:
     return out
 
 
+# Memoize the (multi-call, paginated) thread sweep so a 15s scrape interval
+# doesn't hammer LangGraph 4× every 15s. Still pull-based — no background timer.
+_THREAD_STATUS_TTL_SEC = 60.0
+_thread_status_cache: dict[str, Any] | None = None
+_thread_status_cache_at: float = 0.0
+
+
 def _refresh_langgraph_threads(langgraph_url: str) -> None:
-    try:
-        info = _collect_thread_status(langgraph_url)
-    except Exception:
-        return
+    global _thread_status_cache, _thread_status_cache_at
+    nowm = time.monotonic()
+    if _thread_status_cache is not None and (nowm - _thread_status_cache_at) < _THREAD_STATUS_TTL_SEC:
+        info = _thread_status_cache
+    else:
+        try:
+            info = _collect_thread_status(langgraph_url)
+        except Exception:
+            return
+        _thread_status_cache = info
+        _thread_status_cache_at = nowm
+    collected = info.get("collected", {})
     for status, count in info["counts"].items():
-        g_threads_by_status.labels(status=status).set(count)
-    oldest = info["oldest_busy_age_seconds"]
-    g_busy_thread_age.set(oldest if oldest is not None else 0)
+        if collected.get(status, True):  # only publish statuses we actually counted
+            g_threads_by_status.labels(status=status).set(count)
+    if collected.get("busy", True):
+        oldest = info["oldest_busy_age_seconds"]
+        g_busy_thread_age.set(oldest if oldest is not None else 0)
 
 
 def _refresh_cap_markets() -> None:

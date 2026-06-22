@@ -1,32 +1,32 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-06-09T22:07:16.939914Z",
+  "lastUpdated": "2026-06-22T19:11:02.039717Z",
   "user": {
     "workContext": {
-      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Work spans lender negotiations, analytics, ML, and structured credit. Key tools: Taktile, Redshift, Metabase, python-pptx, loc_tape, Linear, DeerFlow, LangGraph.",
-      "updatedAt": "2026-06-09T20:34:47.106061Z"
+      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Work spans lender negotiations, analytics, ML, and structured credit. Key tools: Taktile, Redshift, Metabase, python-pptx, loc_tape, Linear, DeerFlow, LangGraph, Airflow.",
+      "updatedAt": "2026-06-16T16:32:37.912056Z"
     },
     "personalContext": {
-      "summary": "Direct, zero tolerance for hallucination or speculation without data. Always retrieve data — never reason about it. No workarounds; fix root causes. Expects browser automation attempted before declaring impossible. Prefers Fable 5 for coding and reasoning tasks.",
-      "updatedAt": "2026-06-09T18:33:05.051448Z"
+      "summary": "Direct, zero tolerance for hallucination or unauthorized work. No Drive links — attach files directly. Trackers must be Google Sheets. Never send messages without explicit go-ahead. No workarounds; fix root causes.",
+      "updatedAt": "2026-06-22T16:38:41.114325Z"
     },
     "topOfMind": {
-      "summary": "1) Vista diligence: PwC/Vista shared QoE workstream active\n2) NB: 3 agreed steps post Jun 8 call; close end of June\n3) GTV/Liquidity tension: potential end-of-month cash deficit\n4) BBVA SOFOM wind-down: internal sync Thu Jun 11\n5) Cap Markets dashboard: CICO→bank_accts wiring complete; daca_pledged_usd extraction still broken\n6) DeerFlow agent multi-laptop sync: memory.json to git; mem0_data via manual rsync; local uncommitted changes need pushing",
-      "updatedAt": "2026-06-09T22:07:16.930905Z"
+      "summary": "1) MX BB 6/21: ~$8.7M deficiency ($52.3M base vs $61.0M drawn); validate Total Drawn\n2) Kroll Box: P1-1/P1-7–9/P1-11/P1-13–14 filed; P1-4/P1-5 Brandon; P1-12 not located\n3) Goodwin Punch List: Hedging Policy, bank accounts (Alex), FCPA, Brazil (Thiago)\n4) RPP/Collections: 32 active/$12.08M; reply to Lucio drafted, not sent\n5) PwC FDD (Project J): Section B drafted, inserted in doc; Brian editing\n6) Wind-down meeting: Tue Jun 23 8:30am PT",
+      "updatedAt": "2026-06-22T18:53:43.660185Z"
     }
   },
   "history": {
     "recentMonths": {
-      "summary": "In June 2026, Brian built a Capital Markets intelligence surface: morning Slack brief plus localhost:8100 credit health dashboard covering BB snapshot, DQ 30+ trends, roll rate heatmap, NCO trend, and covenant tracker. Dashboard refactored to no-scroll 4-row layout. US BB pipeline extended with CICO email image extraction. Brian runs a local DeerFlow agent with Redshift, Slack, and Google integrations; memory portability via git-tracked memory.json and manual rsync of mem0_data SQLite. Agent repo has local uncommitted changes (capital-markets dashboard JSON, zscaler_reauth.py, start.sh, .gitignore) pending push for multi-laptop sync.",
-      "updatedAt": "2026-06-09T22:07:16.930905Z"
+      "summary": "Brian is managing two active capital markets facilities (US Bridge and MX SOFOM, June 21 BB showing $8.7M deficiency) while driving Vista diligence closure with Goodwin, NB, and Kroll across hedging policy, bank accounts, and Brazil/FCPA docs. PwC FDD (Project J) is active; Section B (Cash and working capital) answers have been drafted by AI and inserted into the doc for Brian and Isabel to edit. Parallel operational work includes fixing the RPP collections report (32 active loans/$12.08M) and reconciling 76 prior RPP loans. Bridge facility admin is ongoing, including coordinating interest payments with CIM and internal stakeholders.",
+      "updatedAt": "2026-06-22T18:53:43.660185Z"
     },
     "earlierContext": {
       "summary": "",
       "updatedAt": ""
     },
     "longTermBackground": {
-      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Key stakeholders include Alexander Melikian (CFO), Brandon McGathy (GC), Jorge Hurrle, Kacper Chrobot, Hayes Hyde, Melissa Schwab Wright, Tyler Garaffa (Goodwin), Avia Cohen (Goodwin), Victor Garrido, Joe Raia, Jay Berger (NB), Dryden Liddle (CIM), Luis Antonio Gomez Lara (BBVA), Axel García Ortiz (Pérez Lloréa), Gustavo Villarreal (CXC), Eugenio Bernal (BBVA), Aaron Terwey (Proskauer), Rodrigo Cue (Monex), Jorge Olivares (W&C), Max Fernandez (NB), Lu Zhengyuan (NB deal lead)...",
-      "updatedAt": "2026-06-09T20:16:43.670686Z"
+      "summary": "Brian Mauck is Head of Capital Markets at Jeeves Financial Technology, running capital markets and credit data science. Key stakeholders include Alexander Melikian (CFO), Brandon McGathy (GC), Pradeep Manoharan (Finance), Jorge Hurrle, Kacper Chrobot, Hayes Hyde, Melissa Schwab Wright, Tyler Garaffa (Goodwin), Avia Cohen (Goodwin), Victor Garrido, Joe Raia, Jay Berger (NB), Dryden Liddle (CIM), Luis Antonio Gomez Lara (BBVA), Axel García Ortiz (Pérez Lloréa), Gustavo Villarreal (CXC), Eugenio Bernal (BBVA), Aaron Terwey (Proskauer), Rodrigo Cue (Monex), Jorge Olivares (W&C), Max Fernandez (NB)...",
+      "updatedAt": "2026-06-17T20:29:04.180812Z"
     }
   }
 }

@@ -315,7 +315,9 @@ def _build_path_env_exports(thread_data: ThreadDataState | None) -> str:
     """
     if thread_data is None:
         return ""
-    parts = []
+    # Force UTF-8 for all Python subprocesses — Windows defaults to cp1252,
+    # which crashes any script printing ✅/—/emoji (recurring failure mode).
+    parts = ['export PYTHONIOENCODING="utf-8"', 'export PYTHONUTF8="1"']
     for key, env_var in [("workspace_path", "WORKSPACE_PATH"), ("outputs_path", "OUTPUTS_PATH"), ("uploads_path", "UPLOADS_PATH")]:
         path = thread_data.get(key)
         if path:

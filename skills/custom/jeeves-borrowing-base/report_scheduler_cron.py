@@ -464,7 +464,7 @@ def run_weekly_bb():
     yesterday   = (datetime.now().date() - timedelta(days=1)).isoformat()
     yyyymmdd    = yesterday.replace('-', '')
     yyyymm      = yyyymmdd[:6]
-    outputs_dir = os.environ.get('OUTPUTS_PATH', '/mnt/user-data/outputs')
+    outputs_dir = os.environ.get('OUTPUTS_PATH', 'C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/7a0af2ac-5107-48a9-a6f6-137a645fa75a/user-data/outputs').replace(chr(92), '/')
     skills_dir  = os.path.dirname(os.path.abspath(__file__))
 
     log.info(f"run_weekly_bb: building US BB for {yesterday} (direct pipeline)")

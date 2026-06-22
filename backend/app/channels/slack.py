@@ -48,7 +48,7 @@ class SlackChannel(Channel):
         ).strip()
         # Cache for Slack user_id → display_name lookups so we don't hammer
         # users.info on every inbound notification.
-        self._user_name_cache: dict[str, str] = {}
+        self._user_name_cache: dict[str, tuple[str, str]] = {}
         # Dedup: track recently processed message timestamps to avoid
         # double-processing when Slack sends both 'message' and 'app_mention'
         self._seen_ts: dict[str, float] = {}  # ts -> wall-clock time
@@ -327,27 +327,48 @@ class SlackChannel(Channel):
 
     # -- internal ----------------------------------------------------------
 
-    def _resolve_user_name(self, user_id: str) -> str:
-        """Best-effort Slack user_id → display name with caching. Falls back to user_id."""
+    def _resolve_user_identity(self, user_id: str) -> tuple[str, str]:
+        """Best-effort Slack user_id → (display_name, title) with caching.
+
+        Tries the configured web client first. Bot tokens usually lack the
+        ``users:read`` scope, so on failure we fall back to a user-token
+        client built from ``SLACK_USER_TOKEN`` (which has the scope and also
+        exposes the profile title). Falls back to (user_id, "") on total
+        failure so the owner notification still has *something* useful.
+        """
         if not user_id:
-            return ""
+            return ("", "")
         cached = self._user_name_cache.get(user_id)
         if cached is not None:
             return cached
-        name = user_id
+        name, title = user_id, ""
+        clients = []
         if self._web_client:
+            clients.append(self._web_client)
+        user_tok = os.environ.get("SLACK_USER_TOKEN", "").strip()
+        if user_tok:
             try:
-                resp = self._web_client.users_info(user=user_id)
+                from slack_sdk import WebClient
+                clients.append(WebClient(token=user_tok))
+            except Exception:
+                pass
+        for client in clients:
+            try:
+                resp = client.users_info(user=user_id)
                 profile = resp.get("user", {}).get("profile", {})
                 name = (
                     profile.get("real_name")
                     or profile.get("display_name")
                     or user_id
                 )
+                title = (profile.get("title") or "").strip()
+                break
             except Exception as e:
                 logger.debug("users_info failed for %s: %s", user_id, e)
-        self._user_name_cache[user_id] = name
-        return name
+                continue
+        result = (name, title)
+        self._user_name_cache[user_id] = result
+        return result
 
     def _notify_owner_of_inbound(self, user_id: str, channel_id: str,
                                  thread_ts: str, text: str) -> None:
@@ -363,10 +384,13 @@ class SlackChannel(Channel):
         if user_id == self._owner_user_id or user_id == self._own_user_id:
             return
         try:
-            sender_name = self._resolve_user_name(user_id)
+            sender_name, sender_title = self._resolve_user_identity(user_id)
+            who = f"*{sender_name}*"
+            if sender_title:
+                who += f" — {sender_title}"
             snippet = text[:280].replace("\n", " ").strip()
             notification = (
-                f":eyes: *{sender_name}* (`{user_id}`) just messaged the analyst.\n"
+                f":eyes: {who} (`{user_id}`) just messaged the analyst.\n"
                 f"> {snippet}"
             )
             self._web_client.chat_postMessage(

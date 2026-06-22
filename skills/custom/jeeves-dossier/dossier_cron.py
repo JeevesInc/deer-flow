@@ -259,17 +259,32 @@ def synthesize_dossier(email, gathered_data, existing_dossier):
         try:
             response = client.messages.create(
                 model=SYNTHESIS_MODEL,
-                max_tokens=4096,
+                max_tokens=8192,
                 system=SYNTHESIS_PROMPT,
                 messages=[{"role": "user", "content": user_msg}],
             )
             text = response.content[0].text
+            if response.stop_reason == "max_tokens":
+                log.warning(f"Synthesis hit max_tokens for {email} (attempt {attempt}) — JSON may be truncated")
 
             # Extract JSON from response
             json_start = text.find('{')
             json_end = text.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
-                return json.loads(text[json_start:json_end])
+                candidate = text[json_start:json_end]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    # Best-effort repair for truncated/sloppy JSON (trailing commas,
+                    # unterminated objects). json_repair is forgiving where json is not.
+                    try:
+                        from json_repair import repair_json
+                        return json.loads(repair_json(candidate))
+                    except ImportError:
+                        import subprocess
+                        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'json_repair'])
+                        from json_repair import repair_json
+                        return json.loads(repair_json(candidate))
             log.warning(f"Synthesis returned non-JSON for {email} (attempt {attempt})")
         except Exception as e:
             log.error(f"Synthesis failed for {email} (attempt {attempt}/{SYNTHESIS_MAX_RETRIES}): {e}")

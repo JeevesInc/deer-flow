@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 INTERVAL_SEC = 6 * 60 * 60  # 6 hours
 INITIAL_DELAY_SEC = 10 * 60  # let gateway + langgraph settle
-MAX_AGE_DAYS = 7
+MAX_AGE_DAYS = 5
 PAGE_SIZE = 200
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent

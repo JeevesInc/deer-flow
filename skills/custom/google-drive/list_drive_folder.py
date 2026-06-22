@@ -104,6 +104,8 @@ def main():
             max_depth = int(args[idx + 1])
 
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+    from env_loader import load_env
+    load_env()
     from google_auth import get_credentials
     from googleapiclient.discovery import build
 

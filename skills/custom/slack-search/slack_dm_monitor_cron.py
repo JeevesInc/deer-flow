@@ -44,6 +44,42 @@ def _state_path() -> str:
     return str(backend / '.deer-flow' / '_slack_dm_monitor_state.json')
 
 
+def _allowlist_path() -> str:
+    here = Path(__file__).resolve()
+    backend = here.parents[3] / 'backend'
+    return str(backend / '.deer-flow' / '_slack_dm_allowlist.json')
+
+
+def _load_allowlist() -> dict:
+    """Returns {user_id: {name, ...}} of senders allowed to get responses.
+
+    Fail-closed: if the file is missing or unreadable, only Brian is allowed.
+    """
+    try:
+        with open(_allowlist_path()) as f:
+            return json.load(f).get('allowed', {}) or {BRIAN_USER_ID: {'name': 'Brian Mauck'}}
+    except Exception as e:
+        log.error("Could not load allowlist (%s) -- failing closed to owner-only", e)
+        return {BRIAN_USER_ID: {'name': 'Brian Mauck'}}
+
+
+def _notify_gated_message(client, brian_dm: str, sender_name: str, sender_id: str, message: dict) -> None:
+    """Tell Brian a non-allowlisted person DM'd the bot. No reply is sent to the sender."""
+    text = message.get('text', '')
+    ts = message.get('ts', '')
+    dt = datetime.fromtimestamp(float(ts)).strftime('%I:%M %p') if ts else 'unknown time'
+    try:
+        notify_lines = [
+            ":lock: *{0}* ({1}) DM'd me at {2} but is *not on the allowlist* -- I did not respond or take any action.".format(sender_name, sender_id, dt),
+            "> " + text[:400],
+            'Reply "allow {0}" if you want me to add them and respond.'.format(sender_name),
+        ]
+        client.chat_postMessage(channel=brian_dm, text=chr(10).join(notify_lines))
+        log.info("Gated message from %s (%s) -- Brian notified, no response sent", sender_name, sender_id)
+    except Exception as e:
+        log.error("Failed to notify Brian about gated message from %s: %s", sender_name, e)
+
+
 def _load_state() -> dict:
     path = _state_path()
     if os.path.exists(path):
@@ -59,6 +95,8 @@ def _save_state(state: dict) -> None:
     path = _state_path()
     if len(state.get('handled', [])) > 500:
         state['handled'] = state['handled'][-500:]
+    if len(state.get('gated', [])) > 200:
+        state['gated'] = state['gated'][-200:]
     with open(path, 'w') as f:
         json.dump(state, f, indent=2)
 
@@ -202,6 +240,24 @@ def run_loop():
                 if new_msgs:
                     sender_name = _get_display_name(client, other_user)
                     log.info("%d new msg(s) from %s", len(new_msgs), sender_name)
+
+                    allowlist = _load_allowlist()
+                    if other_user not in allowlist:
+                        # Not authorized: no agent dispatch, no reply. Notify Brian, mark seen.
+                        for msg in new_msgs:
+                            _notify_gated_message(client, brian_dm, sender_name, other_user, msg)
+                            state.setdefault('gated', []).append({
+                                'sender_name': sender_name,
+                                'sender_id': other_user,
+                                'channel_id': channel_id,
+                                'ts': msg['ts'],
+                                'text': msg.get('text', ''),
+                                'gated_at': datetime.now().isoformat(),
+                            })
+                            cur_seen = state['seen_ts'].get(channel_id, '0')
+                            if float(msg['ts']) > float(cur_seen):
+                                state['seen_ts'][channel_id] = msg['ts']
+                        continue
 
                     for msg in new_msgs:
                         success = _dispatch_message(client, channel_id, sender_name, other_user, msg)

@@ -241,6 +241,73 @@ def cmd_send(recipient, message):
         print("(Note: this is the owner. The polling cron filters this out of the dashboard.)")
 
 
+def cmd_allowlist(action, target=None):
+    """Manage the inbound DM allowlist (backend/.deer-flow/_slack_dm_allowlist.json).
+
+    Senders not on this list get no response from the DM monitor; Brian is
+    notified instead. Only add people Brian has explicitly authorized.
+    """
+    import json as _json
+    from datetime import datetime as _dt
+    al_path = None
+    cur = Path(__file__).resolve().parent
+    for _ in range(8):
+        cand = cur / 'backend' / '.deer-flow' / '_slack_dm_allowlist.json'
+        if cand.parent.exists():
+            al_path = cand
+            break
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    if al_path is None:
+        print('ERROR: could not locate backend/.deer-flow directory', file=sys.stderr)
+        sys.exit(1)
+    data = {'allowed': {}}
+    if al_path.exists():
+        data = _json.loads(al_path.read_text())
+    allowed = data.setdefault('allowed', {})
+
+    if action == 'list':
+        for uid, meta in allowed.items():
+            print('{0}  {1}  (added {2}; {3})'.format(uid, meta.get('name', '?'), meta.get('added', '?'), meta.get('reason', '')))
+        return
+
+    if not target:
+        print('ERROR: add/remove require a user_id or email', file=sys.stderr)
+        sys.exit(1)
+
+    # Resolve email -> user_id
+    user_id = target.strip()
+    name = user_id
+    if '@' in user_id:
+        client = _get_client()
+        resp = client.users_lookupByEmail(email=user_id)
+        user_id = resp['user']['id']
+        name = resp['user']['profile'].get('real_name') or user_id
+    else:
+        try:
+            info = _get_bot_client().users_info(user=user_id)
+            name = info['user']['profile'].get('real_name') or user_id
+        except Exception:
+            pass
+
+    if action == 'add':
+        allowed[user_id] = {'name': name, 'added': _dt.now().isoformat(timespec='seconds'), 'reason': 'authorized by Brian'}
+        data['updated'] = _dt.now().isoformat(timespec='seconds')
+        al_path.write_text(_json.dumps(data, indent=2))
+        print('Added {0} ({1}) to allowlist.'.format(name, user_id))
+    elif action == 'remove':
+        if user_id in allowed:
+            removed = allowed.pop(user_id)
+            data['updated'] = _dt.now().isoformat(timespec='seconds')
+            al_path.write_text(_json.dumps(data, indent=2))
+            print('Removed {0} ({1}) from allowlist.'.format(removed.get('name', '?'), user_id))
+        else:
+            print('{0} was not on the allowlist.'.format(user_id))
+    else:
+        print('ERROR: unknown allowlist action: ' + action, file=sys.stderr)
+        sys.exit(1)
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -249,7 +316,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python slack_tool.py <command> [args]")
-        print("Commands: search, lookup, send")
+        print("Commands: search, lookup, send, allowlist")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -284,6 +351,12 @@ def main():
             print('Usage: python slack_tool.py send <user-id-or-email> "message text"', file=sys.stderr)
             sys.exit(1)
         cmd_send(sys.argv[2], sys.argv[3])
+
+    elif command == 'allowlist':
+        if len(sys.argv) < 3 or sys.argv[2] not in ('add', 'remove', 'list'):
+            print('Usage: python slack_tool.py allowlist <add|remove|list> [user-id-or-email]', file=sys.stderr)
+            sys.exit(1)
+        cmd_allowlist(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

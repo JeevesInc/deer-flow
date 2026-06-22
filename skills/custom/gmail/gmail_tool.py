@@ -5,8 +5,19 @@ Usage:
     python gmail_tool.py search "query"           # Search emails
     python gmail_tool.py read <message_id>         # Read a specific email
     python gmail_tool.py download <message_id> [--output-dir /path]  # Download attachments
-    python gmail_tool.py draft <message_id> "body" [--attach file1 [--attach file2]]
+    python gmail_tool.py draft <message_id> "body" [--to addr] [--cc "addr, addr"|--cc none] [--attach file1]
     python gmail_tool.py draft-new "to" "subject" "body" [--attach file1 [--attach file2]]
+    python gmail_tool.py delete-draft <draft_id>   # Delete a draft
+
+Recipient control on threaded replies (draft):
+    By default a reply inherits ALL recipients of the original message
+    (reply-all). On external/counterparty threads this can leak internal
+    notes to the whole group. Pass --to/--cc to set recipients explicitly:
+        --to "alexander@tryjeeves.com"     reply only to Alex
+        --cc "shalom@tryjeeves.com"        explicit cc list
+        --cc none                          no cc at all
+    The draft stays on the same thread either way. ALWAYS check the
+    RECIPIENTS line printed after creation before telling anyone it's ready.
 
 Attachments can be:
     - Local file paths: /mnt/user-data/outputs/report.xlsx
@@ -17,6 +28,7 @@ Requires env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
 
 import base64
 import email.utils
+import html as _html
 import mimetypes
 import os
 import re
@@ -122,12 +134,44 @@ def _resolve_attachment(path_or_id):
         return filename, content, mime_type or 'application/octet-stream'
 
 
+def _text_to_html(body_text):
+    """Render a plain-text body as simple HTML so mail clients display it at
+    normal width with paragraph spacing preserved.
+
+    Gmail renders a bare text/plain part in a narrow, fixed column and collapses
+    blank lines. Sending an HTML alternative avoids that. Blank lines separate
+    paragraphs; single newlines within a paragraph become <br>.
+    """
+    body_text = body_text.replace('\r\n', '\n').replace('\r', '\n')
+    paragraphs = re.split(r'\n[ \t]*\n', body_text)
+    blocks = []
+    for para in paragraphs:
+        if not para.strip('\n'):
+            continue
+        lines = [_html.escape(line) for line in para.split('\n')]
+        blocks.append('<p style="margin:0 0 1em 0;">' + '<br>'.join(lines) + '</p>')
+    inner = '\n'.join(blocks) if blocks else '<p style="margin:0;"></p>'
+    return (
+        '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;'
+        'line-height:1.5;color:#222;white-space:normal;">\n'
+        + inner + '\n</div>'
+    )
+
+
+def _build_body_part(body_text):
+    """multipart/alternative wrapping a text/plain and text/html rendering."""
+    alt = MIMEMultipart('alternative')
+    alt.attach(MIMEText(body_text, 'plain', 'utf-8'))
+    alt.attach(MIMEText(_text_to_html(body_text), 'html', 'utf-8'))
+    return alt
+
+
 def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
                 in_reply_to=None, references=None, cc=None):
     """Build a MIME message, with attachments if provided."""
     if attachments:
         mime = MIMEMultipart('mixed')
-        mime.attach(MIMEText(body_text, 'plain', 'utf-8'))
+        mime.attach(_build_body_part(body_text))
 
         for att_source in attachments:
             filename, content, content_type = _resolve_attachment(att_source)
@@ -140,7 +184,7 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
             mime.attach(part)
             print(f"  Attached: {filename} ({content_type}, {len(content) / 1024:.1f} KB)")
     else:
-        mime = MIMEText(body_text, 'plain', 'utf-8')
+        mime = _build_body_part(body_text)
 
     mime['to'] = to_addr
     mime['from'] = from_addr
@@ -202,7 +246,7 @@ def cmd_read(message_id):
         print("(no text body found)")
 
 
-def cmd_draft_reply(message_id, body_text, attachments=None):
+def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, cc_override=None):
     service = _get_service()
 
     # Get the original message for threading — fetch Cc too for reply-all
@@ -222,24 +266,35 @@ def cmd_draft_reply(message_id, body_text, attachments=None):
     profile = service.users().getProfile(userId='me').execute()
     my_email = profile['emailAddress']
 
-    # Build reply-all recipients:
-    # To = original From (always reply to sender)
-    # Cc = everyone else on original To + Cc, minus ourselves
     def _parse_addrs(field):
         """Parse an RFC 2822 address list, handling quoted names with commas."""
         if not field:
             return []
         return [email.utils.formataddr(pair) for pair in email.utils.getaddresses([field]) if pair[1]]
 
-    all_recipients = _parse_addrs(orig_to) + _parse_addrs(orig_cc)
-    cc_addrs = [a for a in all_recipients
-                if email.utils.parseaddr(a)[1].lower() != my_email.lower()
-                and email.utils.parseaddr(a)[1].lower() != email.utils.parseaddr(orig_from)[1].lower()]
-
-    cc_str = ', '.join(cc_addrs) if cc_addrs else None
+    explicit = to_override is not None or cc_override is not None
+    if explicit:
+        # Explicit recipients: --to/--cc fully control who receives the reply.
+        to_str = to_override if to_override else orig_from
+        if cc_override is None or cc_override.strip().lower() in ('', 'none'):
+            cc_str = None
+        else:
+            cc_str = cc_override
+        inherited = False
+    else:
+        # Reply-all default:
+        # To = original From (always reply to sender)
+        # Cc = everyone else on original To + Cc, minus ourselves
+        to_str = orig_from
+        all_recipients = _parse_addrs(orig_to) + _parse_addrs(orig_cc)
+        cc_addrs = [a for a in all_recipients
+                    if email.utils.parseaddr(a)[1].lower() != my_email.lower()
+                    and email.utils.parseaddr(a)[1].lower() != email.utils.parseaddr(orig_from)[1].lower()]
+        cc_str = ', '.join(cc_addrs) if cc_addrs else None
+        inherited = True
 
     mime = _build_mime(
-        body_text, my_email, orig_from, subject,
+        body_text, my_email, to_str, subject,
         attachments=attachments,
         in_reply_to=orig_message_id,
         references=orig_message_id,
@@ -261,12 +316,18 @@ def cmd_draft_reply(message_id, body_text, attachments=None):
     print(f"Draft created successfully!")
     print(f"  Draft ID: {draft['id']}")
     print(f"  Thread:   {thread_id}")
-    print(f"  To:       {orig_from}")
-    if cc_str:
-        print(f"  Cc:       {cc_str}")
     print(f"  Subject:  {subject}")
     if attachments:
         print(f"  Attachments: {len(attachments)}")
+    print()
+    print("=" * 60)
+    print("RECIPIENTS" + ("  (INHERITED from thread — every To/Cc on the" if inherited else "  (explicit via --to/--cc)"))
+    if inherited:
+        print("            original message gets this reply. If that is not")
+        print("            intended, delete-draft and redo with --to/--cc.)")
+    print(f"  To: {to_str}")
+    print(f"  Cc: {cc_str if cc_str else '(none)'}")
+    print("=" * 60)
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
 
 
@@ -292,6 +353,19 @@ def cmd_draft_new(to, subject, body_text, attachments=None):
     if attachments:
         print(f"  Attachments: {len(attachments)}")
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
+
+
+def cmd_delete_draft(draft_id):
+    service = _get_service()
+    try:
+        service.users().drafts().delete(userId='me', id=draft_id).execute()
+        print(f"Draft {draft_id} deleted.")
+    except Exception as e:
+        if '404' in str(e):
+            print(f"Draft {draft_id} not found (already deleted?).")
+        else:
+            print(f"ERROR deleting draft {draft_id}: {e}", file=sys.stderr)
+            sys.exit(1)
 
 
 def cmd_download(message_id, output_dir=None):
@@ -355,6 +429,16 @@ def _parse_attachments(args):
     return remaining, attachments or None
 
 
+def _pop_flag(args, flag):
+    """Extract a single '--flag value' pair from args. Returns (remaining, value|None)."""
+    if flag in args:
+        idx = args.index(flag)
+        if idx + 1 < len(args):
+            value = args[idx + 1]
+            return args[:idx] + args[idx + 2:], value
+    return args, None
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -363,7 +447,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python gmail_tool.py <command> [args]")
-        print("Commands: search, read, draft, draft-new, download")
+        print("Commands: search, read, draft, draft-new, delete-draft, download")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -382,7 +466,7 @@ def main():
 
     elif command == 'draft':
         if len(sys.argv) < 4:
-            print('Usage: python gmail_tool.py draft <message_id> "reply body"|--body-file <path> [--attach file]', file=sys.stderr)
+            print('Usage: python gmail_tool.py draft <message_id> "reply body"|--body-file <path> [--to addr] [--cc "addrs"|--cc none] [--attach file]', file=sys.stderr)
             sys.exit(1)
         body_arg = sys.argv[3]
         if body_arg == '--body-file':
@@ -391,11 +475,15 @@ def main():
                 sys.exit(1)
             with open(sys.argv[4], 'r', encoding='utf-8') as _bf:
                 body_text_arg = _bf.read()
-            _, attachments = _parse_attachments(sys.argv[5:])
+            rest = sys.argv[5:]
         else:
             body_text_arg = body_arg
-            _, attachments = _parse_attachments(sys.argv[4:])
-        cmd_draft_reply(sys.argv[2], body_text_arg, attachments=attachments)
+            rest = sys.argv[4:]
+        rest, attachments = _parse_attachments(rest)
+        rest, to_override = _pop_flag(rest, '--to')
+        rest, cc_override = _pop_flag(rest, '--cc')
+        cmd_draft_reply(sys.argv[2], body_text_arg, attachments=attachments,
+                        to_override=to_override, cc_override=cc_override)
 
     elif command == 'draft-new':
         if len(sys.argv) < 5:
@@ -413,6 +501,12 @@ def main():
             body_text_arg = body_arg
             _, attachments = _parse_attachments(sys.argv[5:])
         cmd_draft_new(sys.argv[2], sys.argv[3], body_text_arg, attachments=attachments)
+
+    elif command == 'delete-draft':
+        if len(sys.argv) < 3:
+            print("Usage: python gmail_tool.py delete-draft <draft_id>", file=sys.stderr)
+            sys.exit(1)
+        cmd_delete_draft(sys.argv[2])
 
     elif command == 'download':
         if len(sys.argv) < 3:

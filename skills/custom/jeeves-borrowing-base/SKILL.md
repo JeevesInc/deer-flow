@@ -143,7 +143,7 @@ python /mnt/skills/custom/jeeves-borrowing-base/merge_template.py "$OUTPUTS_PATH
 ### 3. Upload to `Debt/CIM/{YYYYMM}/MX/`
 
 ```bash
-python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx" --folder "<CIM_MX_FOLDER_ID>"
+python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx" --folder "<CIM_MX_FOLDER_ID>" --new   # --new is REQUIRED: without it the uploader strips date stamps, matches the prior dated master, and overwrites/renames it in place (destroys prior snapshot)
 ```
 
 ---

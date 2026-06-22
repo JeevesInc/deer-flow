@@ -364,6 +364,6 @@ ws.sheet_properties.tabColor   = "1F3864"
 ws3.sheet_properties.tabColor  = "2E75B6"
 ws4.sheet_properties.tabColor  = "375623"
 
-out = os.path.join(OUTPUTS, "Diligence Registry - Capital Markets - 20260507.xlsx")
+out = os.path.join(OUTPUTS, f"Diligence Registry - Capital Markets - {datetime.today().strftime('%Y%m%d')}.xlsx")
 wb.save(out)
 print(f"Saved: {out}")

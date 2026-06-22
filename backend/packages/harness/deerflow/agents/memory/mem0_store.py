@@ -65,7 +65,7 @@ def get_mem0() -> Any:
             "llm": {
                 "provider": "anthropic",
                 "config": {
-                    "model": "claude-sonnet-4-20250514",
+                    "model": "claude-sonnet-4-6",
                     "api_key": api_key,
                     "max_tokens": 4096,
                 },

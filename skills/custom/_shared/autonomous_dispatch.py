@@ -249,7 +249,9 @@ def _extract_response(result: Any) -> str:
 
 
 def _post_slack(text: str) -> None:
-    """Post a message to the owner's Slack DM."""
+    """Post a message to the owner's Slack DM. No-op when text is falsy."""
+    if not text:
+        return
     token = os.environ.get("SLACK_BOT_TOKEN")
     owner_id = os.environ.get("SLACK_OWNER_USER_ID")
     if not token or not owner_id:

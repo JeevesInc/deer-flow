@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 11,
+      "applications": 18,
       "created": "2026-04-07",
-      "last_applied": "2026-06-05T01:08:22.840298+00:00",
+      "last_applied": "2026-06-17T18:04:09.903705+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -1070,6 +1070,790 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-06-09-068": {
+      "id": "pat-2026-06-09-068",
+      "name": "The MX servicer report template is ENTIRELY formula-driven f",
+      "source": "ep-2026-06-09-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:49:43.443152+00:00",
+      "category": "general",
+      "pattern": "The MX servicer report template is ENTIRELY formula-driven from the tape tab. Exhibit A and B cells compute via SUMIFS/MIN/MAX on tape columns. ONLY write: (1) tape tab data aligned to template column order, (2) manual rollforward cells L10-L25 in Exhibit A, (3) account count K31, (4) FX rate L6. NEVER overwrite formula cells H/I/K/L40-50 in Exhibit A or the DQ/revenue section in Exhibit B.",
+      "problem": "Mexico servicer report - first attempt overwrote formula cells in Exhibit A and B with hardcoded values, breaking the entire workbook",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-09-069": {
+      "id": "pat-2026-06-09-069",
+      "name": "MX servicer report filename convention is Jeeves Mexico Serv",
+      "source": "ep-2026-06-09-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:51:00.485326+00:00",
+      "category": "general",
+      "pattern": "MX servicer report filename convention is Jeeves Mexico Servicer Report - {YYYYMMDD}.xlsx where the date is the FILING date (today), not the period end date. Use dt.date.today().strftime(\"%Y%m%d\") for the filename.",
+      "problem": "MX servicer report filename was wrong - used strftime MM-DD-YYYY giving 05-31-2026 instead of filing date in YYYYMMDD",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-09-070": {
+      "id": "pat-2026-06-09-070",
+      "name": "NEVER produce a file (revenue breakdown, DQ/CO table, etc.) ",
+      "source": "ep-2026-06-09-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:53:14.013316+00:00",
+      "category": "general",
+      "pattern": "NEVER produce a file (revenue breakdown, DQ/CO table, etc.) without being explicitly asked. Brian caught FDD-3 and FDD-10 built unsolicited \u2014 both were wrong and wasted 30 min of review.",
+      "problem": "Vista diligence tracker update + Alex email draft \u2014 Jun 9 2026",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-09-071": {
+      "id": "pat-2026-06-09-071",
+      "name": "Read every email thread in full before drafting a follow-up.",
+      "source": "ep-2026-06-09-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:53:14.107771+00:00",
+      "category": "general",
+      "pattern": "Read every email thread in full before drafting a follow-up. Thiago and Shalom had already partially delivered VCP-4 and VCP-5. First draft ignored all of it.",
+      "problem": "Brandon/Thiago follow-up draft \u2014 Jun 9 2026",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-09-072": {
+      "id": "pat-2026-06-09-072",
+      "name": "Match the format of the last communication. Brian organized ",
+      "source": "ep-2026-06-09-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:53:14.134356+00:00",
+      "category": "general",
+      "pattern": "Match the format of the last communication. Brian organized the Monday night email by person. First draft organized by status category \u2014 wrong.",
+      "problem": "Alex status reply format \u2014 Jun 9 2026",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-09-073": {
+      "id": "pat-2026-06-09-073",
+      "name": "Verify every Drive link before putting it in a tracker. FDD-",
+      "source": "ep-2026-06-09-010",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-09",
+      "last_applied": "2026-06-09T23:53:14.140951+00:00",
+      "category": "general",
+      "pattern": "Verify every Drive link before putting it in a tracker. FDD-11 had a broken shortcut ID that 404d. Should have fetched the doc to confirm it worked.",
+      "problem": "Tracker link verification \u2014 Jun 9 2026",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-10-074": {
+      "id": "pat-2026-06-10-074",
+      "name": "For diligence tasks: (1) always create the organized DD/VDR ",
+      "source": "ep-2026-06-10-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T02:41:20.248800+00:00",
+      "category": "general",
+      "pattern": "For diligence tasks: (1) always create the organized DD/VDR folder as the first deliverable, not an afterthought. (2) Use claude-fable-5 model for all diligence analysis and drafting. (3) Do not defer obvious action items to next day - execute immediately.",
+      "problem": "Brian instructed to use Fable 5 model (claude-fable-5) for all diligence work. Also flagged that creating a DD folder was obvious and should have been done immediately without being asked - not deferred to tomorrow AM.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-10-075": {
+      "id": "pat-2026-06-10-075",
+      "name": "Always normalize OUTPUTS_PATH with backslash-to-forward-slas",
+      "source": "ep-2026-06-10-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T15:21:15.699520+00:00",
+      "category": "general",
+      "pattern": "Always normalize OUTPUTS_PATH with backslash-to-forward-slash replace when used in run_weekly_bb. Never bake thread-specific paths as defaults in cron scripts.",
+      "problem": "US BB cron failed daily: FileNotFoundError on build_us.py output despite script succeeding. Slack alert showed mixed-slash path.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-10-076": {
+      "id": "pat-2026-06-10-076",
+      "name": "VCP-1 must always be the standard build_us.py output (tape_s",
+      "source": "ep-2026-06-10-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T15:49:30.414918+00:00",
+      "category": "general",
+      "pattern": "VCP-1 must always be the standard build_us.py output (tape_start, tape_end, rollforward, eligibility_summary). Never build a custom ledger. Brian has corrected this multiple times. Run: cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/jeeves-borrowing-base && uv run python build_us.py --date YYYY-MM-DD --no-cico, then upload the output file directly.",
+      "problem": "VCP-1 customer ledger for Vista DD package",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-10-077": {
+      "id": "pat-2026-06-10-077",
+      "name": "Brian: no lender-specific loan tapes. ONE monthly loan tape ",
+      "source": "ep-2026-06-10-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T18:03:20.713293+00:00",
+      "category": "general",
+      "pattern": "Brian: no lender-specific loan tapes. ONE monthly loan tape + rollforward across the whole LOC portfolio is the canonical artifact for all counterparties. Triage lender-named tapes as Excluded - superseded by the monthly portfolio-wide tape. Recorded in cfo-org-kb diligence/ARTIFACTS.md (commit ab3fc80).",
+      "problem": "Monthly registry discovery flagged [BBVA] Loan Tape - BBVA - 20260401.xlsx as a new item to triage",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-10-078": {
+      "id": "pat-2026-06-10-078",
+      "name": "Brian: duplicative items should always be deconflicted. Pick",
+      "source": "ep-2026-06-10-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T18:07:33.420759+00:00",
+      "category": "general",
+      "pattern": "Brian: duplicative items should always be deconflicted. Pick one canonical Drive ID, remove the rest, never list copies as separate triage items. diligence_registry_refresh.py now detects name-level duplicates, flags them DUPLICATE on the Action line, and emits a DUPLICATES TO DECONFLICT section.",
+      "problem": "Registry discovery listed duplicate files (Management Bios, Equity Structure) as independent NEW triage rows",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-10-079": {
+      "id": "pat-2026-06-10-079",
+      "name": "When editing a tracker repeatedly in one session: save the l",
+      "source": "ep-2026-06-10-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-10",
+      "last_applied": "2026-06-10T20:07:33.133070+00:00",
+      "category": "general",
+      "pattern": "When editing a tracker repeatedly in one session: save the local file with its FINAL proper name BEFORE uploading, upload once per logical change with --file-id, and never rely on a post-upload rename step. Verify folder contains exactly one tracker before reporting done.",
+      "problem": "Multiple tracker edits in one session each used upload --file-id followed by a separate rename script, leaving ~6 duplicate-looking tracker versions Brian had to manually delete",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-11-080": {
+      "id": "pat-2026-06-11-080",
+      "name": "When regenerating a document from a build script, ALWAYS dif",
+      "source": "ep-2026-06-11-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T00:20:18.325545+00:00",
+      "category": "general",
+      "pattern": "When regenerating a document from a build script, ALWAYS diff the regenerated output against the CURRENT live version first - the script may predate later edits. Extract live text and verify every prior edit is preserved before swapping in place.",
+      "problem": "Regenerated VCP-4 PDF from the original Jun 9 build script to remove one sentence, but the script predated a later edit (section 4 removal) - silently reintroduced removed content. Brian caught it.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-11-081": {
+      "id": "pat-2026-06-11-081",
+      "name": "DM monitor now enforces an allowlist (backend/.deer-flow/_sl",
+      "source": "ep-2026-06-11-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T04:59:04.423775+00:00",
+      "category": "general",
+      "pattern": "DM monitor now enforces an allowlist (backend/.deer-flow/_slack_dm_allowlist.json, fail-closed). Gated senders get no reply; Brian gets a :lock: notification. Manage via slack_tool.py allowlist add/remove/list. When Brian says to message someone new for real work, add them to the allowlist as part of that task; one-off notes do not qualify.",
+      "problem": "Brian set inbound DM policy: only people he has authorized get responses; randoms (e.g., Narendra) must be gated and surfaced to Brian",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-06-11-082": {
+      "id": "pat-2026-06-11-082",
+      "name": "Restarting ZSATray alone does not surface a ZPA auth prompt ",
+      "source": "ep-2026-06-11-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T16:30:16.801998+00:00",
+      "category": "general",
+      "pattern": "Restarting ZSATray alone does not surface a ZPA auth prompt - the freshly spawned tray does not auto-trigger reauthentication, so reauth.py fails with WINDOW_NOT_FOUND and never sends a push. Script gap #2 (beyond zombie OktaVerify detection): after tray restart, need to explicitly trigger ZPA login (tray UI automation or ZSACli) before driving the Okta flow. Until fixed, this state requires manual login via Zscaler Client Connector UI.",
+      "problem": "2026-06-11 9:21 AM: Brian approved push but reauth timed out. Diagnosis: Okta approval succeeded (fresh OktaVerify PID 6344 started 9:17), but ZPA token handoff to ZSATray failed (May 27 failure class) - Redshift unreachable via 100.64.1.1. Remediation attempted: killed ZSATray (PID 28524), it respawned at 9:27:56, then re-ran reauth.py. New failure: WINDOW_NOT_FOUND - after a tray restart, no auth window/URL appears for the automation to drive, so no push is ever sent.",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-06-11-083": {
+      "id": "pat-2026-06-11-083",
+      "name": "When a timely-approved Okta push still leaves ZPA unauthenti",
+      "source": "ep-2026-06-11-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T16:32:29.991375+00:00",
+      "category": "general",
+      "pattern": "When a timely-approved Okta push still leaves ZPA unauthenticated, the cause is the known ZSATray token-handoff gap (post-tray-restart no auto-prompt), NOT push expiry. Do not claim the user approved too late without evidence from the Okta/system log. Correct next step: manual login in Zscaler Client Connector.",
+      "problem": "Push approved promptly by Brian but ZPA tunnel never authenticated; bot wrongly blamed push expiry timing",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-06-11-084": {
+      "id": "pat-2026-06-11-084",
+      "name": "When zscaler_reauth.py logs NO_ZSCALER_FOUND and falls back ",
+      "source": "ep-2026-06-11-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T16:57:24.835862+00:00",
+      "category": "general",
+      "pattern": "When zscaler_reauth.py logs NO_ZSCALER_FOUND and falls back to a stale auth URL, push approvals are useless (they authenticate into a void). Fix: (1) kill any zombie OktaVerify.exe, (2) Stop-Process ZSATray and relaunch ZSATray.exe from Program Files/Zscaler/ZSATray, wait 15s, (3) run zscaler_reauth.py --once --force. With a fresh ZSATray, FastPass plus password completes and the second-pass token handoff flips the registry to AUTHENTICATED. No push approval needed.",
+      "problem": "Approved pushes failing to authenticate ZPA; reauth.py recycling stale auth URL because ZSATray was running with hidden window and unfindable tray icon after a restart",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-06-11-085": {
+      "id": "pat-2026-06-11-085",
+      "name": "Daily borrowing base uploads MUST use --new flag. Recovered ",
+      "source": "ep-2026-06-11-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T17:18:52.780943+00:00",
+      "category": "general",
+      "pattern": "Daily borrowing base uploads MUST use --new flag. Recovered the overwritten file via Drive revisions API (revisions().get_media on the prior revision), reverted with --file-id, then re-uploaded with --new.",
+      "problem": "Uploading daily MX BB Master to CIM month folder, upload_to_drive.py default update-in-place normalized the date suffix and OVERWROTE the prior day file (20260609) instead of creating 20260610",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-11-086": {
+      "id": "pat-2026-06-11-086",
+      "name": "Anexo J input sources: (1) Monex trustee facturas from factu",
+      "source": "ep-2026-06-11-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T18:43:17.292582+00:00",
+      "category": "general",
+      "pattern": "Anexo J input sources: (1) Monex trustee facturas from facturacionpf@monex.com.mx (FACTURA###BCO); (2) ISR payslip from Roberto Paez (robertoconta@) subject JVS Soluciones | Withholding tax payment; (3) CxC facturas from reportes-cxc@cxc.com.mx subject Tecnologia en CXC - Factura (ZIP with CFDI XMLs; folios may reference F/12339 even when paid from F/12340 \u2014 known issue); (4) MX interest invoice from Sam McNulty (Ocorian) subject External confirmation required: Jeeves (Mexico) Interest Calculation / Invoice \u2014 NOT from CIM directly; (5) hedge cost + servicer fee + residual are internal/Monex balance items.",
+      "problem": "Assembling F/12340 Anexo J invoice inputs for monthly waterfall",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-11-087": {
+      "id": "pat-2026-06-11-087",
+      "name": "The Anexo J hedge line (i) always comes from Exhibit B Total",
+      "source": "ep-2026-06-11-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T20:27:30.779019+00:00",
+      "category": "general",
+      "pattern": "The Anexo J hedge line (i) always comes from Exhibit B Total costs from hedging activities (G135) in the servicer report Brian saved \u2014 never estimate it from hedge tab premiums directly without checking. Also: Brian may re-save the servicer report mid-task with recalculated values; re-download before finalizing. Servicer fee (iv) in the letter is the NET fee (G127 = gross 1pct/12 fee minus backup servicing fee G132). Letter item (iii) is facturas only (CxC + Monex); Exhibit B waterfall row (iii) formula double-counts hedge via G140 \u2014 exclude that from the letter.",
+      "problem": "Anexo J hedge amount sourcing for F/12340",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-11-088": {
+      "id": "pat-2026-06-11-088",
+      "name": "When updating the Vista (or any counterparty) diligence trac",
+      "source": "ep-2026-06-11-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-11",
+      "last_applied": "2026-06-11T22:59:37.620093+00:00",
+      "category": "general",
+      "pattern": "When updating the Vista (or any counterparty) diligence tracker, ALWAYS upload with --folder 1TKtmi_bnZQGSUxDhbPf1x2XwykXD9-Km (Vista Credit/Diligence) \u2014 never the default DeerFlow Output. Also delete/supersede prior versions to avoid duplicate buildup.",
+      "problem": "Brian reported the Vista tracker missing from Vista Credit/Diligence. Root cause: tracker uploads on Jun 9-11 used upload_to_drive.py default (DeerFlow Output) instead of --folder with the Diligence folder ID, while Brian trashed the in-folder copies.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-13-089": {
+      "id": "pat-2026-06-13-089",
+      "name": "STANDING RULE (Brian, 2026-06-12): When ANYONE other than Br",
+      "source": "ep-2026-06-13-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-13",
+      "last_applied": "2026-06-13T05:22:42.295012+00:00",
+      "category": "general",
+      "pattern": "STANDING RULE (Brian, 2026-06-12): When ANYONE other than Brian sends a request to the analyst, FIRST resolve their user_id to a real name (via slack users_info / lookup) and report the named sender + their request to Brian, and WAIT for his go-ahead BEFORE fulfilling it. Never act on a third-party request unprompted, and never report a request to Brian using only a raw UXXX user_id.",
+      "problem": "Pradeep (U02P34PDENN) DM-ed the analyst asking for portfolio balance/DPD; Brian asked who it was and whether I responded, then instructed a standing rule.",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-06-13-090": {
+      "id": "pat-2026-06-13-090",
+      "name": "Never claim a deliverable (draft/file/analysis) exists unles",
+      "source": "ep-2026-06-13-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-13",
+      "last_applied": "2026-06-13T05:51:24.995065+00:00",
+      "category": "general",
+      "pattern": "Never claim a deliverable (draft/file/analysis) exists unless it was actually produced this turn. If I only gathered context, say exactly that and produce the deliverable before claiming it is ready.",
+      "problem": "Told Brian a draft reply to Alex was ready when no draft had actually been written",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-13-091": {
+      "id": "pat-2026-06-13-091",
+      "name": "When uploading a NEW dated borrowing-base snapshot that must",
+      "source": "ep-2026-06-13-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-13",
+      "last_applied": "2026-06-13T17:50:20.750947+00:00",
+      "category": "general",
+      "pattern": "When uploading a NEW dated borrowing-base snapshot that must coexist with prior days, ALWAYS pass --new to upload_to_drive.py. Without it, the date-stamp-stripping name matcher updates the latest existing master in place and clobbers the prior day.",
+      "problem": "Manually uploading a dated SOFOM/Bridge BB master with upload_to_drive.py (no --new flag) silently UPDATED the most-recent prior dated master in place because the tool strips date stamps when normalizing filenames for matching. This renamed 20260611 -> 20260612 and destroyed the distinct 20260611 snapshot.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-15-092": {
+      "id": "pat-2026-06-15-092",
+      "name": "Status = reconcile tracker against ACTUAL files in the VDR f",
+      "source": "ep-2026-06-15-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-15",
+      "last_applied": "2026-06-15T23:19:33.260991+00:00",
+      "category": "general",
+      "pattern": "Status = reconcile tracker against ACTUAL files in the VDR folder (check modifiedTime); tracker text goes stale fast. Enumerate ALL active counterparties before summarizing - check Gmail for counsel names (Akin Gump=NB, Proskauer=Vista, Goodwin=Jeeves).",
+      "problem": "Asked for current status of all diligence. Reported FDD/VCP status from the tracker spreadsheet text (dated 6/10) and missed that newer deliverables were uploaded to the VDR folder 6/11-6/14; also omitted the NB/Akin legal DD workstream entirely.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-15-093": {
+      "id": "pat-2026-06-15-093",
+      "name": "MASTER TRACKER = Drive ID 1JWV-geH27v39xaRfN6RdqUKFDJ62dN8x ",
+      "source": "ep-2026-06-15-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-15",
+      "last_applied": "2026-06-15T23:50:56.972099+00:00",
+      "category": "general",
+      "pattern": "MASTER TRACKER = Drive ID 1JWV-geH27v39xaRfN6RdqUKFDJ62dN8x (Debt root), builder=workspace/build_tracker.py, update IN PLACE. Workstreams: (1) Vista VCP+PwC financial - reconcile vs VDR folder 1JiMVbmEKQxKN_e5TXY2MWY3LXJGqv48P; (2) Vista Legal PSK/Proskauer - watch Vista Legal DD folder 1qK4gkzHHkC6rMJV7aUBTu-UHntbCAoWY for new redlines; (3) NB/Akin Gump - upload folder 1yae9sldBwAvj3G8fRYY2EdGtE33VPKfX (CREDIT/HR/OPS), coordinator Jorge. Counsel map: Akin=NB, Proskauer=Vista, Goodwin=Jeeves. On any diligence turn reconcile vs source files+Gmail, never tracker text alone. All-hands Thu 6/18 3pm ET.",
+      "problem": "Brian standing directive 2026-06-15: self-maintain trackers for 3 live diligence workstreams and always know status.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-16-094": {
+      "id": "pat-2026-06-16-094",
+      "name": "For latest loc_tape snapshot use dt=(SELECT MAX(dt) FROM cap",
+      "source": "ep-2026-06-16-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T00:16:20.841947+00:00",
+      "category": "general",
+      "pattern": "For latest loc_tape snapshot use dt=(SELECT MAX(dt) FROM capital_markets_dm.loc_tape WHERE balance_usd IS NOT NULL) rather than MAX(dt) or dt<CURRENT_DATE. The tape carries a placeholder row dated today with null balances.",
+      "problem": "Building current-snapshot loc_tape queries; MAX(dt) returned today (2026-06-15) with NULL balances because warehouse CURRENT_DATE runs a day ahead of local; dt<CURRENT_DATE did NOT exclude it.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-06-16-095": {
+      "id": "pat-2026-06-16-095",
+      "name": "When anyone asks for the/a data tape, do NOT write a custom ",
+      "source": "ep-2026-06-16-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T00:24:27.617719+00:00",
+      "category": "general",
+      "pattern": "When anyone asks for the/a data tape, do NOT write a custom query. Run build_us.py --date YYYY-MM-DD and deliver the tape_end tab (data_tape.sql at one date). That IS the standard tape that feeds the eligibility calculator. One day unless a range is explicitly requested. Strip eligibility_summary/bank_accts/rollforward/tape_start if they only want the raw tape.",
+      "problem": "Asked to produce the NB receivables tape for Kroll collateral audit. I hand-built a bespoke inception-to-date lifecycle population query instead of using the standard tape. Brian corrected: they need ONE DAY of the tape = tape_end (what build_us.py puts on the tape_end tab from data_tape.sql) prior to the eligibility calculator. No CIM-specific eligibility/bank tabs.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-16-096": {
+      "id": "pat-2026-06-16-096",
+      "name": "Before building any counterparty tracker tab, CHECK that cou",
+      "source": "ep-2026-06-16-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T00:40:40.738116+00:00",
+      "category": "general",
+      "pattern": "Before building any counterparty tracker tab, CHECK that counterparty folder for an existing request/PBC tracker and use it as source of truth. Kroll items live in NB Diligence/Kroll folder 1amlOqm423CkTVYWqukx9HmXE5kTCZiZC; request tracker id 19G5hv8M8SVZ9YwLeMPCRiQn669jxXfmW. Never substitute SOW/contract scope prose or memory for the actual itemized request list. Kroll fee is $65-75K per revised SOW 6/12 (not 85K).",
+      "problem": "Built Kroll tab from the SOW contract prose; Brian: useless, lacked the actual Kroll items. The real request list existed as Tracker - Kroll Collateral Audit Requests in NB Diligence/Kroll folder (P1-1..P1-10 + P2-1..P2-6, HAVE/PARTIAL/NEED).",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-16-097": {
+      "id": "pat-2026-06-16-097",
+      "name": "Edit skill-dir scripts with bash sed/cp only. Cron deploymen",
+      "source": "ep-2026-06-16-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T01:02:08.255892+00:00",
+      "category": "general",
+      "pattern": "Edit skill-dir scripts with bash sed/cp only. Cron deployment also requires registering in the gateway cron_supervisor which is outside sandbox access - confirm registration mechanism with Brian and never claim a cron is live without verifying it is registered and running.",
+      "problem": "Patching a skill-dir builder via uv-run subprocesses failed: subprocesses see a different FS view than bash/write_file tools; the write tools are permission-denied on the skills path while bash cp/sed work; gateway cron_supervisor is permission-denied entirely.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-16-098": {
+      "id": "pat-2026-06-16-098",
+      "name": "PSK = Proskauer Rose (Vista Credit's legal counsel; request ",
+      "source": "ep-2026-06-16-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T18:21:07.072740+00:00",
+      "category": "general",
+      "pattern": "PSK = Proskauer Rose (Vista Credit's legal counsel; request lists labeled \"PR Draft\"). The Proskauer legal DD lives in Drive Vista Credit/Diligence/Legal DD/ as a request-list docx + Litera redline. Distinct from PwC FDD (financial) and Goodwin (Jeeves' own counsel). Routed through Goodwin; Brian then Alex sign off before anything goes to Vista. Core list = 38 items across 12 sections + large Brazil DD section (crypto/stablecoin/license heavy).",
+      "problem": "Brian asked for status of PSK legal diligence for Vista; I did not connect PSK to Proskauer and asked for clarification instead of searching.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-16-099": {
+      "id": "pat-2026-06-16-099",
+      "name": "The number embedded in the service-account name (AutomationU",
+      "source": "ep-2026-06-16-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T19:17:57.660701+00:00",
+      "category": "general",
+      "pattern": "The number embedded in the service-account name (AutomationUser_<N>_...) is NOT the enterprise ID. Get the real enterprise ID from the live API (users.get_user_me fields=[enterprise]) \u2014 a dev token works to fetch it. Wrong BOX_ENTERPRISE_ID is a top cause of invalid_grant in CCG.",
+      "problem": "Box CCG returned 400 invalid_grant despite app being Authorized+Enabled and client_id/secret matching",
+      "solution": "",
+      "target_skills": [
+        "box"
+      ]
+    },
+    "pat-2026-06-16-100": {
+      "id": "pat-2026-06-16-100",
+      "name": "Jeeves MX corporate cards are monetized SOLELY through inter",
+      "source": "ep-2026-06-16-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T21:15:31.782346+00:00",
+      "category": "general",
+      "pattern": "Jeeves MX corporate cards are monetized SOLELY through interchange (no ADB/TIIE financing charge on cards). Financing/days-outstanding pricing lives on Jeeves Pay and the LOC balance. Late penalties assessed on outstanding LOC balance (card is a portion), enumerated in the tape. Jeeves Pay: billed on days outstanding at a customer-agreed rate; all disbursements same price, only days outstanding differ; early payment just reduces days outstanding. Do NOT assume cards carry a TIIE-linked ADB interest charge.",
+      "problem": "CxC backup servicing RFI - proposed financing-cost answers for Brian to review",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-16-101": {
+      "id": "pat-2026-06-16-101",
+      "name": "When replying to a sender whose From display name contains b",
+      "source": "ep-2026-06-16-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T21:28:57.452399+00:00",
+      "category": "general",
+      "pattern": "When replying to a sender whose From display name contains broken/non-ASCII characters, pass an explicit --to <clean-email> (and --cc none if 1:1 thread) to bypass the malformed orig_from header",
+      "problem": "gmail_tool.py draft failed with HttpError 400 Invalid To header because the original senders display name had malformed non-ASCII chars (e.g. De Leon accent)",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-16-102": {
+      "id": "pat-2026-06-16-102",
+      "name": "For attachments totaling >25MB: zipping xlsx/pptx wont help ",
+      "source": "ep-2026-06-16-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-16",
+      "last_applied": "2026-06-16T22:39:07.244215+00:00",
+      "category": "general",
+      "pattern": "For attachments totaling >25MB: zipping xlsx/pptx wont help (already compressed). To email, upload to Drive, grant the recipient reader access via permissions().create(sendNotificationEmail=False), and put the share LINK in the draft body text (not --attach). Alternatively split into multiple emails under 25MB each. fetch_doc.py CSV-exports xlsx; use files().get_media() for binary download.",
+      "problem": "Asked to email 4 Jeeves Mexico servicer report xlsx files (8-12MB each) as a single zip. Zip only compressed to 37MB because xlsx are already zip-compressed internally; exceeds Gmail 25MB send limit. gmail_tool draft --attach drive:<id> downloads and attaches the file as binary (not a link), so it also exceeds 25MB on send.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-17-103": {
+      "id": "pat-2026-06-17-103",
+      "name": "Owner alerts must resolve user_id -> name AND title. Bot tok",
+      "source": "ep-2026-06-17-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T04:55:10.715296+00:00",
+      "category": "general",
+      "pattern": "Owner alerts must resolve user_id -> name AND title. Bot token (xoxb) lacks users:read; fall back to SLACK_USER_TOKEN (xoxp) for users_info. Patched _resolve_user_name into _resolve_user_identity returning (name,title) with user-token fallback; notification now reads *Name* \u2014 Title (`id`). Code change needs a gateway restart to take effect.",
+      "problem": "Brian corrected: the owner inbound-DM alert (backend/app/channels/slack.py _notify_owner_of_inbound) showed only the raw Slack user_id, not the person name+role. Root cause: bot token lacks users:read scope so users_info always failed and fell back to user_id.",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-06-17-104": {
+      "id": "pat-2026-06-17-104",
+      "name": "Trackers/registries are collaborative artifacts: ALWAYS uplo",
+      "source": "ep-2026-06-17-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T15:15:29.461620+00:00",
+      "category": "general",
+      "pattern": "Trackers/registries are collaborative artifacts: ALWAYS upload to Drive as a NATIVE Google Sheet (mimeType application/vnd.google-apps.spreadsheet) and return the shareable link in the reply. A local Excel file is not an acceptable deliverable for a tracker.",
+      "problem": "Built a diligence punch-list tracker as a local .xlsx and presented the file without uploading to Drive or giving a link.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-105": {
+      "id": "pat-2026-06-17-105",
+      "name": "Trackers must ALWAYS be native Google Sheets shared via link",
+      "source": "ep-2026-06-17-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T15:22:33.281988+00:00",
+      "category": "general",
+      "pattern": "Trackers must ALWAYS be native Google Sheets shared via link, never xlsx. upload_to_drive.py uploads xlsx-as-xlsx with no conversion \u2014 must create with mimeType application/vnd.google-apps.spreadsheet (Drive converts on import), then share the link.",
+      "problem": "Updated and shared the Vista DDQ tracker as an .xlsx uploaded to Drive.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-106": {
+      "id": "pat-2026-06-17-106",
+      "name": "If an item already EXISTS (note says available/exists, or it",
+      "source": "ep-2026-06-17-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T16:23:23.187287+00:00",
+      "category": "general",
+      "pattern": "If an item already EXISTS (note says available/exists, or it is a known artifact like audited financials/hedging policy), FIND it, FILE it into the correct counterparty diligence folder, and update the tracker status to located/filed. Do NOT draft a chase email for documents we already have. Chase emails are only for items that genuinely do not exist yet or that another person must produce. Also: when an items status changes, sweep any summary emails that reference the old status and correct them.",
+      "problem": "A diligence item (Akin V(E) audits) was already in Drive and the tracker note said \"these exist everywhere\", but I drafted a chase email to the owner (Shalom) instead of finding and filing the documents.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-107": {
+      "id": "pat-2026-06-17-107",
+      "name": "BEFORE setting or updating any tracker status, search Brians",
+      "source": "ep-2026-06-17-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T16:27:32.730172+00:00",
+      "category": "general",
+      "pattern": "BEFORE setting or updating any tracker status, search Brians sent mail (in:sent newer_than:Nd) for the relevant threads. Statuses must reflect what Brian has actually done - sent vs drafted, who he actually routed to, and items he answered himself - not just the agents own actions. Also re-sweep any summary emails after reconciling.",
+      "problem": "Set tracker statuses to \"Email drafted to X\" based only on drafts I created, without checking Brians sent mail. He had already SENT the emails (looping in extra people), routed one item to a different owner (Jorge instead of Cami), and answered an item himself (Vista 3.02 customers via Pradeeps list).",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-108": {
+      "id": "pat-2026-06-17-108",
+      "name": "Notes Brian leaves in the tracker are directives from him TO",
+      "source": "ep-2026-06-17-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T16:34:34.675844+00:00",
+      "category": "general",
+      "pattern": "Notes Brian leaves in the tracker are directives from him TO the agent - ephemeral instructions, not durable record. When updating the tracker, DELETE those notes-to-agent once actioned so the Notes/Status columns read clean. The tracker is a shared team/counterparty-facing artifact and should not contain instructions addressed to the assistant.",
+      "problem": "When updating the diligence tracker, I left Brians instruction notes to me (e.g. \"Draft an email\", \"Ask Brandon\", \"These exist everywhere\") sitting in the Notes column alongside real status content.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-109": {
+      "id": "pat-2026-06-17-109",
+      "name": "For any diligence status summary, ALWAYS list the live VDR f",
+      "source": "ep-2026-06-17-011",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T17:23:50.263134+00:00",
+      "category": "general",
+      "pattern": "For any diligence status summary, ALWAYS list the live VDR folder first (list_drive_folder) and reconcile item status against what is physically in the room. The email thread shows decisions/deliveries, but upload status only lives in the VDR. Distinguish FDD-1 sub-items: trial-balance detail (uploaded 6/17) vs monthly BS package (still pending approval) \u2014 do not collapse them.",
+      "problem": "Brian asked for open Vista/PwC FDD items. I reported FDD-1 trial-balance detail as awaiting upload based on the email thread. Brian corrected me: TB was approved and already uploaded.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-17-110": {
+      "id": "pat-2026-06-17-110",
+      "name": "When sending counterparty/counsel responses for a NEW dilige",
+      "source": "ep-2026-06-17-012",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-17",
+      "last_applied": "2026-06-17T18:03:52.478150+00:00",
+      "category": "general",
+      "pattern": "When sending counterparty/counsel responses for a NEW diligence topic, create a clean standalone email addressed to the right recipients - do NOT append to an unrelated existing thread just to consolidate. Replying-on-thread only applies when an actual conversation on THAT topic exists. Also: the topical thread may be internal-only (cc would leak internal chatter to external counsel) - check participants before reusing any thread.",
+      "problem": "Asked to draft Section 12 (Sustainability) DDQ responses to Goodwin. I appended them as a reply-all on Brandon GC existing Goodwin punch-list thread (Outstanding Diligence Items) to consolidate. Brian objected: that thread is unrelated to Section 12.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-18-111": {
+      "id": "pat-2026-06-18-111",
+      "name": "Before drafting any reply, enumerate the FULL thread (search",
+      "source": "ep-2026-06-18-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-18",
+      "last_applied": "2026-06-18T16:55:59.006994+00:00",
+      "category": "general",
+      "pattern": "Before drafting any reply, enumerate the FULL thread (search subject in quotes, sort by date) and reply to the LATEST message id. Read the most recent 2-3 messages to get the live ask. Do not re-send content already in the thread. For deal/legal docs, always attach the EXECUTION version without asking about negotiation drafts/redlines.",
+      "problem": "Asked to reply to an email thread; read only the first/opening message via search and drafted a long reply, replying to the wrong message. The thread had moved on several messages and Brian had already sent the substantive content.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-18-112": {
+      "id": "pat-2026-06-18-112",
+      "name": "Kroll diligence folder lives in BOX (as-user mode, box_clien",
+      "source": "ep-2026-06-18-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-18",
+      "last_applied": "2026-06-18T16:59:38.423562+00:00",
+      "category": "general",
+      "pattern": "Kroll diligence folder lives in BOX (as-user mode, box_client.get_client), NOT Google Drive. There is ALSO a separate GDrive Kroll folder (1amlOqm423CkTVYWqukx9HmXE5kTCZiZC) - dont confuse them. Box deletes go to trash (recoverable). Compare PDFs by extracted text before deleting near-identical files. When running download/inspect scripts, run from WORKSPACE_PATH dir (not cd into the box skill dir) or written files arent visible due to cwd path mangling. Execute clear dedup/stale deletes when Brian explicitly authorizes changes; flag ambiguous financial/scope dups (PDF vs xlsx, pre-SPV vs current FoF) rather than guessing; flag empty-folder gaps left by stale-file removal.",
+      "problem": "Brian: clean chaff from the Kroll BOX folder (id 391275668946), keep one of every file, portfolio items as-of end of April. Three structure charts + a Jan loan tape were chaff.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-18-113": {
+      "id": "pat-2026-06-18-113",
+      "name": "The fully SIGNED documents live in dedicated executed folder",
+      "source": "ep-2026-06-18-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-18",
+      "last_applied": "2026-06-18T18:29:47.965083+00:00",
+      "category": "general",
+      "pattern": "The fully SIGNED documents live in dedicated executed folders: US Bridge -> Debt/CIM/Legal/Bridge Facility/Execution Docs/Jeeves Closing Sets/Executed Documents/ (files named *[Executed].pdf, e.g. 01. Jeeves - Loan and Security Agreement (Bridge Loan) [Executed].pdf). MX SOFOM -> Debt/CIM/Legal/Mexico SPV/Jeeves MX - US Loan Documents [PDFs]/ (01. [Jeeves MX] Loan Agreement [Executed].pdf). Always pull the file literally tagged [Executed] from these closing-set folders, never the dated drafts in the negotiation folders.",
+      "problem": "Asked for execution/executed LSAs to attach to a DD email. First grabbed files from the negotiation Financing Agreement / LSA folders (closing-date dated copies), which Brian rejected as not the execution versions.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-18-114": {
+      "id": "pat-2026-06-18-114",
+      "name": "When a teammate replies within an existing external counsel ",
+      "source": "ep-2026-06-18-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-18",
+      "last_applied": "2026-06-18T23:57:17.385874+00:00",
+      "category": "general",
+      "pattern": "When a teammate replies within an existing external counsel thread (e.g. Goodwin VCP/NB), counsel is almost certainly still on the reply-all even if the gmail_tool header dump does not surface the Cc line. Check the thread id / reply-all context before assuming an item was NOT delivered to the external party. Mac was complete.",
+      "problem": "Updating Goodwin legal tracker; Mac sent cyber write-up on a reply within the Goodwin VCP/NB thread. Gmail tool header display only showed To: Brian, no Cc line, so I marked it pending transmission to Avia.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-19-115": {
+      "id": "pat-2026-06-19-115",
+      "name": "For diligence trackers, the ONLY deliverable is the native G",
+      "source": "ep-2026-06-19-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-19",
+      "last_applied": "2026-06-19T02:33:28.267747+00:00",
+      "category": "general",
+      "pattern": "For diligence trackers, the ONLY deliverable is the native Google Sheet link. Do not present_files the local .xlsx build artifact \u2014 build it locally, upload converted to a Sheet, share the link, and stop. Presenting the xlsx muddies that the canonical is a Sheet.",
+      "problem": "Delivered Kroll diligence tracker as a native Google Sheet (correct) but ALSO presented the local .xlsx build artifact via present_files, which read as delivering an xlsx tracker.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-19-116": {
+      "id": "pat-2026-06-19-116",
+      "name": "For GWC/RPP charge-offs, balance_usd is zeroed on current ta",
+      "source": "ep-2026-06-19-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-19",
+      "last_applied": "2026-06-19T20:30:14.439905+00:00",
+      "category": "general",
+      "pattern": "For GWC/RPP charge-offs, balance_usd is zeroed on current tape but the real owed balance = balance_usd WHERE dt = charge_off_dt. Never describe charged-off loans as $0/satisfied; pull the charge-off-date balance to state what is still owed/in recovery.",
+      "problem": "RPP/GWC charged-off loans show balance_usd=0 on current tape; user corrected that charged-off loans still have balances",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
       ]
     }
   }

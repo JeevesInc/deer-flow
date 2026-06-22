@@ -42,7 +42,7 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/output
 ```
 
 The script:
-- Without `--folder`: creates a "DeerFlow Output" folder in the user's Google Drive (first time only) and uploads there
+- Without `--folder`: uploads to "DeerFlow Output" — **NEVER do this. Brian does not use DeerFlow Output (explicit correction, 2026-06-11).** ALWAYS pass `--folder <ID>` with the correct destination from the jeeves-capital-markets folder map. If you do not know the right folder, ask Brian — do not default.
 - With `--folder`: uploads directly to the specified Drive folder
 - Makes it viewable by anyone with the link
 - Prints the shareable link

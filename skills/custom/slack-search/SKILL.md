@@ -47,3 +47,20 @@ Sends a DM **as the bot's identity** (deerflow_analyst), not as Brian. The recip
 - **Do not write your own `chat_postMessage` scripts.** Always use `slack_tool.py send` — it logs every send to the owner's audit log. Ad-hoc Python skips the log and makes the dashboard miss real activity.
 - The `send` command will refuse an empty message body. Quote messages that contain shell special characters.
 - When the user asks you to send a draft, send it verbatim — do not paraphrase. If you need to clarify the tone or wording, ask the user before sending.
+
+## Inbound DM allowlist (who gets responses)
+
+The DM monitor only responds to senders on the allowlist (`backend/.deer-flow/_slack_dm_allowlist.json`).
+Anyone NOT on the list gets **no reply and no agent dispatch** — Brian gets a Slack notification instead
+and decides whether to allow them. The loader fails closed (owner-only) if the file is unreadable.
+
+```bash
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/slack-search/slack_tool.py allowlist list
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/slack-search/slack_tool.py allowlist add shalom@tryjeeves.com
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/slack-search/slack_tool.py allowlist remove U037LV70CHY
+```
+
+**Rules:**
+- When Brian tells you to message someone new for substantive work, add them to the allowlist as part of that task.
+- Do NOT auto-add on every `send` — e.g., sending someone a one-off note (like telling Narendra to route requests through Brian) does not authorize them.
+- Only Brian authorizes additions. If a gated sender's message looks important, surface it to Brian — never reply directly.

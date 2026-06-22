@@ -31,10 +31,16 @@ Folder IDs (from jeeves-capital-markets skill):
 
 import os, sys, json, subprocess, datetime, argparse, shutil
 
-DRIVE_SCRIPT  = "/mnt/skills/custom/google-drive/list_drive_folder.py"
-UPLOAD_SCRIPT = "/mnt/skills/custom/google-drive/upload_to_drive.py"
+# Resolve sibling skills relative to this script so the job runs both inside
+# the agent sandbox and from the gateway cron (where /mnt/ does not exist).
+_SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
+_SKILLS_DIR   = os.path.normpath(os.path.join(_SCRIPT_DIR, '..'))
+DRIVE_SCRIPT  = os.path.join(_SKILLS_DIR, 'google-drive', 'list_drive_folder.py')
+UPLOAD_SCRIPT = os.path.join(_SKILLS_DIR, 'google-drive', 'upload_to_drive.py')
 DEBT_ROOT     = "1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU"
-OUTPUTS       = os.environ.get('OUTPUTS_PATH', '/mnt/user-data/outputs')
+# Stable state dir (not thread-specific): backend/.deer-flow/diligence
+_DEFAULT_OUT  = os.path.normpath(os.path.join(_SKILLS_DIR, '..', '..', 'backend', '.deer-flow', 'diligence'))
+OUTPUTS       = os.environ.get('DILIGENCE_OUTPUTS_PATH') or os.environ.get('OUTPUTS_PATH', _DEFAULT_OUT)
 TODAY         = datetime.date.today()
 DATE_STR      = TODAY.strftime('%Y%m%d')
 DATE_ISO      = TODAY.isoformat()
@@ -87,15 +93,58 @@ def parse_files(raw):
     return items
 
 
+def _download_latest_registry_from_drive():
+    """Fetch the latest canonical registry Excel from the Drive Debt/ root.
+
+    The Drive copy is the canonical diligence library — always prefer it over
+    any local copy, which may be stale or thread-specific.
+    """
+    try:
+        sys.path.insert(0, os.path.join(_SKILLS_DIR, '_shared'))
+        from env_loader import load_env
+        load_env()
+        from google_auth import get_credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseDownload
+        import io
+
+        service = build('drive', 'v3', credentials=get_credentials())
+        res = service.files().list(
+            q=f"'{DEBT_ROOT}' in parents and trashed=false and name contains 'Diligence Registry'",
+            fields='files(id,name,modifiedTime)',
+            orderBy='modifiedTime desc',
+            pageSize=5,
+        ).execute()
+        files = res.get('files', [])
+        if not files:
+            return None
+        latest = files[0]
+        buf = io.BytesIO()
+        dl = MediaIoBaseDownload(buf, service.files().get_media(fileId=latest['id']))
+        done = False
+        while not done:
+            _, done = dl.next_chunk()
+        dest = os.path.join(OUTPUTS, latest['name'])
+        with open(dest, 'wb') as f:
+            f.write(buf.getvalue())
+        print(f"Downloaded canonical registry from Drive: {latest['name']}")
+        return dest
+    except Exception as e:
+        print(f"  (could not download registry from Drive: {e})")
+        return None
+
+
 def load_known_ids():
     known = set()
     try:
         import openpyxl
-        cands = [f for f in os.listdir(OUTPUTS)
-                 if f.startswith("Diligence Registry") and f.endswith(".xlsx")]
-        if not cands:
-            return known
-        latest = os.path.join(OUTPUTS, sorted(cands)[-1])
+        latest = _download_latest_registry_from_drive()
+        if latest is None:
+            cands = [f for f in os.listdir(OUTPUTS)
+                     if f.startswith("Diligence Registry") and f.endswith(".xlsx")]
+            if not cands:
+                return known
+            latest = os.path.join(OUTPUTS, sorted(cands)[-1])
         wb = openpyxl.load_workbook(latest, read_only=True)
         ws = wb["Master Registry"]
         for row in ws.iter_rows(min_row=3, values_only=True):
@@ -122,6 +171,7 @@ def main():
     cutoff       = TODAY - datetime.timedelta(days=45)
     new_items    = []
     recent_items = []
+    all_items    = []
 
     for (cp, folder_id, recursive) in CRAWL_TARGETS:
         print(f"  Crawling {cp} ({folder_id[:14]}...)...", end=" ", flush=True)
@@ -130,6 +180,7 @@ def main():
         print(f"{len(items)} files")
         for item in items:
             item["counterparty"] = cp
+            all_items.append(item)
             if item["id"] not in known_ids:
                 new_items.append(item)
                 print(f"    [NEW] {item['name']} ({item['modified']})")
@@ -139,8 +190,18 @@ def main():
             except Exception:
                 pass
 
+    # Duplicate detection (Brian 2026-06-10: duplicative items must always
+    # be deconflicted, never listed as independent triage rows)
+    from collections import defaultdict
+    name_map = defaultdict(list)
+    for item in all_items:
+        name_map[item["name"].strip().lower()].append(item)
+    dup_groups = {k: v for k, v in name_map.items() if len(v) > 1}
+    dup_ids = {i["id"] for v in dup_groups.values() for i in v}
+
     print(f"\n{'=' * 55}")
     print(f"NEW (not in registry): {len(new_items)}")
+    print(f"Duplicate groups:      {len(dup_groups)}")
     print(f"Recent (last 45d):     {len(recent_items)}")
 
     # Write summary report
@@ -157,9 +218,21 @@ def main():
                 f.write(f"\n  [{item['counterparty']}] {item['name']}\n")
                 f.write(f"    Drive ID:  {item['id']}\n")
                 f.write(f"    Modified:  {item['modified']}\n")
-                f.write(f"    Action:    Add to Master Registry with Status, Owner, Notes\n")
+                if item["id"] in dup_ids:
+                    f.write(f"    Action:    DUPLICATE - deconflict to one canonical copy before adding\n")
+                else:
+                    f.write(f"    Action:    Add to Master Registry with Status, Owner, Notes\n")
         else:
             f.write("  (none - registry is current)\n")
+
+        f.write("\n--- DUPLICATES TO DECONFLICT (pick one canonical copy, remove the rest) ---\n")
+        if dup_groups:
+            for name, copies in sorted(dup_groups.items()):
+                f.write(f"\n  {copies[0]['name']}  ({len(copies)} copies)\n")
+                for c in copies:
+                    f.write(f"    [{c['counterparty']}] Drive ID: {c['id']}  Modified: {c['modified']}\n")
+        else:
+            f.write("  (none)\n")
 
         f.write("\n--- RECENT ACTIVITY (last 45 days) ---\n")
         for item in recent_items:
@@ -179,23 +252,21 @@ def main():
         print("[DRY RUN] Done.")
         return
 
-    # Rebuild registry
-    builder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "build_registry.py")
+    # Rebuild registry (builder writes a dated file directly)
+    builder = os.path.join(_SCRIPT_DIR, "build_diligence_registry.py")
     registry_path = os.path.join(OUTPUTS, f"Diligence Registry - Capital Markets - {DATE_STR}.xlsx")
 
     if os.path.exists(builder):
         print(f"\nRebuilding registry Excel...")
-        result = subprocess.run([sys.executable, builder], capture_output=True, text=True)
-        if result.returncode == 0:
-            old = os.path.join(OUTPUTS, "Diligence Registry - Capital Markets - 20260507.xlsx")
-            if os.path.exists(old) and old != registry_path:
-                shutil.move(old, registry_path)
+        env = dict(os.environ, OUTPUTS_PATH=OUTPUTS)
+        result = subprocess.run([sys.executable, builder], capture_output=True, text=True, env=env)
+        if result.returncode == 0 and os.path.exists(registry_path):
             print(f"  Built: {registry_path}")
         else:
-            print(f"  Build error: {result.stderr}")
+            print(f"  Build error: {result.stderr or 'output file missing'}")
             registry_path = None
     else:
-        print("  build_registry.py not found - skipping Excel rebuild")
+        print("  build_diligence_registry.py not found - skipping Excel rebuild")
         registry_path = None
 
     # Upload
@@ -209,7 +280,8 @@ def main():
 
     # Log episode
     if new_items:
-        manage = "/mnt/skills/public/self-improving-agent/scripts/skill_manage.py"
+        manage = os.path.normpath(os.path.join(
+            _SKILLS_DIR, '..', 'public', 'self-improving-agent', 'scripts', 'skill_manage.py'))
         if os.path.exists(manage):
             episode = json.dumps({
                 "situation": f"Monthly refresh {DATE_ISO} found {len(new_items)} new Drive items",

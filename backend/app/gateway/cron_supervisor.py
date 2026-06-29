@@ -177,6 +177,7 @@ def start_crons() -> None:
     _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
+    _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
     # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
     # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
     # top level executed the full dashboard render + 3 synchronous Redshift

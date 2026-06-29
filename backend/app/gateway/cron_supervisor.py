@@ -176,6 +176,8 @@ def start_crons() -> None:
     _load_and_start("diligence-registry", skills_dir / "jeeves-diligence" / "diligence_registry_cron.py")
     _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
+    _load_and_start("weekly-open-items", skills_dir / "gmail" / "weekly_open_items_cron.py")
+    _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
     _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
     # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called

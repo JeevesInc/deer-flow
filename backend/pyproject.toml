@@ -31,6 +31,15 @@ dependencies = [
     # mem0's HuggingFace embedder needs sentence-transformers. Without it
     # mem0 initializes but every injection fails on the embedder load.
     "sentence-transformers>=2.7.0",
+    # Borrowing-base report crons (report_scheduler_cron loads build_us,
+    # build_mx, build_portfolio_report in-process via cron_supervisor).
+    # pandas pulls these transitively; without explicit declaration
+    # 'uv sync' prunes them (notably python-dateutil), breaking the daily
+    # US and MX borrowing-base builds.
+    "pandas>=2.2.0",
+    "python-dateutil>=2.9.0",
+    "openpyxl>=3.1.5",
+    "xlsxwriter>=3.2.0",
 ]
 
 [dependency-groups]

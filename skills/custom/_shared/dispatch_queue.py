@@ -47,8 +47,7 @@ def _write_queue(items):
     tmp = QUEUE_PATH.with_suffix(".jsonl.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         for item in items:
-            f.write(json.dumps(item) + "
-")
+            f.write(json.dumps(item) + "\n")
     tmp.replace(QUEUE_PATH)
 
 def _is_stale(item):

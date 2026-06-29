@@ -21,7 +21,8 @@ def ensure_deps(*extras):
     if missing:
         import subprocess
         pip_names = [('psycopg2-binary' if p == 'psycopg2' else p) for p in required]
-        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q'] + pip_names)
+        # Use 'uv pip install' — the backend venv is uv-managed and may not have the pip module.
+        subprocess.check_call(['uv', 'pip', 'install', '--python', sys.executable, '-q'] + pip_names)
 
 
 def connect():

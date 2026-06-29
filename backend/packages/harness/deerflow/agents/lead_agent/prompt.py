@@ -2,8 +2,21 @@ import logging
 
 from deerflow.config.agents_config import load_agent_soul
 from deerflow.skills import load_skills
+from deerflow.subagents.custom_agents import list_custom_agent_subagent_configs
 
 logger = logging.getLogger(__name__)
+
+
+def _build_specialist_list() -> str:
+    """Return a bullet list of custom specialist agents, or empty string if none."""
+    try:
+        configs = list_custom_agent_subagent_configs()
+    except Exception:
+        return ""
+    if not configs:
+        return ""
+    lines = [f"- **{c.name}**: {c.description}" for c in configs]
+    return "\n" + "\n".join(lines)
 
 
 def _build_subagent_section(max_concurrent: int) -> str:
@@ -41,6 +54,7 @@ You are running with subagent capabilities enabled. Your role is to be a **task 
 **Available Subagents:**
 - **general-purpose**: For ANY non-trivial task - web research, code exploration, file operations, analysis, etc.
 - **bash**: For command execution (git, build, test, deploy operations)
+{_build_specialist_list()}
 
 **Your Orchestration Strategy:**
 

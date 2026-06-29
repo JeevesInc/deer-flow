@@ -66,6 +66,8 @@ def classify_error_text(exc: BaseException) -> str:
         )
     if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
         return "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
+    if isinstance(exc, httpx.ConnectError):
+        return "I can't reach the agent engine right now — it may be restarting. Try again in a moment."
     if "usage limit" in err_str or "specified api usage" in err_str:
         return (
             "I've hit the Anthropic API usage limit for this billing period, so "
@@ -693,7 +695,7 @@ class ChannelManager:
     async def _handle_command(self, msg: InboundMessage) -> None:
         text = msg.text.strip()
         parts = text.split(maxsplit=1)
-        command = parts[0].lower().lstrip("/")
+        command = parts[0].lower().lstrip("/!")
 
         if command == "bootstrap":
             from dataclasses import replace as _dc_replace
@@ -701,6 +703,45 @@ class ChannelManager:
             chat_text = parts[1] if len(parts) > 1 else "Initialize workspace"
             chat_msg = _dc_replace(msg, text=chat_text, msg_type=InboundMessageType.CHAT)
             await self._handle_chat(chat_msg, extra_context={"is_bootstrap": True})
+            return
+
+        if command == "learn":
+            from dataclasses import replace as _dc_replace
+
+            chat_msg = _dc_replace(
+                msg,
+                text=(
+                    "Run the latent-learning skill now. Analyse memory facts and completed work to identify "
+                    "recurring task domains, draft specialist sub-agent specs, write them to the agents-draft "
+                    "directory, and report back a summary of what was proposed."
+                ),
+                msg_type=InboundMessageType.CHAT,
+            )
+            await self._handle_chat(chat_msg)
+            return
+
+        if command == "promote":
+            reply = await self._promote_agent(parts[1].strip() if len(parts) > 1 else "")
+            outbound = OutboundMessage(
+                channel_name=msg.channel_name,
+                chat_id=msg.chat_id,
+                thread_id=self.store.get_thread_id(msg.channel_name, msg.chat_id) or "",
+                text=reply,
+                thread_ts=msg.thread_ts,
+            )
+            await self.bus.publish_outbound(outbound)
+            return
+
+        if command == "reject":
+            reply = await self._reject_agent(parts[1].strip() if len(parts) > 1 else "")
+            outbound = OutboundMessage(
+                channel_name=msg.channel_name,
+                chat_id=msg.chat_id,
+                thread_id=self.store.get_thread_id(msg.channel_name, msg.chat_id) or "",
+                text=reply,
+                thread_ts=msg.thread_ts,
+            )
+            await self.bus.publish_outbound(outbound)
             return
 
         if command == "new":
@@ -734,6 +775,9 @@ class ChannelManager:
                 "/btw — Quick system health check\n"
                 "/models — List available models\n"
                 "/memory — Show memory status\n"
+                "!learn — Analyse task history and propose specialist agents\n"
+                "!promote <name> — Activate a drafted specialist agent\n"
+                "!reject <name> — Delete a drafted specialist agent\n"
                 "/help — Show this help"
             )
         else:
@@ -747,6 +791,59 @@ class ChannelManager:
             thread_ts=msg.thread_ts,
         )
         await self.bus.publish_outbound(outbound)
+
+    async def _promote_agent(self, name: str) -> str:
+        """Move an agent draft into the live agents directory."""
+        import re
+        import shutil
+
+        from deerflow.config.paths import get_paths
+
+        if not name or not re.match(r"^[A-Za-z0-9-]+$", name):
+            return "Usage: /promote <agent-name>  (letters, digits, hyphens only)"
+
+        paths = get_paths()
+        draft_dir = paths.base_dir / "agents-draft" / name.lower()
+        live_dir = paths.agent_dir(name)
+
+        if not draft_dir.exists():
+            return f"No draft found for `{name}`. Run `/learn` to generate drafts."
+
+        if live_dir.exists():
+            return f"Agent `{name}` already exists. Delete it first if you want to replace it."
+
+        try:
+            shutil.copytree(str(draft_dir), str(live_dir))
+            shutil.rmtree(str(draft_dir))
+        except Exception as exc:
+            logger.exception("Failed to promote agent %s", name)
+            return f"Error promoting `{name}`: {exc}"
+
+        return f"Agent `{name}` is now live. The lead agent will delegate to it on matching tasks."
+
+    async def _reject_agent(self, name: str) -> str:
+        """Delete a draft agent without promoting it."""
+        import re
+        import shutil
+
+        from deerflow.config.paths import get_paths
+
+        if not name or not re.match(r"^[A-Za-z0-9-]+$", name):
+            return "Usage: /reject <agent-name>"
+
+        paths = get_paths()
+        draft_dir = paths.base_dir / "agents-draft" / name.lower()
+
+        if not draft_dir.exists():
+            return f"No draft found for `{name}`."
+
+        try:
+            shutil.rmtree(str(draft_dir))
+        except Exception as exc:
+            logger.exception("Failed to reject agent %s", name)
+            return f"Error deleting draft `{name}`: {exc}"
+
+        return f"Draft `{name}` deleted."
 
     async def _fetch_gateway(self, path: str, kind: str) -> str:
         """Fetch data from the Gateway API for command responses."""

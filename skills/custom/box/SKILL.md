@@ -1,3 +1,12 @@
+---
+name: box
+description: Use this skill whenever the work involves Box or a Box data room (box.com) — any diligence data room, deal data room, document repository, or per-request document folder hosted in Box. This skill is how you both READ and WRITE Box. It authenticates via Client Credentials Grant in as-user mode (inheriting the user's full Box folder access) and lets you list, read, download, upload, move, rename, and delete files and folders. IMPORTANT — Box is a separate system from Google Drive. Having only Drive, Gmail, and Slack tools does NOT mean you lack Box access — you DO have full Box read/write access through this skill, so never tell the user you cannot write to Box. Use it any time work involves a "Box folder", "Box site", "data room", uploading or copying documents into Box, or filling empty Box folders.
+allowed-tools:
+  - bash
+  - read_file
+  - write_file
+---
+
 # Box (Client Credentials Grant)
 
 Server-to-server Box connection for the daemon. Built on Box's SDK Gen package

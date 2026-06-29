@@ -20,7 +20,10 @@ def get_subagent_config(name: str) -> SubagentConfig | None:
     """
     config = BUILTIN_SUBAGENTS.get(name)
     if config is None:
-        return None
+        # Fall back to custom "soul" agents exposed as delegatable specialists.
+        from deerflow.subagents.custom_agents import custom_agent_to_subagent_config
+
+        return custom_agent_to_subagent_config(name)
 
     # Apply timeout override from config.yaml (lazy import to avoid circular deps)
     from deerflow.config.subagents_config import get_subagents_app_config

@@ -1855,6 +1855,342 @@
       "target_skills": [
         "jeeves-redshift"
       ]
+    },
+    "pat-2026-06-22-117": {
+      "id": "pat-2026-06-22-117",
+      "name": "Root cause was relationship.summary accreting into a calenda",
+      "source": "ep-2026-06-22-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-22",
+      "last_applied": "2026-06-22T20:57:32.125421+00:00",
+      "category": "general",
+      "pattern": "Root cause was relationship.summary accreting into a calendar recap + no delta logic. Fix: force one-sentence summaries in synthesis prompt, track last_briefed per contact in cron state, render briefs leading with what is NEW since last prep + action items owed, suppress standing bio for daily/weekly contacts. Cron is a daemon thread inside gateway; code changes need a gateway restart to take effect.",
+      "problem": "Brian: dossier meeting preps are stale and repetitive (re-narrate a rolling 14-day calendar window every run)",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-06-22-118": {
+      "id": "pat-2026-06-22-118",
+      "name": "When Brian references the Kroll box / data room, it means th",
+      "source": "ep-2026-06-22-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-22",
+      "last_applied": "2026-06-22T22:30:04.174994+00:00",
+      "category": "general",
+      "pattern": "When Brian references the Kroll box / data room, it means the Box.com Kroll folder (root id 391275668946; Phase 1 id 391276628990). Drive Kroll folder is staging only; files filed there are NOT auto-propagated to Box. To fill empties: download from Drive, upload to matching Box per-request folder via box_client get_client + uploads.upload_file.",
+      "problem": "Brian said put a file in / look at empties in the Kroll box. The Kroll box is the Box.com data room (Files > Kroll > Phase 1/Phase 2) with one folder per request item (P1-01..P1-16, P2-01..07), NOT the Google Drive Neuberger Berman/Diligence/Kroll folder which is only a flat staging area.",
+      "solution": "",
+      "target_skills": [
+        "box"
+      ]
+    },
+    "pat-2026-06-22-119": {
+      "id": "pat-2026-06-22-119",
+      "name": "For external data rooms: (1) strip ALL counterparty/codename",
+      "source": "ep-2026-06-22-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-22",
+      "last_applied": "2026-06-22T23:48:53.413049+00:00",
+      "category": "general",
+      "pattern": "For external data rooms: (1) strip ALL counterparty/codename refs (VCP=Vista, FDD=PwC workstream, CIM=lender) from filenames. (2) Verify customer-concentration files are anonymized before trusting them external (download + openpyxl peek). (3) When uv run python mid-session reinstalls packages and breaks box_sdk_gen/certifi, run uv pip install box_sdk_gen truststore certifi then retry. (4) Confirm before deleting from an external room even when the stale-file logic is obvious.",
+      "problem": "Kroll Box data room cleanup: strip codenames, standardize names, swap stale forecasts. Box files renamed via c.files.update_file_by_id(fid, name=...); deleted via c.files.delete_file_by_id(fid) (goes to recoverable Box trash); uploaded via c.uploads.upload_file(UploadFileAttributes(name,parent=UploadFileAttributesParentField(id))).",
+      "solution": "",
+      "target_skills": [
+        "box"
+      ]
+    },
+    "pat-2026-06-23-120": {
+      "id": "pat-2026-06-23-120",
+      "name": "When summarizing a legal redline that contains Note-to-Jeeve",
+      "source": "ep-2026-06-23-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T00:34:35.626970+00:00",
+      "category": "general",
+      "pattern": "When summarizing a legal redline that contains Note-to-Jeeves / NTD footnotes, the PRIMARY deliverable is the complete, organized list of every open decision/question with full text and section context \u2014 not the economic-terms recap. Lead with the action items as a decision memo.",
+      "problem": "Brian asked for a summary of a redline (Goodwin first turn on NB credit agreement). I led with economic terms recap and only listed Notes to Jeeves briefly. Brian called it useless and wanted the full Notes to Jeeves laid out.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redline"
+      ]
+    },
+    "pat-2026-06-23-121": {
+      "id": "pat-2026-06-23-121",
+      "name": "Word compare PDFs color-code edits: red non_stroking_color (",
+      "source": "ep-2026-06-23-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T01:13:17.496826+00:00",
+      "category": "general",
+      "pattern": "Word compare PDFs color-code edits: red non_stroking_color (1,0,0)=deletion, blue (0,0,1)=insertion. To produce coherent before/after, reconstruct each changed sentence twice from the SAME word span: old=keep+deleted tokens, new=keep+inserted tokens. Do NOT concatenate deleted fragments vs inserted fragments separately \u2014 that produces garbled columns. Track section via numbered headings and defined-term-start (quoted term followed by means/has). Filter trivial diffs by comparing case/punct-normalized old vs new.",
+      "problem": "Asked to build an issues list of every change in a Word compare-redline PDF with coherent old vs new positions.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redline"
+      ]
+    },
+    "pat-2026-06-23-122": {
+      "id": "pat-2026-06-23-122",
+      "name": "When sending or delivering a TRACKER, always deliver the liv",
+      "source": "ep-2026-06-23-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T17:38:04.988730+00:00",
+      "category": "general",
+      "pattern": "When sending or delivering a TRACKER, always deliver the live Google Sheet link (docs.google.com/spreadsheets/...), never an Excel/xlsx export. Trackers are always Google Sheets \u2014 this overrides the general no-Drive-links preference for tracker delivery specifically. Do not export trackers to xlsx for delivery.",
+      "problem": "Brian asked me to send the Kroll tracker in Slack. I exported the Google Sheet to .xlsx and presented the Excel file. Brian corrected: trackers are always in Google Sheets.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-23-123": {
+      "id": "pat-2026-06-23-123",
+      "name": "Trackers must be simple and self-consistent: (1) use ONE sta",
+      "source": "ep-2026-06-23-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T17:46:13.357378+00:00",
+      "category": "general",
+      "pattern": "Trackers must be simple and self-consistent: (1) use ONE status for done items (COMPLETE) \u2014 do not invent distinctions like IN FOLDER vs FILED vs DRAFTED & FILED; (2) strip Notes from any COMPLETE row \u2014 notes belong only on open/dropped items; (3) before marking an item PENDING, verify the actual Box/Drive folder contents \u2014 do not trust a stale prior status; (4) drive colors with conditional formatting tied to the status value, never manual shading.",
+      "problem": "Built a tracker with three statuses for completed items (IN FOLDER, FILED, DRAFTED & FILED), kept verbose notes on completed rows, and left P1-12 as PENDING when it actually had a Box file. Brian called it garbage.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-23-124": {
+      "id": "pat-2026-06-23-124",
+      "name": "When reformatting a status/category column, reset BOTH backg",
+      "source": "ep-2026-06-23-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T17:47:37.765840+00:00",
+      "category": "general",
+      "pattern": "When reformatting a status/category column, reset BOTH backgroundColor AND textFormat.foregroundColor. Manual font colors persist independently of cell text and conditional formatting (which only changes background by default). Normalize the whole column font to a single color in one repeatCell pass.",
+      "problem": "After consolidating tracker statuses and fixing background via conditional formatting, the Status cells still showed different FONT colors because old manual per-status font colors were baked into each cell.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-23-125": {
+      "id": "pat-2026-06-23-125",
+      "name": "A borrowing base is NOT done until ALL tabs populate. Transi",
+      "source": "ep-2026-06-23-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-23",
+      "last_applied": "2026-06-23T22:08:18.060751+00:00",
+      "category": "general",
+      "pattern": "A borrowing base is NOT done until ALL tabs populate. Transient API overload (529) on the CICO vision fetch should be retried immediately, not delivered partial. Also: US BB uploads WITHOUT --new (it is a single rolling file updated in place per revision history); using --new creates a stray duplicate. Only MX SOFOM master needs --new.",
+      "problem": "US BB build_us.py CICO vision fetch hit transient Anthropic 529 overload, bank_accts tab omitted. Delivered incomplete file instead of retrying.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-24-126": {
+      "id": "pat-2026-06-24-126",
+      "name": "Gmail drafts().create SILENTLY DROPS lowercase MIME header n",
+      "source": "ep-2026-06-24-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-24",
+      "last_applied": "2026-06-24T17:43:51.625561+00:00",
+      "category": "general",
+      "pattern": "Gmail drafts().create SILENTLY DROPS lowercase MIME header names (to/from/subject/cc) when a threadId is attached. Headers MUST be set with canonical case (To/From/Subject/Cc). Patched _build_mime in gmail_tool.py to use capitalized headers. Verified via A/B test: cap+threadId=preserved, lowercase+threadId=dropped.",
+      "problem": "Reply drafts created via gmail_tool landed in Brian's mailbox as blank, subject-less, recipient-less drafts that were invisible in his Drafts folder.",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-06-24-127": {
+      "id": "pat-2026-06-24-127",
+      "name": "For physical/registered address use dms_mysql_jeeves_raw.com",
+      "source": "ep-2026-06-24-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-24",
+      "last_applied": "2026-06-24T17:57:30.277485+00:00",
+      "category": "general",
+      "pattern": "For physical/registered address use dms_mysql_jeeves_raw.company_addresses with addresstype=company (deletedat IS NULL). addresstype=statement is the billing address. country_code/countrycode in loc_tape and companies_dm = billing country, NOT physical address. CO LOC set had 1711 companies: 1684 physically in CO, 27 outside (26 US, 1 MX) despite all billing 170.",
+      "problem": "Asked to split Colombia LOC customers by whether their address is in Colombia. country_code in loc_tape/companies_dm is the BILLING jurisdiction, not the physical address.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-06-24-128": {
+      "id": "pat-2026-06-24-128",
+      "name": "The CIM monthly report for the US Bridge is the Jeeves Month",
+      "source": "ep-2026-06-24-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-24",
+      "last_applied": "2026-06-24T20:40:05.680158+00:00",
+      "category": "general",
+      "pattern": "The CIM monthly report for the US Bridge is the Jeeves Monthly Servicer Report, stored as Monthly Tested Portfolio Report - YYYYMMDD.xlsx in the CIM Reporting month folder; dated mid-month and tests the PRIOR month-end. Build with build_us month-end plus no-cico, merge into prior servicer report as template, then update bank_accts eom_bal in place matched by country and acct keeping the row order so Summary cash sums stay valid, and refresh the revenue tab with that months loc revenue query. Use first post-month-end CICO email for EOM balances. Run python from cwd workspace with relative filenames for openpyxl since absolute mounted paths fail in openpyxl.",
+      "problem": "CIM monthly servicer report for the bridge; first tried standalone Portfolio Report which was wrong (no CICO).",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-24-129": {
+      "id": "pat-2026-06-24-129",
+      "name": "Two different CIM deliverables: (1) CIM SS DDMONYY.zip = bal",
+      "source": "ep-2026-06-24-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-24",
+      "last_applied": "2026-06-24T21:06:29.479691+00:00",
+      "category": "general",
+      "pattern": "Two different CIM deliverables: (1) CIM SS DDMONYY.zip = balance SCREENSHOTS (png) for CICO/daily cash, mostly images; NOT formal statements. (2) The formal monthly bank statements are CIM STATEMENTS MONYY.zip / CIM_STATEMENTS_MONTHYEAR.zip = actual PDF bank statements per account. The formal monthly package arrives by EMAIL from Axel or Mariana, subject CIM Bank Statements- Month, and may NOT be in Drive yet (April was in Drive, May 2026 only existed as Axel email attachment from June 9). When asked for monthly bank statements, look for the STATEMENTS PDF package, not the SS screenshot zip.",
+      "problem": "Brian asked for the zip of May bank statements. I first pointed to CIM SS 05JUNE26.zip which is mostly balance screenshots (png), and he corrected me.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-06-25-130": {
+      "id": "pat-2026-06-25-130",
+      "name": "In this sandbox, some script-file open() calls on absolute C",
+      "source": "ep-2026-06-25-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-25",
+      "last_applied": "2026-06-25T23:28:03.089329+00:00",
+      "category": "general",
+      "pattern": "In this sandbox, some script-file open() calls on absolute C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/9671fb89-7e3c-41fe-9541-f800f7de87fd/user-data paths intermittently fail path translation; cd into the dir and use a RELATIVE path (or run as heredoc) which resolves reliably.",
+      "problem": "Python script run via uv/PYTHON_PATH failed FileNotFoundError on an absolute C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/9671fb89-7e3c-41fe-9541-f800f7de87fd/user-data/workspace path while os.path.exists and inline heredocs succeeded for the same path",
+      "solution": "",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-06-25-131": {
+      "id": "pat-2026-06-25-131",
+      "name": "NEVER cite a source document for a diligence item without op",
+      "source": "ep-2026-06-25-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-25",
+      "last_applied": "2026-06-25T23:58:28.916027+00:00",
+      "category": "general",
+      "pattern": "NEVER cite a source document for a diligence item without opening it and confirming it matches the request. BBVA DD 5.06 statements are BBVA-facility/MX-specific, NOT the BR/CO collection-account statements that evidence cash receipts for Kroll sampled receivables. Payment-receipt/cash-reconciliation tracing needs the collection-account (CIM reporting) statements where customer payments actually land.",
+      "problem": "Marked P2-6 bank statements as satisfiable by BBVA DD 5.06 by echoing a stale tracker note without opening the files",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-26-132": {
+      "id": "pat-2026-06-26-132",
+      "name": "When a diligence item is ambiguous, READ the actual request ",
+      "source": "ep-2026-06-26-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-26",
+      "last_applied": "2026-06-26T00:16:39.655954+00:00",
+      "category": "general",
+      "pattern": "When a diligence item is ambiguous, READ the actual request language first (it specifies scope/intent), then resolve the source from authoritative internal docs (the Jeeves bank accounts list names which accounts are receivables-collection vs AP/fees/disbursement). Brazil collections=BTG 6343-30; Colombia collections=Davivienda 0337/4765, BdB 8116, Cobre JSE233. The CIM SS monthly bundles are balance SCREENSHOTS, not transactional statements - insufficient for cash-receipt tracing.",
+      "problem": "For Kroll P2-6 bank statements, asked Brian which set instead of reading the diligence request and deriving it",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-06-26-133": {
+      "id": "pat-2026-06-26-133",
+      "name": "In this sandbox uv can pick a native Windows Python that onl",
+      "source": "ep-2026-06-26-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-26",
+      "last_applied": "2026-06-26T16:27:31.133207+00:00",
+      "category": "general",
+      "pattern": "In this sandbox uv can pick a native Windows Python that only PARTIALLY translates the mnt mount (stat works, file open does not). Avoid bouncing data through a workspace file: do query+build in ONE process via psycopg2 (REDSHIFT_* env vars). For Drive/Sheets scripts importing from the shared dir, run as a FILE from the google-drive skill dir with a file-relative sys.path insert.",
+      "problem": "Bounced query output through an intermediate xlsx in workspace, then a separate build script failed to read it (FileNotFoundError on io.open) even though os.path.exists returned True.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-06-26-134": {
+      "id": "pat-2026-06-26-134",
+      "name": "To reproduce a delivered file, re-run at its ORIGINAL snapsh",
+      "source": "ep-2026-06-26-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-26",
+      "last_applied": "2026-06-26T17:35:50.497477+00:00",
+      "category": "general",
+      "pattern": "To reproduce a delivered file, re-run at its ORIGINAL snapshot date and diff to confirm methodology before extending. Findings: (1) Top Obligors file = obligors with balance_usd>2,000,000 at a month-end (NOT a fixed count); max_dpd column = lt.days_past_due AT snapshot (not all-time max); country_code/currency are alpha codes derived from companies_dm.country_name and billing_currency_alphacode, not loc_tape numeric ISO. (2) LOC Acct Rollforward = loc_acct_rollforward_cumul.sql run monthly first->last day, start/end_date added in pandas, jeeves_pay_fee_amount_usd renamed to fee_amount_usd, 24 cols (drop dup company_id + onboarding_date). (3) Data Tape - Portfolio = data_tape.sql single snapshot, drop name/ein/is_startup (88 cols) for lender version. Delivered Top Obligors filename date was the GENERATION date; data was a prior month-end.",
+      "problem": "Reproduce NB/Varun three files (LOC rollforward, Top Obligors, data tape) through end of May",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-06-26-135": {
+      "id": "pat-2026-06-26-135",
+      "name": "CORRECTION: The NB rollforward file is built from loc_acct_r",
+      "source": "ep-2026-06-26-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-26",
+      "last_applied": "2026-06-26T18:07:17.195744+00:00",
+      "category": "general",
+      "pattern": "CORRECTION: The NB rollforward file is built from loc_acct_rollforward.sql (BASE query), NOT loc_acct_rollforward_cumul.sql. The base query has TWO fee columns: jeeves_pay_fee_amount_usd (~0) and fee_amount_usd = sum(fee_amount*spot_rate) = agentic-services fees (~$21.7M). Delivered file = base output, DROP jeeves_pay_fee_amount_usd, KEEP fee_amount_usd as-is (do NOT rename jeeves_pay_fee to fee_amount). The cumul query lacks the real fee_amount_usd, so using it zeroes out fees and blows up the diff column. ALWAYS diff a reproduction against the delivered file on overlapping rows BEFORE delivering.",
+      "problem": "Brian flagged diffs on reproduced LOC Acct Rollforward",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-06-29-136": {
+      "id": "pat-2026-06-29-136",
+      "name": "Root cause: pandas/python-dateutil/openpyxl/xlsxwriter undec",
+      "source": "ep-2026-06-29-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-29",
+      "last_applied": "2026-06-29T15:59:25.626020+00:00",
+      "category": "general",
+      "pattern": "Root cause: pandas/python-dateutil/openpyxl/xlsxwriter undeclared in backend/pyproject.toml. report_scheduler_cron loads build_us in-process in gateway venv, so an env sync prunes transitive python-dateutil. Durable fix=declare all four as direct deps + uv lock + commit. Quick unblock=uv pip install --python $PYTHON_PATH --reinstall python-dateutil.",
+      "problem": "US BB build_us.py fails ModuleNotFoundError dateutil in backend venv; recurred 6/22,6/23,6/28",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-29-137": {
+      "id": "pat-2026-06-29-137",
+      "name": "CORRECTION to prior episode: (1) uv sync does NOT prune pyth",
+      "source": "ep-2026-06-29-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-29",
+      "last_applied": "2026-06-29T16:06:23.586548+00:00",
+      "category": "general",
+      "pattern": "CORRECTION to prior episode: (1) uv sync does NOT prune python-dateutil \u2014 dry-run proves it is a kept transitive dep (croniter/kubernetes/pandas require it). (2) ensure_deps uv pip install DOES restore dateutil in every reproducible condition (tested from workspace AND project dir). (3) The 6/28 failure could NOT be reproduced and the removal trigger remains UNIDENTIFIED. gateway.log has zero dateutil/build_us lines (cron subprocess stdout not captured there). Do NOT claim a root cause without log evidence. Immediate unblock that always works: uv pip install --python $PYTHON_PATH --reinstall python-dateutil. Next step for real fix: instrument ensure_deps to capture the uv install stdout + log dateutil presence before/after so the NEXT occurrence yields the smoking gun.",
+      "problem": "US BB dateutil ModuleNotFoundError; tried to root-cause the recurrence",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
     }
   }
 }

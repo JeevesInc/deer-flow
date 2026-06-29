@@ -186,11 +186,15 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
     else:
         mime = _build_body_part(body_text)
 
-    mime['to'] = to_addr
-    mime['from'] = from_addr
-    mime['subject'] = subject
+    # NOTE: Header names MUST be canonical-case (To/From/Subject/Cc). Gmail's
+    # drafts().create silently DROPS lowercase header names ('to','subject',...)
+    # when a threadId is attached, producing a blank, recipient-less draft that
+    # is effectively invisible in the Drafts folder. Verified 2026-06-24.
+    mime['To'] = to_addr
+    mime['From'] = from_addr
+    mime['Subject'] = subject
     if cc:
-        mime['cc'] = cc
+        mime['Cc'] = cc
     if in_reply_to:
         mime['In-Reply-To'] = in_reply_to
         mime['References'] = references or in_reply_to

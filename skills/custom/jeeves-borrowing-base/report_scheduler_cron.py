@@ -426,27 +426,144 @@ def run_portfolio_report():
 
 
 def run_mx_bb():
-    """Trigger MX (SOFOM) Borrowing Base using yesterday's date. Runs daily at 8:30am PST."""
-    yesterday = (datetime.now().date() - timedelta(days=1)).isoformat()
+    """Build MX (SOFOM) Borrowing Base directly (no agent) using yesterday's date.
 
-    log.info(f"Triggering daily MX BB for {yesterday}")
+    Runs daily at 8:30am PST. Mirrors run_weekly_bb's deterministic pipeline so a
+    transient Redshift/Zscaler drop or a long agent run can't silently fail the job:
+      1. build_mx.py --end-date {yesterday}  (with one zscaler-reauth retry on conn error)
+         -> $OUTPUTS_PATH/Borrowing Base - SOFOM - {YYYYMMDD}.xlsx
+      2. merge_template.py (most-recent SOFOM Master on Drive as template)
+         -> $OUTPUTS_PATH/Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx
+      3. upload_to_drive.py --new -> Debt/CIM/{YYYYMM}/ folder
+      4. Post Slack with Drive link + key balances
+    """
+    import subprocess, re as _re
+
+    yesterday   = (datetime.now().date() - timedelta(days=1)).isoformat()
+    yyyymmdd    = yesterday.replace('-', '')
+    yyyymm      = yyyymmdd[:6]
+    outputs_dir = os.environ.get('OUTPUTS_PATH', 'C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/7a0af2ac-5107-48a9-a6f6-137a645fa75a/user-data/outputs').replace(chr(92), '/')
+    skills_dir  = os.path.dirname(os.path.abspath(__file__))
+
+    log.info(f"run_mx_bb: building MX SOFOM BB for {yesterday} (direct pipeline)")
     _post_slack(f":flag-mx: Running scheduled *MX Borrowing Base* for {yesterday}...")
 
-    task = (
-        f"Run the MX borrowing base for {yesterday}. "
-        f"Upload the completed file to Drive in the Debt/CIM folder and share the link here."
-    )
-    result = _run_agent_task(task)
+    def _run(cmd, step, timeout=600):
+        log.info(f"  [{step}] {' '.join(cmd)}")
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        # stdin=DEVNULL so merge_template.py's "Continue anyway?" prompt (SOFOM has no
+        # Summary tabs) auto-answers 'y' via its sys.stdin.isatty() is False branch.
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           encoding='utf-8', errors='replace', env=env,
+                           stdin=subprocess.DEVNULL)
+        out = ((r.stdout or '') + (r.stderr or '')).strip()
+        if r.returncode != 0:
+            raise RuntimeError(f"Step '{step}' failed (rc={r.returncode}):\n{out[-1000:]}")
+        log.info(f"  [{step}] OK: {out[-300:]}")
+        return out
 
-    if result:
-        _post_slack(f":white_check_mark: *MX Borrowing Base -- {yesterday}*\n{result[:3000]}")
-        log.info("MX BB completed.")
-    else:
-        _post_slack(
-            f":warning: *MX Borrowing Base -- {yesterday}* failed to generate. "
-            f"Run it manually."
+    try:
+        # -- 1. Generate raw SOFOM tape (with one zscaler-reauth retry) ----------
+        build_script = os.path.join(skills_dir, 'build_mx.py')
+        build_out = ""
+        try:
+            build_out = _run([sys.executable, build_script, '--end-date', yesterday],
+                             'build_mx', timeout=900)
+        except RuntimeError as build_err:
+            msg = str(build_err).lower()
+            conn_err = any(k in msg for k in (
+                'connection', 'timeout', 'ssl', 'could not connect',
+                'connection refused', 'host', 'operationalerror', 'reset'))
+            if not conn_err:
+                raise
+            log.warning("build_mx hit a connection error — running zscaler reauth then retrying once.")
+            reauth = os.path.join(skills_dir, '..', 'zscaler-reauth', 'reauth.py')
+            try:
+                _run([sys.executable, reauth], 'zscaler_reauth', timeout=180)
+            except Exception as re_err:
+                log.error(f"zscaler reauth failed: {re_err}")
+            build_out = _run([sys.executable, build_script, '--end-date', yesterday],
+                             'build_mx_retry', timeout=900)
+
+        raw_wb = os.path.join(outputs_dir, f'Borrowing Base - SOFOM - {yyyymmdd}.xlsx')
+        if not os.path.exists(raw_wb):
+            raise FileNotFoundError(f"build_mx.py did not produce {raw_wb}")
+
+        # -- 2. Find most-recent SOFOM Master on Drive to use as template -------
+        list_script = os.path.join(skills_dir, '..', 'google-drive', 'list_drive_folder.py')
+        listing = _run(
+            [sys.executable, list_script, '1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU',
+             '--recursive', '--max-depth', '4'],
+            'list_drive', timeout=120
+        ) or ""
+
+        best_date, template_id = '', ''
+        for line in listing.splitlines():
+            if 'SOFOM Borrowing Base - Master' not in line:
+                continue
+            m_date = _re.search(r'Master - (\d{8})\.xlsx', line)
+            m_id   = _re.search(r'id:\s*([A-Za-z0-9_-]+)', line)
+            if m_date and m_id:
+                d = m_date.group(1)
+                if d < yyyymmdd and d > best_date:
+                    best_date, template_id = d, m_id.group(1)
+        if not template_id:
+            raise RuntimeError("Could not find a prior SOFOM Master template on Drive")
+        log.info(f"  Template: Jeeves SOFOM Borrowing Base - Master - {best_date}.xlsx ({template_id})")
+
+        # -- 3. Merge into template --------------------------------------------
+        merge_script = os.path.join(skills_dir, 'merge_template.py')
+        final_wb = os.path.join(outputs_dir, f'Jeeves SOFOM Borrowing Base - Master - {yyyymmdd}.xlsx')
+        _run([sys.executable, merge_script, raw_wb, template_id, '--output', final_wb],
+             'merge_template', timeout=300)
+        if not os.path.exists(final_wb):
+            raise FileNotFoundError(f"merge_template.py did not produce {final_wb}")
+
+        # -- 4. Find the correct CIM month folder ------------------------------
+        month_folder_id = ''
+        for line in listing.splitlines():
+            m_f  = _re.search(r'\[folder\]\s+' + yyyymm + r'/', line)
+            m_id = _re.search(r'id:\s*([A-Za-z0-9_-]+)', line)
+            if m_f and m_id:
+                month_folder_id = m_id.group(1)
+                break
+        if not month_folder_id:
+            raise RuntimeError(f"Could not find the {yyyymm}/ folder under Debt/CIM in Drive")
+        log.info(f"  Upload target: {yyyymm}/ ({month_folder_id})")
+
+        # -- 5. Upload (--new is REQUIRED so the dated master isn't overwritten) -
+        upload_script = os.path.join(skills_dir, '..', 'google-drive', 'upload_to_drive.py')
+        upload_out = _run(
+            [sys.executable, upload_script, final_wb, '--folder', month_folder_id, '--new'],
+            'upload', timeout=120
         )
-        log.error("MX BB failed.")
+        drive_link = ''
+        m_link = _re.search(r'https://(?:docs|drive)\.google\.com/\S+', upload_out)
+        if m_link:
+            drive_link = m_link.group(0).rstrip(')')
+
+        # -- 6. Parse key balances from build output ---------------------------
+        stats = ""
+        m_bal  = _re.search(r'Latest date SOFOM balance:\s*\$([\d,]+\.\d+)', build_out)
+        m_elig = _re.search(r'Eligible SOFOM balance:\s*\$([\d,]+\.\d+)', build_out)
+        if m_bal and m_elig:
+            stats = f"SOFOM balance: *${m_bal.group(1)}*  |  Eligible: *${m_elig.group(1)}*"
+
+        msg = (
+            f":white_check_mark: *MX Borrowing Base -- {yesterday}*\n"
+            + (f"{stats}\n" if stats else "")
+            + (f"<{drive_link}|Open in Drive>" if drive_link else f"Uploaded to Drive/CIM/{yyyymm}/")
+        )
+        _post_slack(msg)
+        log.info(f"run_mx_bb: done. {stats}")
+
+    except Exception as exc:
+        log.error(f"run_mx_bb failed: {exc}", exc_info=True)
+        _post_slack(
+            f":warning: *MX Borrowing Base -- {yesterday}* failed to generate.\n"
+            f"`{str(exc)[:400]}`\nRun manually: `build_mx.py --end-date {yesterday}`"
+        )
 
 
 def run_weekly_bb():

@@ -1132,10 +1132,12 @@ class SlackChannel(Channel):
                 logger.info("[Slack] Injecting root message context (%d chars) for thread_ts=%s", len(root_text), thread_ts)
                 text = f"[Thread context — the message being replied to:]\n{root_text}\n\n[User's reply:]\n{text}"
 
-        # Detect commands: /cmd or bare keywords like "btw", "status"
+        # Detect commands: /cmd, !cmd, or unambiguous bare keywords like "btw"
+        # Note: /cmd is intercepted by Slack for registered slash commands, so
+        # custom commands use ! prefix (e.g. !learn, !promote, !reject).
         _BARE_COMMANDS = {"btw", "status", "new", "help", "models", "memory"}
         text_lower = text.strip().lower()
-        if text_lower.startswith("/"):
+        if text_lower.startswith("/") or text_lower.startswith("!"):
             msg_type = InboundMessageType.COMMAND
         elif text_lower in _BARE_COMMANDS:
             msg_type = InboundMessageType.COMMAND

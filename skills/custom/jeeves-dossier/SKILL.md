@@ -16,6 +16,14 @@ Build and maintain contact dossiers that track relationship health, communicatio
 
 **The user is Brian Mauck (brian.mauck@tryjeeves.com).** All dossiers are from Brian's perspective. When prepping for meetings, **never create a dossier for Brian himself** — only for the other attendees. The `prep` command already excludes Brian's email from the attendee list.
 
+> **Honcho peer cards — use by default, not optionally.** All interaction history across Gmail, Slack, Calendar, and Gemini notes is stored in Honcho, which synthesizes it into a rich dialectic peer card (relationship trend, communication style, open threads). Whenever you work with a known contact — prepping a meeting, **drafting or replying to an email to/from them**, or handling a **Slack** thread that involves them — pull their peer card FIRST for relationship context. This applies to email and Slack equally; it is not just for explicit meeting prep.
+> ```bash
+> python /mnt/skills/custom/honcho-peers/peer_card_tool.py ingest <email> --days 30   # refresh recent history first
+> python /mnt/skills/custom/honcho-peers/peer_card_tool.py read <email>                # full peer card
+> python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> "<question>"  # targeted question
+> ```
+> Use the card to match the contact's communication style and surface what's owed before you write. For ONA questions ("who is most connected?", "key bridges"), use the `honcho-peers` skill.
+
 ## Workflow: Prep for a meeting
 
 1. **Get meeting attendees:**

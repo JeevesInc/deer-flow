@@ -112,6 +112,11 @@ def main():
     parser.add_argument('data_workbook', help='Local path to data workbook')
     parser.add_argument('template_drive_id', help='Drive ID or URL of template')
     parser.add_argument('--output', default=None, help='Output path (default: $OUTPUTS_PATH)')
+    parser.add_argument('--non-interactive', dest='non_interactive', action='store_true',
+                        default=True,
+                        help='Never prompt for confirmation (default; required for cron/pipeline runs).')
+    parser.add_argument('--interactive', dest='non_interactive', action='store_false',
+                        help='Allow interactive Y/N confirmation prompts (for manual use only).')
     args = parser.parse_args()
 
     _ensure_deps()
@@ -130,27 +135,32 @@ def main():
         template_wb = openpyxl.load_workbook(template_path)
         original_tab_order = list(template_wb.sheetnames)  # capture before any modifications
 
-        # Validate template has formula/summary tabs
-        _EXPECTED_FORMULA_TABS = {'Summary', 'Summary - Country'}
-        found_formula_tabs = _EXPECTED_FORMULA_TABS & set(template_wb.sheetnames)
-        if not found_formula_tabs:
-            print(f"WARNING: Template has no formula tabs (expected at least one of: {_EXPECTED_FORMULA_TABS})", file=sys.stderr)
-            print(f"         Template sheets: {template_wb.sheetnames}", file=sys.stderr)
-            print(f"         This may be a raw data file, not a proper template with formulas.", file=sys.stderr)
-            print(f"         Use a file named 'Portfolio Reporting - YYYYMM01.xlsx' (with 'ing').", file=sys.stderr)
-            resp = input("Continue anyway? [y/N] ") if sys.stdin.isatty() else 'y'
-            if resp.strip().lower() != 'y':
-                print("Aborted.", file=sys.stderr)
-                sys.exit(1)
-
         print("Opening data workbook...")
         data_wb = openpyxl.load_workbook(args.data_workbook)
-
         data_sheet_names = data_wb.sheetnames
         print(f"Data tabs to merge: {data_sheet_names}")
 
-        # Track which template sheets are formula tabs (not in data workbook)
+        # Formula/preserved tabs = any template sheet NOT supplied by the data
+        # workbook. These are carried over verbatim. The set is PRODUCT-SPECIFIC
+        # by construction, so we never hard-code tab names:
+        #   * US Bridge / portfolio report -> Summary, Summary - Country, ...
+        #   * SOFOM master                 -> Exhibit A, Exhibit B, bank_accts,
+        #                                     historical_draws, hedge
+        # The previous check looked only for the US 'Summary'/'Summary - Country'
+        # tabs and therefore misfired on EVERY SOFOM run, dropping into an
+        # interactive prompt that could abort the unattended pipeline.
         formula_tabs = [s for s in template_wb.sheetnames if s not in data_sheet_names]
+        if not formula_tabs:
+            print(f"WARNING: Template '{template_name}' has no formula/preserved tabs.", file=sys.stderr)
+            print(f"         Template sheets: {template_wb.sheetnames}", file=sys.stderr)
+            print(f"         This looks like a raw data file, not a template with formulas.", file=sys.stderr)
+            if args.non_interactive or not sys.stdin.isatty():
+                print("         Running non-interactively -- continuing anyway.", file=sys.stderr)
+            else:
+                resp = input("Continue anyway? [y/N] ")
+                if resp.strip().lower() != 'y':
+                    print("Aborted.", file=sys.stderr)
+                    sys.exit(1)
         print(f"Template formula tabs (preserved): {formula_tabs}")
 
         # Tabs that need a pandas index column (col A) to match the

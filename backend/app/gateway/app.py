@@ -1,8 +1,7 @@
+import json
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-
-import json
 
 from fastapi import FastAPI, Response
 
@@ -277,10 +276,12 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
         return {"status": overall, "service": "deer-flow-gateway", "checks": checks}
 
     @app.get("/api/admin/active-runs", tags=["health"])
-    async def active_runs() -> dict:
+    def active_runs() -> dict:
+        # Plain `def` (not async) on purpose: the body does sync blocking I/O
+        # (httpx to LangGraph + a thread sweep). FastAPI runs sync handlers in a
+        # threadpool, so this can't starve the async event loop / health probes
+        # (the 2026-06-16 kill-loop cause). Do NOT make this async.
         # Drilldown for the Grafana dashboard's "busy thread age" panel.
-        # Returns the list of currently-busy threads sorted by age, plus
-        # counts by status — enough to identify which run is stuck.
         from app.gateway.metrics import _collect_thread_status
 
         cfg = get_app_config()
@@ -293,10 +294,12 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
         return _collect_thread_status(langgraph_url)
 
     @app.get("/metrics", tags=["health"])
-    async def metrics() -> Response:
-        # Prometheus scrape endpoint. Pulled by the local Grafana stack
-        # in monitoring/docker-compose.yml. Computes all gauges inline so
-        # there's no background refresher to babysit.
+    def metrics() -> Response:
+        # Plain `def` (not async) on purpose: refresh_all() does sync blocking
+        # I/O (httpx to LangGraph + parsing dispatch_audit.jsonl + JSON reads).
+        # FastAPI threadpools sync handlers, keeping the event loop free for
+        # /livez//readyz. Do NOT make this async (2026-06-16 kill-loop cause).
+        # Prometheus scrape endpoint pulled by the local Grafana stack.
         from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
         from app.gateway.metrics import refresh_all, registry

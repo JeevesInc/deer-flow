@@ -4,6 +4,7 @@ Profile sections are in memory.json, long-term facts are in mem0.
 """
 
 import logging
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -65,18 +66,24 @@ class MemoryStatusResponse(BaseModel):
 
 
 def _get_mem0_count() -> int:
-    """Get the number of memories stored in mem0."""
+    """True number of stored memories.
+
+    Uses count_memories() (a Qdrant scroll) rather than len(get_all_memories()):
+    mem0's get_all() reads its internal index, which the 2026-07-01 bulk
+    migration bypassed, so it reports only the ~20 facts written since then
+    instead of the ~4,400 actually stored. count_memories() hits Qdrant directly
+    (the source of truth) and is far cheaper than fetching every memory.
+    """
     try:
-        from deerflow.agents.memory.mem0_store import get_all_memories
-        memories = get_all_memories()
-        return len(memories)
+        from deerflow.agents.memory.mem0_store import count_memories
+        return count_memories()
     except Exception as e:
         logger.warning("Failed to get mem0 count: %s", e)
         return -1
 
 
 @router.get("/memory", response_model=MemoryResponse, summary="Get Memory Data")
-async def get_memory() -> MemoryResponse:
+def get_memory() -> MemoryResponse:  # sync: does blocking mem0 I/O → threadpool
     memory_data = get_memory_data()
     return MemoryResponse(
         version=memory_data.get("version", "2.0"),
@@ -89,7 +96,7 @@ async def get_memory() -> MemoryResponse:
 
 
 @router.post("/memory/reload", response_model=MemoryResponse, summary="Reload Memory Data")
-async def reload_memory() -> MemoryResponse:
+def reload_memory() -> MemoryResponse:  # sync: blocking mem0 I/O → threadpool
     memory_data = reload_memory_data()
     return MemoryResponse(
         version=memory_data.get("version", "2.0"),
@@ -117,7 +124,7 @@ async def get_memory_config_endpoint() -> MemoryConfigResponse:
 
 
 @router.get("/memory/status", response_model=MemoryStatusResponse, summary="Get Memory Status")
-async def get_memory_status() -> MemoryStatusResponse:
+def get_memory_status() -> MemoryStatusResponse:  # sync: blocking mem0 I/O → threadpool
     config = get_memory_config()
     memory_data = get_memory_data()
 
@@ -144,7 +151,7 @@ async def get_memory_status() -> MemoryStatusResponse:
 
 
 @router.get("/memory/mem0", summary="Search mem0 memories")
-async def search_mem0(q: str = "", limit: int = 20):
+def search_mem0(q: str = "", limit: int = 20):  # sync: blocking mem0 I/O → threadpool
     """Search or list mem0 memories. If q is empty, returns all."""
     try:
         if q:

@@ -284,7 +284,23 @@ def get_app_config() -> AppConfig:
                 _app_config_mtime,
                 current_mtime,
             )
-        _load_and_cache_app_config(str(resolved_path))
+        try:
+            _load_and_cache_app_config(str(resolved_path))
+        except Exception:
+            # A malformed config.yaml or a missing $ENV var must NOT take down
+            # every run (config is hot-edited in production). If we have a
+            # last-good config cached, keep serving it and advance the cache
+            # metadata so we don't re-attempt (and re-log) on every call — the
+            # next mtime change (i.e. the fix) triggers another reload.
+            if _app_config is None:
+                raise  # first load ever — nothing to fall back to
+            logger.exception(
+                "Failed to reload config from %s — keeping the last-good config. "
+                "Fix the file; the next edit will retry.",
+                resolved_path,
+            )
+            _app_config_path = resolved_path
+            _app_config_mtime = current_mtime
     return _app_config
 
 

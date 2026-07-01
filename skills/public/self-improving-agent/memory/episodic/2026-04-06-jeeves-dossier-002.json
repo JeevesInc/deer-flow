@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-06-002",
+  "timestamp": "2026-04-06T03:00:08.392627+00:00",
+  "skill": "jeeves-dossier",
+  "situation": "During meeting prep, I identified that Brian sent Alex a file on Slack at 4:15 PM Apr 2. I noted the file was sent but did not fetch and read it. Brian had to explicitly tell me to check the file. When I finally read it, it turned out to be the 3-lender term sheet comparison doc (NB vs Gramercy vs Fasanara), not a Fasanara-specific markup as I had assumed. This changed the entire picture of what Alex was acknowledging and what the open item actually is.",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "During meeting prep, whenever a Slack message has a file attached (has:file), ALWAYS fetch and read the file using fetch_doc.py. Do not assume what the file contains based on the message text. Files attached to Slack messages are often the most important context for understanding what was communicated and whether a request was fulfilled. This applies to Drive links shared in Slack too.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

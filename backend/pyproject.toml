@@ -16,6 +16,21 @@ dependencies = [
     "python-telegram-bot>=21.0",
     "langgraph-sdk>=0.1.51",
     "markdown-to-mrkdwn>=0.3.1",
+    "playwright>=1.50.0",
+    "prometheus-client>=0.20.0",
+    # In-process cron dependencies. dossier_cron and revenue_comp_cron
+    # are loaded directly into the gateway via cron_supervisor, so their
+    # imports need to resolve in this venv (not just in the agent sandbox).
+    "psycopg2-binary>=2.9.9",
+    "google-api-python-client>=2.150.0",
+    # mem0 powers long-term fact recall (mem0_injection_middleware,
+    # mem0_search in lead_agent/prompt). Without it every model call
+    # silently logs an import error AND the agent has no long-term
+    # memory — leading to slower responses and re-derived context.
+    "mem0ai>=0.1.0",
+    # mem0's HuggingFace embedder needs sentence-transformers. Without it
+    # mem0 initializes but every injection fails on the embedder load.
+    "sentence-transformers>=2.7.0",
 ]
 
 [dependency-groups]

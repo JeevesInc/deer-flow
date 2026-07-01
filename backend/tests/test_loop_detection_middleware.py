@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from deerflow.agents.middlewares.loop_detection_middleware import (
     _HARD_STOP_MSG,
@@ -26,6 +26,19 @@ def _make_state(tool_calls=None, content=""):
 
 def _bash_call(cmd="ls"):
     return {"name": "bash", "id": f"call_{cmd}", "args": {"command": cmd}}
+
+
+def _step(mw, state, runtime):
+    """Simulate one full graph step: after_model then before_model.
+
+    Returns whatever ``before_model`` would emit (the warning, if any), since
+    ``after_model`` only queues the warning and returns None in the warning path.
+    Hard-stop short-circuits and returns from ``after_model`` directly.
+    """
+    after_result = mw._after(state, runtime)
+    if after_result is not None:
+        return after_result
+    return mw._before(state, runtime)
 
 
 class TestHashToolCalls:
@@ -55,7 +68,7 @@ class TestLoopDetection:
         mw = LoopDetectionMiddleware()
         runtime = _make_runtime()
         state = {"messages": [AIMessage(content="hello")]}
-        result = mw._apply(state, runtime)
+        result = _step(mw, state, runtime)
         assert result is None
 
     def test_below_threshold_returns_none(self):
@@ -65,7 +78,7 @@ class TestLoopDetection:
 
         # First two identical calls — no warning
         for _ in range(2):
-            result = mw._apply(_make_state(tool_calls=call), runtime)
+            result = _step(mw, _make_state(tool_calls=call), runtime)
             assert result is None
 
     def test_warn_at_threshold(self):
@@ -74,10 +87,10 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         for _ in range(2):
-            mw._apply(_make_state(tool_calls=call), runtime)
+            _step(mw, _make_state(tool_calls=call), runtime)
 
         # Third identical call triggers warning
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is not None
         msgs = result["messages"]
         assert len(msgs) == 1
@@ -92,15 +105,15 @@ class TestLoopDetection:
 
         # First two — no warning
         for _ in range(2):
-            mw._apply(_make_state(tool_calls=call), runtime)
+            _step(mw, _make_state(tool_calls=call), runtime)
 
         # Third — warning injected
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is not None
         assert "LOOP DETECTED" in result["messages"][0].content
 
         # Fourth — warning already injected, should return None
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is None
 
     def test_hard_stop_at_limit(self):
@@ -109,10 +122,10 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         for _ in range(3):
-            mw._apply(_make_state(tool_calls=call), runtime)
+            _step(mw, _make_state(tool_calls=call), runtime)
 
         # Fourth call triggers hard stop
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is not None
         msgs = result["messages"]
         assert len(msgs) == 1
@@ -127,7 +140,7 @@ class TestLoopDetection:
 
         # Each call is different
         for i in range(10):
-            result = mw._apply(_make_state(tool_calls=[_bash_call(f"cmd_{i}")]), runtime)
+            result = _step(mw, _make_state(tool_calls=[_bash_call(f"cmd_{i}")]), runtime)
             assert result is None
 
     def test_window_sliding(self):
@@ -136,15 +149,15 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         # Fill with 2 identical calls
-        mw._apply(_make_state(tool_calls=call), runtime)
-        mw._apply(_make_state(tool_calls=call), runtime)
+        _step(mw, _make_state(tool_calls=call), runtime)
+        _step(mw, _make_state(tool_calls=call), runtime)
 
         # Push them out of the window with different calls
         for i in range(5):
-            mw._apply(_make_state(tool_calls=[_bash_call(f"other_{i}")]), runtime)
+            _step(mw, _make_state(tool_calls=[_bash_call(f"other_{i}")]), runtime)
 
         # Now the original call should be fresh again — no warning
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is None
 
     def test_reset_clears_state(self):
@@ -152,25 +165,25 @@ class TestLoopDetection:
         runtime = _make_runtime()
         call = [_bash_call("ls")]
 
-        mw._apply(_make_state(tool_calls=call), runtime)
-        mw._apply(_make_state(tool_calls=call), runtime)
+        _step(mw, _make_state(tool_calls=call), runtime)
+        _step(mw, _make_state(tool_calls=call), runtime)
 
         # Would trigger warning, but reset first
         mw.reset()
-        result = mw._apply(_make_state(tool_calls=call), runtime)
+        result = _step(mw, _make_state(tool_calls=call), runtime)
         assert result is None
 
     def test_non_ai_message_ignored(self):
         mw = LoopDetectionMiddleware()
         runtime = _make_runtime()
         state = {"messages": [SystemMessage(content="hello")]}
-        result = mw._apply(state, runtime)
+        result = _step(mw, state, runtime)
         assert result is None
 
     def test_empty_messages_ignored(self):
         mw = LoopDetectionMiddleware()
         runtime = _make_runtime()
-        result = mw._apply({"messages": []}, runtime)
+        result = _step(mw, {"messages": []}, runtime)
         assert result is None
 
     def test_thread_id_from_runtime_context(self):
@@ -181,17 +194,17 @@ class TestLoopDetection:
         call = [_bash_call("ls")]
 
         # One call on thread A
-        mw._apply(_make_state(tool_calls=call), runtime_a)
+        _step(mw, _make_state(tool_calls=call), runtime_a)
         # One call on thread B
-        mw._apply(_make_state(tool_calls=call), runtime_b)
+        _step(mw, _make_state(tool_calls=call), runtime_b)
 
         # Second call on thread A — triggers warning (2 >= warn_threshold)
-        result = mw._apply(_make_state(tool_calls=call), runtime_a)
+        result = _step(mw, _make_state(tool_calls=call), runtime_a)
         assert result is not None
         assert "LOOP DETECTED" in result["messages"][0].content
 
         # Second call on thread B — also triggers (independent tracking)
-        result = mw._apply(_make_state(tool_calls=call), runtime_b)
+        result = _step(mw, _make_state(tool_calls=call), runtime_b)
         assert result is not None
         assert "LOOP DETECTED" in result["messages"][0].content
 
@@ -203,11 +216,11 @@ class TestLoopDetection:
         # Fill up 3 threads
         for i in range(3):
             runtime = _make_runtime(f"thread-{i}")
-            mw._apply(_make_state(tool_calls=call), runtime)
+            _step(mw, _make_state(tool_calls=call), runtime)
 
         # Add a 4th thread — should evict thread-0
         runtime_new = _make_runtime("thread-new")
-        mw._apply(_make_state(tool_calls=call), runtime_new)
+        _step(mw, _make_state(tool_calls=call), runtime_new)
 
         assert "thread-0" not in mw._history
         assert "thread-new" in mw._history
@@ -227,5 +240,134 @@ class TestLoopDetection:
         runtime.context = {}
         call = [_bash_call("ls")]
 
-        mw._apply(_make_state(tool_calls=call), runtime)
+        _step(mw, _make_state(tool_calls=call), runtime)
         assert "default" in mw._history
+
+
+class TestWarningOrdering:
+    """Regression: warning HumanMessage must NOT split a tool_use/tool_result pair.
+
+    Anthropic's API requires every tool_use block to be immediately followed
+    by its matching tool_result. The pre-fix behavior emitted the warning
+    from ``after_model``, producing the sequence
+    ``[AI tool_use] [Human warning] [Tool result]`` which the API rejected
+    with HTTP 400 on the next call.
+
+    The fix defers the warning to ``before_model``, so it lands AFTER the
+    tool_result of the offending call: ``[AI tool_use] [Tool result] [Human warning]``.
+    """
+
+    def test_after_model_does_not_emit_warning_immediately(self):
+        mw = LoopDetectionMiddleware(warn_threshold=2, hard_limit=10)
+        runtime = _make_runtime()
+        call = [_bash_call("ls")]
+
+        # First call: tracked, no warning yet
+        assert mw._after(_make_state(tool_calls=call), runtime) is None
+        # Second call hits warn_threshold — but after_model still returns None;
+        # warning is queued for the next before_model.
+        assert mw._after(_make_state(tool_calls=call), runtime) is None
+        # Pending slot should now hold the warning
+        assert "test-thread" in mw._pending_warning
+
+    def test_warning_emitted_on_next_before_model(self):
+        mw = LoopDetectionMiddleware(warn_threshold=2, hard_limit=10)
+        runtime = _make_runtime()
+        call = [_bash_call("ls")]
+
+        mw._after(_make_state(tool_calls=call), runtime)
+        mw._after(_make_state(tool_calls=call), runtime)
+
+        result = mw._before({"messages": []}, runtime)
+        assert result is not None
+        msgs = result["messages"]
+        assert len(msgs) == 1
+        assert isinstance(msgs[0], HumanMessage)
+        assert "LOOP DETECTED" in msgs[0].content
+        # Slot drained
+        assert "test-thread" not in mw._pending_warning
+
+    def test_before_model_no_pending_returns_none(self):
+        mw = LoopDetectionMiddleware()
+        runtime = _make_runtime()
+        assert mw._before({"messages": []}, runtime) is None
+
+    def test_warning_lands_after_tool_result_in_simulated_graph(self):
+        """End-to-end: simulate the agent loop and assert message ordering."""
+        mw = LoopDetectionMiddleware(warn_threshold=2, hard_limit=10)
+        runtime = _make_runtime()
+        call_args = {"command": "ls"}
+        ai_msg_1 = AIMessage(content="", tool_calls=[{"name": "bash", "id": "tc_1", "args": call_args}])
+        tool_msg_1 = ToolMessage(content="output", tool_call_id="tc_1")
+        ai_msg_2 = AIMessage(content="", tool_calls=[{"name": "bash", "id": "tc_2", "args": call_args}])
+        tool_msg_2 = ToolMessage(content="output", tool_call_id="tc_2")
+
+        # Turn 1: model emits ai_msg_1; after_model runs (just tracks).
+        history = [ai_msg_1]
+        after = mw._after({"messages": list(history)}, runtime)
+        assert after is None
+        # Tool node runs and appends tool_msg_1.
+        history.append(tool_msg_1)
+
+        # Turn 2: before_model runs. No pending warning yet (only 1 hit so far).
+        before = mw._before({"messages": list(history)}, runtime)
+        assert before is None
+        # Model emits ai_msg_2 (second identical call).
+        history.append(ai_msg_2)
+        after = mw._after({"messages": list(history)}, runtime)
+        # Warning queued, NOT emitted between ai_msg_2 and the upcoming tool result.
+        assert after is None
+        # Tool node runs and appends tool_msg_2.
+        history.append(tool_msg_2)
+
+        # Turn 3: before_model drains the pending warning.
+        before = mw._before({"messages": list(history)}, runtime)
+        assert before is not None
+        history.extend(before["messages"])
+
+        # Final ordering: every AI tool_use must be IMMEDIATELY followed by its
+        # tool_result (Anthropic adjacency rule).
+        for i, msg in enumerate(history):
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                next_msg = history[i + 1]
+                assert isinstance(next_msg, ToolMessage), (
+                    f"AIMessage with tool_calls at index {i} not followed by ToolMessage; "
+                    f"got {type(next_msg).__name__}. Full sequence: "
+                    f"{[type(m).__name__ for m in history]}"
+                )
+                assert next_msg.tool_call_id == msg.tool_calls[0]["id"]
+
+        # And the warning is present, after both tool results.
+        assert isinstance(history[-1], HumanMessage)
+        assert "LOOP DETECTED" in history[-1].content
+
+    def test_reset_clears_pending_warning(self):
+        mw = LoopDetectionMiddleware(warn_threshold=2)
+        runtime = _make_runtime("thread-X")
+        call = [_bash_call("ls")]
+
+        mw._after(_make_state(tool_calls=call), runtime)
+        mw._after(_make_state(tool_calls=call), runtime)
+        assert "thread-X" in mw._pending_warning
+
+        mw.reset("thread-X")
+        assert "thread-X" not in mw._pending_warning
+        # before_model now finds nothing to drain
+        assert mw._before({"messages": []}, runtime) is None
+
+    def test_lru_eviction_drops_pending_warning(self):
+        mw = LoopDetectionMiddleware(warn_threshold=2, max_tracked_threads=2)
+        call = [_bash_call("ls")]
+
+        # Queue a warning on thread-0
+        rt0 = _make_runtime("thread-0")
+        mw._after(_make_state(tool_calls=call), rt0)
+        mw._after(_make_state(tool_calls=call), rt0)
+        assert "thread-0" in mw._pending_warning
+
+        # Touch two more threads to evict thread-0
+        for tid in ("thread-1", "thread-2"):
+            mw._after(_make_state(tool_calls=call), _make_runtime(tid))
+
+        assert "thread-0" not in mw._history
+        assert "thread-0" not in mw._pending_warning

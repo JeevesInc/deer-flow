@@ -8,16 +8,44 @@ token_usage:
 # ── Models ─────────────────────────────────────────────────────────
 models:
   - name: claude-sonnet
-    display_name: Claude Sonnet 4.6
+    display_name: Claude Sonnet 5
     use: langchain_anthropic:ChatAnthropic
-    model: claude-sonnet-4-6
+    model: claude-sonnet-5
     api_key: $ANTHROPIC_API_KEY
-    max_tokens: 8192
-    temperature: 0.0
+    fallback: claude-opus   # step down to Opus 4.8 if Sonnet 5 fails
+    max_tokens: 64000
+    # Sonnet 5 (Mythos/5 family) is adaptive-thinking ONLY: {type: enabled,
+    # budget_tokens} 400s ("use thinking.type.adaptive"), and sampling params
+    # (temperature/top_p/top_k) are rejected alongside adaptive thinking — same
+    # constraints as Opus 4.8. Verified against the API 2026-06-30.
     supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: adaptive
 
+  # Fable 5 access was revoked on this API key (2026-06-12): Anthropic returns
+  # 404 not_found_error "Claude Fable 5 is not available. Please use Opus 4.8."
+  # Repointed to Opus 4.8, which uses standard {type: enabled} thinking.
+  - name: claude-opus
+    display_name: Claude Opus 4.8
+    use: langchain_anthropic:ChatAnthropic
+    model: claude-opus-4-8
+    api_key: $ANTHROPIC_API_KEY
+    fallback: claude-sonnet  # step down to Sonnet 4.6 if Opus fails
+    max_tokens: 64000
+    # Opus 4.8 (Mythos family) supports adaptive thinking only — {type: enabled,
+    # budget_tokens: N} 400s ("use thinking.type.adaptive"). Sampling params
+    # (temperature/top_p/top_k) are also removed — sending them 400s.
+    supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: adaptive
+
+# All roles run Sonnet 5 (claude-sonnet). Opus 4.8 (claude-opus) is retained
+# only as the resilience fallback if Sonnet 5 errors.
 basic_model: claude-sonnet
 reasoning_model: claude-sonnet
+coding_model: claude-sonnet
 
 # ── Tools ──────────────────────────────────────────────────────────
 tool_groups:
@@ -81,19 +109,31 @@ title:
   model_name: null
 
 # ── Summarization ──────────────────────────────────────────────────
+# DISABLED — Each Slack thread is its own focused conversation with
+# full context preserved in SQLite checkpoints. Claude's 200K context
+# window is large enough for even heavy threads. Cross-thread knowledge
+# is handled by the memory system (memory.json), not summarization.
+#
+# Short-term memory: summarize older messages to prevent token explosion.
+# Triggers at 80% of model max input OR 50 messages, keeps last 20 messages.
 summarization:
   enabled: true
-  model_name: null
   trigger:
-    - type: tokens
-      value: 15564
+    - type: fraction
+      value: 0.8
+    - type: messages
+      value: 200
   keep:
     type: messages
-    value: 10
-  trim_tokens_to_summarize: 15564
-  summary_prompt: null
+    value: 80
+  trim_tokens_to_summarize: 32000
 
 # ── Memory ─────────────────────────────────────────────────────────
+# ── Memory ─────────────────────────────────────────────────────────
+# Profile sections (workContext, personalContext, topOfMind, history)
+# are stored in memory.json. Long-term facts are in mem0 (semantic
+# vector search). max_facts and fact_confidence_threshold are legacy
+# fields kept for backward compat but no longer used.
 memory:
   enabled: true
   storage_path: memory.json
@@ -102,7 +142,7 @@ memory:
   max_facts: 100
   fact_confidence_threshold: 0.7
   injection_enabled: true
-  max_injection_tokens: 2000
+  max_injection_tokens: 1500
 
 # ── Checkpointer ──────────────────────────────────────────────────
 checkpointer:
@@ -117,7 +157,7 @@ channels:
   session:
     assistant_id: lead_agent
     config:
-      recursion_limit: 100
+      recursion_limit: 500
     context:
       thinking_enabled: true
       is_plan_mode: false

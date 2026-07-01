@@ -12,6 +12,14 @@ class ModelConfig(BaseModel):
         description="Class path of the model provider(e.g. langchain_openai.ChatOpenAI)",
     )
     model: str = Field(..., description="Model name")
+    fallback: "str | list[str] | None" = Field(
+        default=None,
+        description=(
+            "Optional step-down chain. Name (or ordered list of names) of other "
+            "models in this config to fall back to if this model fails at "
+            "invocation time. Resolved by create_chat_model into a FallbackChatModel."
+        ),
+    )
     model_config = ConfigDict(extra="allow")
     use_responses_api: bool | None = Field(
         default=None,

@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-08-006",
+  "timestamp": "2026-04-08T21:42:53.788327+00:00",
+  "skill": "jeeves-analytics",
+  "situation": "Rebuilding credit performance slides - DQ and C/O numbers did not match template",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "Always find the source SQL before writing your own. The template used: (1) DQ = ADB methodology (avg daily balance of dq_bucket=2 / avg daily total balance), not EOM snapshot; (2) C/O = rollforward methodology where charge-off amount is balance on min(charge_off_dt)-1 (day before flag flips), not dt=charge_off_dt; (3) dq_bucket=2 is the 30-59 DPD bucket code. Source SQL: ds_dq30_historical.sql and loc_acct_rollforward.sql in .github/sql/.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

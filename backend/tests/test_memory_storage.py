@@ -21,11 +21,12 @@ class TestCreateEmptyMemory:
         """Should return a valid empty memory structure."""
         memory = create_empty_memory()
         assert isinstance(memory, dict)
-        assert memory["version"] == "1.0"
+        assert memory["version"] == "2.0"
         assert "lastUpdated" in memory
         assert isinstance(memory["user"], dict)
         assert isinstance(memory["history"], dict)
-        assert isinstance(memory["facts"], list)
+        # facts array no longer in v2.0 — long-term facts are in mem0
+        assert "facts" not in memory
 
 
 class TestMemoryStorageInterface:
@@ -89,7 +90,7 @@ class TestFileMemoryStorage:
                 storage = FileMemoryStorage()
                 memory = storage.load()
                 assert isinstance(memory, dict)
-                assert memory["version"] == "1.0"
+                assert memory["version"] == "2.0"
 
     def test_save_writes_to_file(self, tmp_path):
         """Should save memory data to file."""

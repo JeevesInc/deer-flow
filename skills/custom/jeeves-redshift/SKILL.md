@@ -9,34 +9,81 @@ allowed-tools:
 
 # Jeeves Redshift Access
 
-## Setup
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
 
-Before running any query, install the driver (once per session):
+
+**CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
+
+## Workflow: Always Check the KB First
+
+**Before writing any SQL from scratch**, pull and search `JeevesInc/cfo-org-kb`:
 
 ```bash
-pip install psycopg2-binary
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb && git pull origin main
+ls C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/*.sql/ngrep -rl "rollforward" C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/ncat C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/total_portfolio_balance.sql/n```
+
+If an existing query covers 80%+ of what is needed, start from it and adapt.
+
+**Do NOT use `sql_repo.py`.** When a query is worth keeping, commit it to GH:
+
+```bash
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/ngit add sql/new_query.sql
+git commit -m "Add new_query: description"
+git push origin main
 ```
 
-## Connection
+## Running Queries
 
-```python
-import psycopg2, os
+Use the SQL runner — it handles connection, validation, and output formatting automatically. **The runner always echoes the full SQL being executed so Brian has direct visibility.**
 
-conn = psycopg2.connect(
-    host=os.environ['REDSHIFT_HOST'],
-    port=int(os.environ['REDSHIFT_PORT']),
-    dbname=os.environ['REDSHIFT_DB'],
-    user=os.environ['REDSHIFT_USER'],
-    password=os.environ['REDSHIFT_PASSWORD'],
-    sslmode='require',
-    sslrootcert='disable'
-)
-cur = conn.cursor()
-cur.execute("<query>")
-columns = [desc[0] for desc in cur.description]
-rows = cur.fetchall()
-conn.close()
+```bash
+# Inline query
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT SUM(balance_usd) FROM capital_markets_dm.loc_tape WHERE dt = '2026-04-02' AND charge_off_flag = false AND is_in_repayment = false"
+
+# Query from file
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --file /mnt/user-data/workspace/query.sql
+
+# Save large results to Excel
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.xlsx
+
+# Save as CSV
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.csv
+
+# Increase inline display limit (default 100 rows)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --limit 500
+
+# Generate SQL from natural language (uses DSPy + Claude)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the total portfolio balance by country?"
+
+# Save a query to the repo after successful execution
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "total_portfolio_balance" --tags "portfolio,balance,loc"
 ```
+
+The runner automatically:
+- **Echoes the full SQL** being executed (always visible to the user)
+- Validates SQL before executing (catches common mistakes, warns on missing filters)
+- Blocks non-SELECT queries
+- Formats small results inline, saves large results to files
+- Provides actionable error hints on failure
+
+## Saving Queries to the Repo
+
+**After every successful query, save it to the repo** so it can be reused:
+
+```bash
+# Save via sql_runner --save flag (after execution)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "descriptive_name" --tags "tag1,tag2"
+
+# Or save directly via sql_repo.py
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py save "descriptive_name" "SELECT ..." --tags "tag1,tag2" --description "What this query does"
+
+# Delete an outdated query
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py delete "old_query_name"
+```
+
+**Naming convention:** Use snake_case descriptive names like `total_portfolio_balance`, `dpd_90plus_by_country`, `monthly_charge_off_trend`, `top_borrowers_with_names`.
+
+**When to save:** Save every query that answers a real question. Don't save one-off debugging queries. If an existing query was adapted, update it with the improved version.
 
 ## Key Tables
 
@@ -48,10 +95,13 @@ conn.close()
 | `capital_markets_dm.gwc_tape` | GWC (Global Working Capital) daily tape — principal, interest, VAT/fees/tax breakdowns, obligation tracking. By company by day. |
 | `analytics_sandbox.loc_vintage_data` | LOC vintage/cohort data — BOP/EOP balances, charge-offs, repayments, period-over-period deltas. |
 
-### TODO — Tables to add after verification:
-- `analytics_sandbox.jurs_test` — JURS loss rate scores (needs validation)
-- `capital_markets_dm.rms_transactions` — RMS transaction-level collections data (needs validation)
-- Borrowing base table — not found in schema, may be derived or in a different location
+### Additional Tables
+
+| Table | Description |
+|-------|-------------|
+| `analytics_sandbox.jurs_test` | JURS loss rate scores. |
+| `capital_markets_dm.rms_transactions` | RMS transaction-level collections data (~9.2M rows). |
+| `capital_markets_dm.intraday_collections` | Intraday collection events. |
 
 ---
 
@@ -147,6 +197,7 @@ Daily LOC portfolio tape. One row per company per day. Use for **balances, disbu
 - `jp_balance_usd` (numeric): Jeeves Pay balance
 - `disbursement_amount_usd` (numeric): Card spend/disbursements
 - `jeeves_pay_disbursement_amount_usd` (numeric): Jeeves Pay spend
+- `fee_amount` / `fee_amount_usd` (numeric): Fee amounts
 - `payment_amount_usd` (numeric): Payments received
 - `days_past_due` (integer): Days overdue (0 = current)
 - `dq_bucket` (varchar): Delinquency bucket (current, 1-30, 31-60, 61-90, 90+)
@@ -222,7 +273,8 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Filter test companies:** `WHERE is_company_test = false` (transactions_ssot) or `WHERE is_test = false` (companies_dm)
 - **Filter by market:** Use `country_code` — 840=US, 484=MX, 170=CO, 124=CA, 76=BR
 - **Latest snapshot:** `WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)`
-- **Active portfolio:** `WHERE charge_off_flag = false` on loc_tape/gwc_tape
+- **Active portfolio:** `WHERE charge_off_flag = false AND is_in_repayment = false` on loc_tape (ALWAYS include both filters)
+**CRITICAL: is_in_repayment = false must be applied to ALL loc_tape queries without exception** — repayment plan accounts are tracked separately in the mods/GWC rollforward and must never be mixed into standard portfolio, DQ, charge-off, or loss calculations. This applies even when querying charged-off accounts (e.g. recoveries, charge-off amounts).
 - **DPD buckets:** current (0), 1-30, 31-60, 61-90, 90+
 - **Date filtering on loc_tape/gwc_tape:** Always use `dt` column with BETWEEN, never DATE_TRUNC
 - **NULL arithmetic:** When adding columns, wrap each in `COALESCE(col, 0)` — NULL + value = NULL
@@ -230,7 +282,222 @@ Vintage/cohort analysis data for LOC portfolio.
 - **String matching:** Use `ILIKE '%pattern%'` for case-insensitive partial matches
 - **CTEs:** Fully supported and encouraged for complex queries
 
+## Query Examples by Intent
+
+## SQL Style\nALWAYS write SQL with leading commas, not trailing commas. Example:\n  SELECT\n      col1\n    , col2\n    , col3\n  FROM ...\n  ORDER BY\n      col1\n    , col2\n\n## RPP Data Model\nRPP accounts are LOC balances financed into GWC loans. Key facts:\n- Identify via: gwc_tape WHERE loan_reference_number ILIKE 'RPP%'\n- One row per installment = rows WHERE principal_amount_due_usd != 0\n- dt on those rows = the invoice due date\n- balance_usd = running unpaid balance at that point\n- days_past_due = days since that installment was due\n- delinquent_dt = date the current installment became overdue\n- ~99 RPP loans (as of May 2026), one row per installment\n- Do NOT use dms_mysql_jeeves_raw.instalments or company_statements for RPP — gwc_tape is the source of truth\n\nUse these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+
+### Balance (portfolio snapshot)
+**Q:** "What's the total portfolio balance?"
+```sql
+SELECT SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+
+### Spend / disbursements
+**Q:** "How much did customers spend on cards in March?"
+```sql
+SELECT SUM(COALESCE(disbursement_amount_usd, 0)) AS card_spend
+FROM capital_markets_dm.loc_tape
+WHERE dt BETWEEN '2026-03-01' AND '2026-03-31'
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+⚠️ `disbursement_amount_usd` = customer card spend. Do NOT use `loan_allocation_amount` (internal accounting).
+
+### Delinquency / DPD
+**Q:** "What's our 90+ DPD rate by country?"
+```sql
+SELECT country_code,
+       SUM(CASE WHEN days_past_due > 90 THEN balance_usd ELSE 0 END)
+         / NULLIF(SUM(balance_usd), 0) AS dpd_90plus_rate,
+       SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+GROUP BY country_code
+```
+
+### Charge-offs
+**Q:** "What was the charge-off amount for company 456?"
+```sql
+SELECT company_id, balance_usd AS charge_off_amount, charge_off_dt
+FROM capital_markets_dm.loc_tape
+WHERE company_id = 456 AND dt = charge_off_dt
+```
+⚠️ Charge-off amount = `balance_usd` on the `charge_off_dt` date. Never use deprecated `v0_charge_off_amount_usd`.
+
+### Revenue
+**Q:** "Total revenue in Q1 2026?"
+```sql
+SELECT SUM(revenue_usd) AS total_revenue
+FROM master_transactions_dm.transactions_ssot
+WHERE posted_at BETWEEN '2026-01-01' AND '2026-03-31'
+  AND is_company_test = false
+```
+⚠️ Revenue is ONLY in `transactions_ssot.revenue_usd`. The `loc_tape` table has spend, not revenue.
+
+### Date ranges on loc_tape
+```sql
+-- CORRECT: use BETWEEN on dt
+WHERE dt BETWEEN '2025-10-01' AND '2025-10-31'
+
+-- WRONG: never DATE_TRUNC on dt
+-- WHERE DATE_TRUNC('month', dt) = '2025-10-01'  ← DO NOT DO THIS
+```
+
+### Company lookup with join
+**Q:** "Top 10 borrowers by balance with company names"
+```sql
+SELECT c.name, c.country_name, lt.balance_usd
+FROM capital_markets_dm.loc_tape lt
+JOIN master_customer_dm.companies_dm c ON c.company_id = lt.company_id
+WHERE lt.dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND lt.charge_off_flag = false AND lt.is_in_repayment = false
+  AND c.is_test = false
+ORDER BY lt.balance_usd DESC LIMIT 10
+```
+
+---
+
 ## Output Rules
 
 - Single metric or <10 rows: respond inline in Slack
 - Large dataset or multi-metric: write to .xlsx using openpyxl, present the file, and summarize inline
+
+---
+
+## dms_mysql_jeeves_raw Schema
+
+Raw MySQL replication of the Jeeves production database via AWS DMS. **209 tables, 3,530 columns.** Source-of-truth operational data — use for company/user/card/loan/transfer details not available in the DM layer.
+
+**Key differences from DM layer:**
+- Column names are camelCase (e.g. `companyid`, `createdat`, `deletedat`)
+- No `_usd` suffix — amounts are in native currency unless column ends in `usd`
+- Booleans stored as `smallint` (0/1), not boolean
+- Soft deletes: always add `WHERE deletedat IS NULL` for active records
+- `_dms_created` = DMS replication timestamp, not business creation time
+- Join to DM layer: `dms_mysql_jeeves_raw.companies.id` = `master_customer_dm.companies_dm.company_id`
+
+### Core Entity Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `companies` | 102 | Raw company records — EIN, business type, billing method, credit line, status, KYB/KYC, platform currency |
+| `users` | 72 | All users — role, email, spend limit, 2FA, status, login history |
+| `cards` | 48 | Physical/virtual cards — cardstatus, spendlimit, cardtype, processor IDs (Galileo, Stripe, Tutuka) |
+| `primary_account_owners` | 37 | KYB primary account owners — identity verification, TruNarrative |
+| `business_ownerships` | 39 | Beneficial owners — percentofownership, KYB status, isdirector |
+| `invite_users` | 39 | Invited users — role, spendlimit, department, location |
+| `waitlists` | 47 | Onboarding waitlist/leads — country, product interest, referral |
+
+### Transaction & Payment Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `transactions` | 65 | Raw card transactions — acttype, networkcode, transactionamount, merchantid, cardid, transactionstatus |
+| `transfers` | 51 | Jeeves Pay / wire transfers — beneficiaryid, transferamount, paymenttype, transferstatus, usdamount |
+| `loans` | 77 | GWC/JP loans — principal, interestrate, originationfeerate, VAT, term, disbursementtype, paymentstructure |
+| `loan_payments` | 17 | Loan payment records — loanid, paymentdate, paymentsource, transactionstatus |
+| `instalments` | 30 | Loan instalment schedule — duedate, paiddate, status, dayspastdue, usdcurrencyamount |
+| `statement_transactions` | 35 | Statement-level transactions — producttype, billingcycletag, usdcurrencyamount |
+| `reimbursements` | 31 | Employee reimbursements — amount, currency, merchantname, expensecategory, paymentstatus |
+
+### Billing & Statements
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_statements` | 52 | Monthly billing statements — month/year, invoicedamount, endingbalance, duedate, autodebit, settlementdatetime |
+| `company_billing_configurations` | 14 | Billing day, due date interval, billing interval per company |
+| `company_bank_accounts` | 61 | Linked bank accounts — ACH/Plaid details, autodebit status, verification status |
+| `bank_accounts` | 21 | Internal credit line ledger — cl (credit limit), ab (available balance), tb (total balance), bb (billing balance) |
+
+### Beneficiaries & Payments
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `beneficiaries` | 11 | Payment beneficiary master — companyid, beneficiaryname |
+| `beneficiary_payment_details` | 50 | Bank details — CLABE, SWIFT/BIC, routing, account number, currency, country |
+| `transfer_details` | 22 | Transfer detail records |
+| `transfer_approvals` | 12 | Approval workflow for transfers |
+
+### Credit & Collateral
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `collateral_records` | 24 | Collateral — type, local/USD amount, advancerate, effectivecollateralvalue, expiry, status |
+| `credit_product_requests` | 13 | Credit line requests |
+| `bank_accounts` | 21 | cl/ab/tb/bb/ar ledger columns (credit line accounting) |
+
+### KYB / Compliance / Tax
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_tax_status` | 20 | MX SAT tax status — RFC, regimens, obligations, economic activity |
+| `company_tax_returns` | 28 | MX SAT annual tax returns — ISR, deductions, declarations |
+| `sardine_audit_logs` | 10 | Sardine fraud/risk audit logs |
+| `sardine_transaction_risks` | 14 | Transaction-level risk scores from Sardine |
+| `device_fingerprints` | 27 | Device fingerprint records for fraud detection |
+
+### SAT / Mexico Invoicing
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `satws_invoices` | 43 | SAT invoices (CFDI) — issuer, receiver, total, tax, status, issuedat |
+| `satws_invoice_items` | 19 | Line items on SAT invoices |
+| `satws_invoice_payments` | 20 | Payment records against SAT invoices |
+| `satws_extractions` | 19 | SAT data extraction jobs |
+| `company_satws_accounts` | 18 | Company SAT account linkages |
+
+### Cards & Spend Controls
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `card_transaction_details` | 21 | Detailed card transaction metadata |
+| `temporary_spend_limits` | 19 | Temporary spend limit overrides |
+| `needs_attention_items` | 26 | Expense policy violations — missing receipts, notes, policy breaches |
+| `policies` | 17 | Spend policies |
+| `mcc_custom_categories` | 13 | Custom MCC category mappings |
+
+### Open Banking & FX
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `open_banking_balances` | 12 | Open banking balance snapshots |
+| `open_banking_transactions` | 28 | Open banking transaction feed |
+| `exchange_rates` | 11 | Exchange rate records |
+| `exchange_rate_logs` | 13 | Exchange rate change log |
+| `routefusion_entities` | 22 | Routefusion payment entity records |
+| `cross_border_fees` | 11 | Cross-border fee schedules |
+
+### Example Joins
+
+```sql
+-- Company name + credit limit from raw + DM
+SELECT r.id, r.name, r.ein, c.credit_limit_usd, c.activity_status
+FROM dms_mysql_jeeves_raw.companies r
+JOIN master_customer_dm.companies_dm c ON c.company_id = r.id
+WHERE r.deletedat IS NULL AND c.is_test = false
+
+-- Active cards for a company
+SELECT c.id, c.cardtype, c.cardstatus, c.spendlimit, u.email
+FROM dms_mysql_jeeves_raw.cards c
+JOIN dms_mysql_jeeves_raw.users u ON u.id = c.userid
+WHERE c.companyid = 12345 AND c.deletedat IS NULL
+
+-- Loan instalment schedule
+SELECT i.id, i.duedate, i.paiddate, i.usdcurrencyamount, i.status, i.dayspastdue
+FROM dms_mysql_jeeves_raw.instalments i
+JOIN dms_mysql_jeeves_raw.loans l ON l.id = i.loanid
+WHERE l.companyid = 12345 AND i.deletedat IS NULL
+ORDER BY i.duedate
+
+-- SAT invoices for a company
+SELECT s.invoiceid, s.total, s.tax, s.status, s.issuedat
+FROM dms_mysql_jeeves_raw.satws_invoices s
+WHERE s.companyid = 12345
+ORDER BY s.issuedat DESC
+```
+
+### Full Table List (209 tables)
+accounting_sync_cycles, activity_logs, admin_settings, admins, all_product_transactions, api_client_calendar_configurations, api_client_credentials, auto_debit_bank_accounts, autopay_logs, backend_dead_letters, bank_account_link_logs, bank_accounts, bank_histories, banks, beneficiaries, beneficiary_payment_details, bill_pay_billers, bulk_transfers, business_ownerships, card_digital_wallets, card_product_configurations, card_product_requests, card_requests, card_shipment_approvals, card_transaction_details, card_transaction_settlement, cards, cards_gateway_dead_letters, cities, collateral_records, companies, company_account_mappings, company_accounting_integration_settings, company_accounting_integrations, company_addresses, company_bank_accounts, company_bank_accounts_fallback, company_billing_configuration_logs, company_billing_configurations, company_business_leaderships, company_cardservices, company_contacts, company_investors, company_jp_credit_contact_details, company_mexico_credit_bureau_data, company_migrations, company_operating_cou

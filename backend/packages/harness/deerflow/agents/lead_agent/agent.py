@@ -5,8 +5,12 @@ from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.runnables import RunnableConfig
 
 from deerflow.agents.lead_agent.prompt import apply_prompt_template
+from deerflow.agents.middlewares.anthropic_retry_middleware import AnthropicRetryMiddleware
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from deerflow.agents.middlewares.continuation_middleware import ContinuationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.agents.middlewares.step_budget_middleware import StepBudgetMiddleware
+from deerflow.agents.middlewares.mem0_injection_middleware import Mem0InjectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
 from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
@@ -23,19 +27,37 @@ from deerflow.models import create_chat_model
 logger = logging.getLogger(__name__)
 
 
-def _resolve_model_name(requested_model_name: str | None = None) -> str:
-    """Resolve a runtime model name safely, falling back to default if invalid. Returns None if no models are configured."""
+def _resolve_model_name(requested_model_name: str | None = None, thinking_enabled: bool = False) -> str:
+    """Resolve a runtime model name, routing to reasoning_model when thinking is enabled.
+
+    Priority:
+    1. Explicit requested_model_name (validated against config)
+    2. reasoning_model from config.yaml (when thinking_enabled=True)
+    3. basic_model from config.yaml (when thinking_enabled=False)
+    4. models[0] as final fallback
+    """
     app_config = get_app_config()
-    default_model_name = app_config.models[0].name if app_config.models else None
-    if default_model_name is None:
+    if not app_config.models:
         raise ValueError("No chat models are configured. Please configure at least one model in config.yaml.")
 
-    if requested_model_name and app_config.get_model_config(requested_model_name):
-        return requested_model_name
+    # Honour explicit per-request model override
+    if requested_model_name:
+        if app_config.get_model_config(requested_model_name):
+            return requested_model_name
+        logger.warning(f"Model '{requested_model_name}' not found in config; falling back to routing rules.")
 
-    if requested_model_name and requested_model_name != default_model_name:
-        logger.warning(f"Model '{requested_model_name}' not found in config; fallback to default model '{default_model_name}'.")
-    return default_model_name
+    # Route by thinking mode using named config fields (basic_model / reasoning_model)
+    extra = app_config.model_extra or {}
+    if thinking_enabled:
+        named = extra.get("reasoning_model") or extra.get("coding_model")
+    else:
+        named = extra.get("basic_model")
+
+    if named and app_config.get_model_config(named):
+        return named
+
+    # Final fallback: first model in list
+    return app_config.models[0].name
 
 
 def _create_summarization_middleware() -> SummarizationMiddleware | None:
@@ -63,6 +85,36 @@ def _create_summarization_middleware() -> SummarizationMiddleware | None:
         # Use a lightweight model for summarization to save costs
         # Falls back to default model if not explicitly specified
         model = create_chat_model(thinking_enabled=False)
+
+    # SummarizationMiddleware raises at construction time ("Model profile
+    # information is required to use fractional token limits") whenever a
+    # `fraction` trigger/keep is configured but the model exposes no
+    # profile["max_input_tokens"]. langchain's model-profiles registry has no
+    # entry for the current Claude ids (claude-sonnet-5, claude-opus-4-8), so
+    # ChatAnthropic.profile is {} — which means the fraction: 0.8 trigger in
+    # config.yaml made EVERY agent run fail with an "internal error". Inject a
+    # max_input_tokens so the fraction resolves. Claude's standard context
+    # window is 200K input tokens (the [1m] variant is a separate beta id).
+    def _uses_fraction(cs) -> bool:
+        if cs is None:
+            return False
+        if isinstance(cs, list):
+            return any(item.type == "fraction" for item in cs)
+        return cs.type == "fraction"
+
+    if _uses_fraction(config.trigger) or _uses_fraction(config.keep):
+        try:
+            profile = dict(getattr(model, "profile", None) or {})
+            if not isinstance(profile.get("max_input_tokens"), int):
+                profile["max_input_tokens"] = 200000
+                model.profile = profile
+                logger.info(
+                    "Injected max_input_tokens=200000 into summarization model profile "
+                    "(model id %r has no registry profile) so the fractional trigger resolves.",
+                    getattr(model, "model", "?"),
+                )
+        except Exception:  # pragma: no cover - defensive
+            logger.warning("Could not inject max_input_tokens into summarization model profile", exc_info=True)
 
     # Prepare kwargs
     kwargs = {
@@ -222,6 +274,11 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     if summarization_middleware is not None:
         middlewares.append(summarization_middleware)
 
+    # Mem0 semantic memory injection — uses wrap_model_call to inject
+    # recalled memories per-turn based on the user's actual message.
+    # This is in addition to the static profile injection in the system prompt.
+    middlewares.append(Mem0InjectionMiddleware(top_k=10))
+
     # Add TodoList middleware if plan mode is enabled
     is_plan_mode = config.get("configurable", {}).get("is_plan_mode", False)
     todo_list_middleware = _create_todo_list_middleware(is_plan_mode)
@@ -257,12 +314,69 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
         max_concurrent_subagents = config.get("configurable", {}).get("max_concurrent_subagents", 3)
         middlewares.append(SubagentLimitMiddleware(max_concurrent=max_concurrent_subagents))
 
+    # StepBudgetMiddleware — graceful wrap-up before recursion limit kills the run
+    middlewares.append(StepBudgetMiddleware())
+
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     middlewares.append(LoopDetectionMiddleware())
 
+    # ContinuationMiddleware — re-invoke once when the model abandons stated intent
+    # (says "now let me X" but emits no tool call). Sits outside the retry layer so a
+    # transient API error during the re-invocation gets retried, not re-detected.
+    middlewares.append(ContinuationMiddleware())
+
+    # AnthropicRetryMiddleware — retry transient API errors (500/502/503/504/529, connection, timeout, rate-limit).
+    # Added last (before ClarificationMiddleware) so it sits closest to the model call; outer middlewares'
+    # request mutations are preserved across retries.
+    middlewares.append(AnthropicRetryMiddleware())
+
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())
+
+    # Runtime validation of critical middleware ordering invariants
+    _validate_middleware_order(middlewares)
+
     return middlewares
+
+
+def _validate_middleware_order(middlewares):
+    """Validate critical middleware ordering constraints at build time."""
+    from deerflow.agents.middlewares.tool_error_handling_middleware import ToolErrorHandlingMiddleware
+    from deerflow.sandbox.middleware import SandboxMiddleware
+    try:
+        from deerflow.agents.middlewares.thread_data_middleware import ThreadDataMiddleware
+    except ImportError:
+        ThreadDataMiddleware = None
+
+    type_list = [type(m) for m in middlewares]
+
+    # ClarificationMiddleware must be last
+    if ClarificationMiddleware in type_list:
+        assert type_list[-1] is ClarificationMiddleware, (
+            "ClarificationMiddleware must be the last middleware (uses Command(goto=END) to interrupt)"
+        )
+
+    # ToolErrorHandlingMiddleware must come before ClarificationMiddleware
+    if ToolErrorHandlingMiddleware in type_list and ClarificationMiddleware in type_list:
+        err_idx = type_list.index(ToolErrorHandlingMiddleware)
+        clar_idx = type_list.index(ClarificationMiddleware)
+        assert err_idx < clar_idx, (
+            "ToolErrorHandlingMiddleware must precede ClarificationMiddleware"
+        )
+
+    # ThreadDataMiddleware must be first (if present)
+    if ThreadDataMiddleware and ThreadDataMiddleware in type_list:
+        assert type_list[0] is ThreadDataMiddleware, (
+            "ThreadDataMiddleware must be the first middleware (provides thread_id for all others)"
+        )
+
+    # SandboxMiddleware must come after ThreadDataMiddleware (if both present)
+    if ThreadDataMiddleware and ThreadDataMiddleware in type_list and SandboxMiddleware in type_list:
+        td_idx = type_list.index(ThreadDataMiddleware)
+        sb_idx = type_list.index(SandboxMiddleware)
+        assert td_idx < sb_idx, (
+            "ThreadDataMiddleware must precede SandboxMiddleware"
+        )
 
 
 def make_lead_agent(config: RunnableConfig):
@@ -283,7 +397,7 @@ def make_lead_agent(config: RunnableConfig):
 
     agent_config = load_agent_config(agent_name) if not is_bootstrap else None
     # Custom agent model or fallback to global/default model resolution
-    agent_model_name = agent_config.model if agent_config and agent_config.model else _resolve_model_name()
+    agent_model_name = agent_config.model if agent_config and agent_config.model else _resolve_model_name(thinking_enabled=thinking_enabled)
 
     # Final model name resolution with request override, then agent config, then global default
     model_name = requested_model_name or agent_model_name

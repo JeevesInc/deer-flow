@@ -305,6 +305,49 @@ def _thread_actual_to_virtual_mappings(thread_data: ThreadDataState) -> dict[str
     return {actual: virtual for virtual, actual in _thread_virtual_to_actual_mappings(thread_data).items()}
 
 
+def _build_path_env_exports(thread_data: ThreadDataState | None) -> str:
+    """Build shell export commands for resolved thread paths.
+
+    Injects WORKSPACE_PATH, OUTPUTS_PATH, UPLOADS_PATH, SKILLS_PATH, and
+    PYTHON_PATH as env vars so Python scripts running inside bash can use
+    os.environ['OUTPUTS_PATH'] etc. instead of hard-coding /mnt/user-data/
+    paths (which don't resolve on Windows).
+    """
+    if thread_data is None:
+        return ""
+    # Force UTF-8 for all Python subprocesses — Windows defaults to cp1252,
+    # which crashes any script printing ✅/—/emoji (recurring failure mode).
+    parts = ['export PYTHONIOENCODING="utf-8"', 'export PYTHONUTF8="1"']
+    for key, env_var in [("workspace_path", "WORKSPACE_PATH"), ("outputs_path", "OUTPUTS_PATH"), ("uploads_path", "UPLOADS_PATH")]:
+        path = thread_data.get(key)
+        if path:
+            # Normalize to forward slashes for Git Bash on Windows
+            path = path.replace("\\", "/")
+            parts.append(f'export {env_var}="{path}"')
+
+    # Inject resolved skills host path so scripts can import from skills
+    skills_host = _get_skills_host_path()
+    if skills_host:
+        skills_host = skills_host.replace("\\", "/")
+        parts.append(f'export SKILLS_PATH="{skills_host}"')
+
+    # Inject Python executable path — on Windows, bare `python` often hits the
+    # Store alias which doesn't work.  Prefer the backend venv python.
+    import shutil
+    python_path = shutil.which("python3") or shutil.which("python")
+    if skills_host:
+        # Check for backend venv python relative to skills dir
+        import pathlib
+        venv_python = pathlib.Path(skills_host).parent / "backend" / ".venv" / "Scripts" / "python.exe"
+        if venv_python.exists():
+            python_path = str(venv_python)
+    if python_path:
+        python_path = python_path.replace("\\", "/")
+        parts.append(f'export PYTHON_PATH="{python_path}"')
+
+    return "; ".join(parts) + ";" if parts else ""
+
+
 def mask_local_paths_in_output(output: str, thread_data: ThreadDataState | None) -> str:
     """Mask host absolute paths from local sandbox output using virtual paths.
 
@@ -705,14 +748,80 @@ def ensure_thread_directories_exist(runtime: ToolRuntime[ContextT, ThreadState] 
     runtime.state["thread_directories_created"] = True
 
 
+# ---------------------------------------------------------------------------
+# Per-tool-result size cap
+# ---------------------------------------------------------------------------
+# A single tool result that's many megabytes of raw output (huge query result,
+# logfile dump, etc.) goes straight into the conversation history. The
+# SummarizationMiddleware watches cumulative size, so it can't catch a single
+# call that jumps the prompt past the model's context limit in one step.
+# This helper caps any tool output and saves the full body to a file the
+# agent can re-read on demand.
+_MAX_TOOL_OUTPUT_CHARS = 30000  # ~7-10K tokens depending on content
+_TOOL_OUTPUT_HEAD_CHARS = 12000
+_TOOL_OUTPUT_TAIL_CHARS = 12000
+
+
+def _truncate_oversized_tool_output(
+    output: str,
+    runtime: "ToolRuntime[ContextT, ThreadState] | None",
+    tool_name: str,
+) -> str:
+    """If output is over the cap, save full text to outputs_path and return a summary.
+
+    Returns the original output unchanged when under the cap or when we can't
+    resolve an outputs_path (no thread context, etc.).
+    """
+    if output is None:
+        return output
+    if len(output) <= _MAX_TOOL_OUTPUT_CHARS:
+        return output
+
+    full_len = len(output)
+    saved_ref = None
+    try:
+        thread_data = get_thread_data(runtime) if runtime is not None else None
+        outputs_path = thread_data.get("outputs_path") if thread_data else None
+        if outputs_path:
+            import os
+            import time
+
+            dump_dir = Path(outputs_path) / "_tool_outputs"
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            ts = int(time.time() * 1000)
+            dump_path = dump_dir / f"{tool_name}_{ts}.txt"
+            dump_path.write_text(output, encoding="utf-8", errors="replace")
+            # Surface the agent-visible virtual path so the agent can re-read it
+            saved_ref = f"/mnt/user-data/outputs/_tool_outputs/{dump_path.name}"
+    except Exception:
+        saved_ref = None
+
+    head = output[:_TOOL_OUTPUT_HEAD_CHARS]
+    tail = output[-_TOOL_OUTPUT_TAIL_CHARS:]
+    middle_len = full_len - _TOOL_OUTPUT_HEAD_CHARS - _TOOL_OUTPUT_TAIL_CHARS
+    notice = (
+        f"\n\n[output truncated: {full_len:,} chars total, "
+        f"showing first {_TOOL_OUTPUT_HEAD_CHARS:,} and last {_TOOL_OUTPUT_TAIL_CHARS:,} "
+        f"({middle_len:,} chars elided)"
+    )
+    if saved_ref:
+        notice += f"; full output saved to {saved_ref} — read_file it if needed]"
+    else:
+        notice += "; outputs_path unavailable, full body not persisted]"
+    return f"{head}{notice}\n\n--- tail ---\n{tail}"
+
+
 @tool("bash", parse_docstring=True)
 def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, command: str) -> str:
     """Execute a bash command in a Linux environment.
 
 
-    - Use `python` to run Python code.
+    - Use `uv run python` to run Python code (bare `python` may not work on all systems).
+    - Alternatively, use `$PYTHON_PATH` which points to the correct Python executable.
     - Prefer a thread-local virtual environment in `/mnt/user-data/workspace/.venv`.
-    - Use `python -m pip` (inside the virtual environment) to install Python packages.
+    - Use `uv pip install` or `python -m pip` (inside the virtual environment) to install Python packages.
+    - Use `$SKILLS_PATH` to reference the skills directory in Python scripts (e.g. for imports).
+    - Environment variables available: `$WORKSPACE_PATH`, `$OUTPUTS_PATH`, `$UPLOADS_PATH`, `$SKILLS_PATH`, `$PYTHON_PATH`.
 
     Args:
         description: Explain why you are running this command in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
@@ -725,9 +834,17 @@ def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, com
         if is_local_sandbox(runtime):
             validate_local_bash_command_paths(command, thread_data)
             command = replace_virtual_paths_in_command(command, thread_data)
+            # Inject resolved path env vars so Python scripts can use
+            # os.environ['OUTPUTS_PATH'] etc. instead of /mnt/user-data/ paths
+            # which don't resolve natively on Windows.
+            env_exports = _build_path_env_exports(thread_data)
+            if env_exports:
+                command = f"{env_exports} {command}"
             output = sandbox.execute_command(command)
-            return mask_local_paths_in_output(output, thread_data)
-        return sandbox.execute_command(command)
+            output = mask_local_paths_in_output(output, thread_data)
+            return _truncate_oversized_tool_output(output, runtime, "bash")
+        output = sandbox.execute_command(command)
+        return _truncate_oversized_tool_output(output, runtime, "bash")
     except SandboxError as e:
         return f"Error: {e}"
     except PermissionError as e:
@@ -805,7 +922,7 @@ def read_file_tool(
             return "(empty)"
         if start_line is not None and end_line is not None:
             content = "\n".join(content.splitlines()[start_line - 1 : end_line])
-        return content
+        return _truncate_oversized_tool_output(content, runtime, "read_file")
     except SandboxError as e:
         return f"Error: {e}"
     except FileNotFoundError:
@@ -828,10 +945,14 @@ def write_file_tool(
 ) -> str:
     """Write text content to a file.
 
+    IMPORTANT: You MUST provide all three required parameters: description, path, AND content.
+    Calling this tool without content will always fail — if your script is long, write it in
+    sections or use bash with an inline heredoc (python3 << 'EOF' ... EOF) instead.
+
     Args:
         description: Explain why you are writing to this file in short words. ALWAYS PROVIDE THIS PARAMETER FIRST.
         path: The **absolute** path to the file to write to. ALWAYS PROVIDE THIS PARAMETER SECOND.
-        content: The content to write to the file. ALWAYS PROVIDE THIS PARAMETER THIRD.
+        content: The FULL text content to write to the file. ALWAYS PROVIDE THIS PARAMETER THIRD. This field is REQUIRED — never omit it.
     """
     try:
         sandbox = ensure_sandbox_initialized(runtime)

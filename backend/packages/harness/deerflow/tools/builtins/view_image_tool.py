@@ -10,6 +10,7 @@ from langgraph.typing import ContextT
 
 from deerflow.agents.thread_state import ThreadState
 from deerflow.sandbox.tools import get_thread_data, replace_virtual_path
+from deerflow.utils.images import downscale_for_anthropic
 
 
 @tool("view_image", parse_docstring=True)
@@ -75,11 +76,12 @@ def view_image_tool(
         }
         mime_type = extension_to_mime.get(path.suffix.lower(), "application/octet-stream")
 
-    # Read image file and convert to base64
+    # Read image file, downscale if needed, then convert to base64
     try:
         with open(actual_path, "rb") as f:
             image_data = f.read()
-            image_base64 = base64.b64encode(image_data).decode("utf-8")
+        image_data, mime_type = downscale_for_anthropic(image_data, mime_type)
+        image_base64 = base64.b64encode(image_data).decode("utf-8")
     except Exception as e:
         return Command(
             update={"messages": [ToolMessage(f"Error reading image file: {str(e)}", tool_call_id=tool_call_id)]},

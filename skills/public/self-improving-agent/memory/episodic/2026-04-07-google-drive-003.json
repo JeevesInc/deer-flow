@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-07-003",
+  "timestamp": "2026-04-07T16:36:47.329910+00:00",
+  "skill": "google-drive",
+  "situation": "Created a plan document and presented it locally but did not upload to Drive. User had to ask where it was.",
+  "root_cause": "Followed present_files without also calling upload_to_drive.py",
+  "solution": "Always upload to Drive immediately after writing any output file, before or alongside present_files",
+  "lesson": "present_files and upload_to_drive are not interchangeable \u2014 Drive upload is required for user access across sessions and devices. Never skip it.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

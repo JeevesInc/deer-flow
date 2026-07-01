@@ -9,6 +9,9 @@ allowed-tools:
 
 # Jeeves Portfolio Analytics
 
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
+
+
 Ad-hoc analytical questions about the Jeeves credit portfolio.
 
 ## Examples
@@ -43,7 +46,7 @@ SELECT country_code, COUNT(DISTINCT company_id) AS accounts,
        SUM(balance_usd) AS total_balance
 FROM capital_markets_dm.loc_tape
 WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
-  AND charge_off_flag = false
+  AND charge_off_flag = false AND is_in_repayment = false
 GROUP BY country_code
 ```
 
@@ -53,7 +56,7 @@ SELECT dq_bucket, COUNT(DISTINCT company_id) AS accounts,
        SUM(balance_usd) AS balance
 FROM capital_markets_dm.loc_tape
 WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
-  AND charge_off_flag = false
+  AND charge_off_flag = false AND is_in_repayment = false
 GROUP BY dq_bucket
 ORDER BY dq_bucket
 ```
@@ -84,8 +87,8 @@ ORDER BY total_revenue DESC
 ## Rules
 
 - Always state the snapshot date in the response
-- MX balances are USD unless explicitly asked for MXN (default rate: 17.5)
-- "Active" accounts = balance_usd > 0 AND charge_off_flag = false
+- MX balances are USD unless explicitly asked for MXN. Use `spot_rate` from loc_tape for conversion — do NOT hardcode an FX rate.
+- "Active" accounts = balance_usd > 0 AND charge_off_flag = false AND is_in_repayment = false
 - Revenue questions → use transactions_ssot.revenue_usd
 - Spend questions → use loc_tape.disbursement_amount_usd
 - Always exclude test companies

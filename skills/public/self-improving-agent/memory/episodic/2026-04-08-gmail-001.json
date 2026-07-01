@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-08-001",
+  "timestamp": "2026-04-08T00:58:46.989437+00:00",
+  "skill": "gmail",
+  "situation": "User asked to compare Spanish vs English Covalto term sheet. Agent searched Drive first and found an old March 17 draft, producing a misleading analysis flagging major discrepancies. The actual final documents were email attachments sent same day by Pablo Demederos.",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "When user says they just received something, check Gmail FIRST before Drive. Drive may have older drafts that are not the current version. Search email with sender name + subject keywords to find the latest attachment.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

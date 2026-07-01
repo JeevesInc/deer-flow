@@ -19,6 +19,33 @@ _MISSING_TOOL_CALL_ID = "missing_tool_call_id"
 class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     """Convert tool exceptions into error ToolMessages so the run can continue."""
 
+    # Map exception types to structured error info
+    _ERROR_MAP: dict[type, tuple[str, bool, str]] = {
+        FileNotFoundError: ("FILE_NOT_FOUND", True, "Check the file path. Use ls to verify it exists."),
+        PermissionError: ("PERMISSION_DENIED", False, "Path is outside allowed directories or is read-only."),
+        IsADirectoryError: ("IS_DIRECTORY", True, "Expected a file path, got a directory. Add the filename."),
+        TimeoutError: ("TIMEOUT", True, "Operation timed out. Try a simpler query or smaller scope."),
+        ConnectionError: ("CONNECTION_ERROR", True, "Connection failed. The service may be temporarily unavailable — retry once."),
+        ValueError: ("INVALID_INPUT", True, "Invalid input value. Check your arguments and try again."),
+        KeyError: ("MISSING_KEY", True, "Required key/field not found. Check the expected format."),
+    }
+
+    def _classify_error(self, exc: Exception) -> tuple[str, bool, str]:
+        """Classify an exception into (error_type, recoverable, suggestion)."""
+        for exc_type, info in self._ERROR_MAP.items():
+            if isinstance(exc, exc_type):
+                return info
+
+        detail = str(exc).lower()
+        if "not found" in detail or "no such" in detail:
+            return ("NOT_FOUND", True, "Resource not found. Verify the path or identifier.")
+        if "timeout" in detail or "timed out" in detail:
+            return ("TIMEOUT", True, "Operation timed out. Try a simpler approach.")
+        if "permission" in detail or "denied" in detail or "forbidden" in detail:
+            return ("PERMISSION_DENIED", False, "Access denied. This path or operation is not allowed.")
+
+        return ("UNEXPECTED_ERROR", True, "Unexpected error. Try a different approach or check your inputs.")
+
     def _build_error_message(self, request: ToolCallRequest, exc: Exception) -> ToolMessage:
         tool_name = str(request.tool_call.get("name") or "unknown_tool")
         tool_call_id = str(request.tool_call.get("id") or _MISSING_TOOL_CALL_ID)
@@ -26,7 +53,10 @@ class ToolErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         if len(detail) > 500:
             detail = detail[:497] + "..."
 
-        content = f"Error: Tool '{tool_name}' failed with {exc.__class__.__name__}: {detail}. Continue with available context, or choose an alternative tool."
+        error_type, recoverable, suggestion = self._classify_error(exc)
+        action = "You may retry with corrected inputs." if recoverable else "Do NOT retry — try a different approach or report this to the user."
+
+        content = f"[{error_type}] Tool '{tool_name}' failed: {detail}\nRecoverable: {recoverable}\nSuggestion: {suggestion}\nAction: {action}"
         return ToolMessage(
             content=content,
             tool_call_id=tool_call_id,

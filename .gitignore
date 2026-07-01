@@ -36,8 +36,8 @@ extensions_config.json
 coverage.xml
 coverage/
 .deer-flow/
+.deer-flow-backups/
 .claude/
-skills/custom/*
 logs/
 log/
 
@@ -53,4 +53,55 @@ web/
 
 # Deployment artifacts
 backend/Dockerfile.langgraph
+# Backup copies (use git history, not .bak files)
 config.yaml.bak
+*.bak
+*.bak.*
+*.bak_*
+
+# Local debug / scratch artifacts
+backend/sh.EXE.stackdump
+backend/tmp_check.py
+backend/test_chart.png
+backend/test-output/
+backend/workspace/
+backend/data_tape_sofom.sql
+backend/fix_memory.py
+
+# Cron runtime state (regenerated on each poll/restart)
+backend/.bot_dm_state.json
+backend/.webhook_gmail_state.json
+
+# Agent memory snapshot (private, regenerated)
+backend/.deer-flow/memory.json
+
+# Per-thread workspaces and outputs (large, ephemeral)
+skills/custom/jeeves-borrowing-base/outputs/
+skills/custom/jeeves-borrowing-base/test_write
+skills/custom/jeeves-slides/scripts/
+skills/public/self-improving-agent/memory/episodic/
+
+# Nested git repos that shouldn't be vendored bare
+skills/custom/cfo-org-kb/
+
+# Agent throwaway scripts in skill dirs (one-off Python the agent wrote)
+skills/custom/google-drive/copy_bbva_temp.py
+skills/custom/google-drive/download_pptx.py
+skills/custom/google-drive/find_nb_deck.py
+skills/custom/google-drive/fix_301.py
+skills/custom/google-drive/fix_nb_*.py
+skills/custom/google-drive/get_all_comments.py
+skills/custom/google-drive/get_comments*.py
+skills/custom/google-drive/nb_deck_*.pptx
+skills/custom/google-drive/populate_slides.py
+skills/custom/google-drive/update_*.py
+skills/custom/gmail/approve_dream.py
+
+# Embedded deerflow harness build artifact at backend/deerflow/
+backend/deerflow/
+
+# Runtime logs
+*.log
+
+# Box skill secrets (local only)
+skills/custom/box/box_secrets.json

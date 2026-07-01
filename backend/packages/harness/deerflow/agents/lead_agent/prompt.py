@@ -1,10 +1,22 @@
 import logging
-from datetime import datetime
 
 from deerflow.config.agents_config import load_agent_soul
 from deerflow.skills import load_skills
+from deerflow.subagents.custom_agents import list_custom_agent_subagent_configs
 
 logger = logging.getLogger(__name__)
+
+
+def _build_specialist_list() -> str:
+    """Return a bullet list of custom specialist agents, or empty string if none."""
+    try:
+        configs = list_custom_agent_subagent_configs()
+    except Exception:
+        return ""
+    if not configs:
+        return ""
+    lines = [f"- **{c.name}**: {c.description}" for c in configs]
+    return "\n" + "\n".join(lines)
 
 
 def _build_subagent_section(max_concurrent: int) -> str:
@@ -42,6 +54,7 @@ You are running with subagent capabilities enabled. Your role is to be a **task 
 **Available Subagents:**
 - **general-purpose**: For ANY non-trivial task - web research, code exploration, file operations, analysis, etc.
 - **bash**: For command execution (git, build, test, deploy operations)
+{_build_specialist_list()}
 
 **Your Orchestration Strategy:**
 
@@ -167,74 +180,6 @@ You are {agent_name}, an open-source super agent.
 - Your response must contain the actual answer, not just a reference to what you thought about
 </thinking_style>
 
-<clarification_system>
-**WORKFLOW PRIORITY: CLARIFY → PLAN → ACT**
-1. **FIRST**: Analyze the request in your thinking - identify what's unclear, missing, or ambiguous
-2. **SECOND**: If clarification is needed, call `ask_clarification` tool IMMEDIATELY - do NOT start working
-3. **THIRD**: Only after all clarifications are resolved, proceed with planning and execution
-
-**CRITICAL RULE: Clarification ALWAYS comes BEFORE action. Never start working and clarify mid-execution.**
-
-**MANDATORY Clarification Scenarios - You MUST call ask_clarification BEFORE starting work when:**
-
-1. **Missing Information** (`missing_info`): Required details not provided
-   - Example: User says "create a web scraper" but doesn't specify the target website
-   - Example: "Deploy the app" without specifying environment
-   - **REQUIRED ACTION**: Call ask_clarification to get the missing information
-
-2. **Ambiguous Requirements** (`ambiguous_requirement`): Multiple valid interpretations exist
-   - Example: "Optimize the code" could mean performance, readability, or memory usage
-   - Example: "Make it better" is unclear what aspect to improve
-   - **REQUIRED ACTION**: Call ask_clarification to clarify the exact requirement
-
-3. **Approach Choices** (`approach_choice`): Several valid approaches exist
-   - Example: "Add authentication" could use JWT, OAuth, session-based, or API keys
-   - Example: "Store data" could use database, files, cache, etc.
-   - **REQUIRED ACTION**: Call ask_clarification to let user choose the approach
-
-4. **Risky Operations** (`risk_confirmation`): Destructive actions need confirmation
-   - Example: Deleting files, modifying production configs, database operations
-   - Example: Overwriting existing code or data
-   - **REQUIRED ACTION**: Call ask_clarification to get explicit confirmation
-
-5. **Suggestions** (`suggestion`): You have a recommendation but want approval
-   - Example: "I recommend refactoring this code. Should I proceed?"
-   - **REQUIRED ACTION**: Call ask_clarification to get approval
-
-**STRICT ENFORCEMENT:**
-- ❌ DO NOT start working and then ask for clarification mid-execution - clarify FIRST
-- ❌ DO NOT skip clarification for "efficiency" - accuracy matters more than speed
-- ❌ DO NOT make assumptions when information is missing - ALWAYS ask
-- ❌ DO NOT proceed with guesses - STOP and call ask_clarification first
-- ✅ Analyze the request in thinking → Identify unclear aspects → Ask BEFORE any action
-- ✅ If you identify the need for clarification in your thinking, you MUST call the tool IMMEDIATELY
-- ✅ After calling ask_clarification, execution will be interrupted automatically
-- ✅ Wait for user response - do NOT continue with assumptions
-
-**How to Use:**
-```python
-ask_clarification(
-    question="Your specific question here?",
-    clarification_type="missing_info",  # or other type
-    context="Why you need this information",  # optional but recommended
-    options=["option1", "option2"]  # optional, for choices
-)
-```
-
-**Example:**
-User: "Deploy the application"
-You (thinking): Missing environment info - I MUST ask for clarification
-You (action): ask_clarification(
-    question="Which environment should I deploy to?",
-    clarification_type="approach_choice",
-    context="I need to know the target environment for proper configuration",
-    options=["development", "staging", "production"]
-)
-[Execution stops - wait for user response]
-
-User: "staging"
-You: "Deploying to staging..." [proceed]
-</clarification_system>
 
 {skills_section}
 
@@ -342,6 +287,10 @@ combined with a FastAPI gateway for REST API access [citation:FastAPI](https://f
 def _get_memory_context(agent_name: str | None = None) -> str:
     """Get memory context for injection into system prompt.
 
+    Injects the slim profile (workContext, personalContext, topOfMind,
+    history summaries) from memory.json, plus the top mem0 memories
+    retrieved using the user's current priorities as the search query.
+
     Args:
         agent_name: If provided, loads per-agent memory. If None, loads global memory.
 
@@ -357,7 +306,28 @@ def _get_memory_context(agent_name: str | None = None) -> str:
             return ""
 
         memory_data = get_memory_data(agent_name)
-        memory_content = format_memory_for_injection(memory_data, max_tokens=config.max_injection_tokens)
+
+        # Retrieve mem0 memories using topOfMind + workContext as search query
+        mem0_memories = []
+        try:
+            from deerflow.agents.memory.mem0_store import search_memories
+
+            # Build a query from the user's current focus areas
+            top_of_mind = memory_data.get("user", {}).get("topOfMind", {}).get("summary", "")
+            work_ctx = memory_data.get("user", {}).get("workContext", {}).get("summary", "")
+            query = f"{top_of_mind} {work_ctx}".strip()
+            if query:
+                mem0_memories = search_memories(query, top_k=10)
+                if mem0_memories:
+                    logger.info("mem0 retrieved %d memories for system prompt", len(mem0_memories))
+        except Exception as e:
+            logger.warning("mem0 search failed, continuing without: %s", e)
+
+        memory_content = format_memory_for_injection(
+            memory_data,
+            max_tokens=config.max_injection_tokens,
+            mem0_memories=mem0_memories,
+        )
 
         if not memory_content.strip():
             return ""
@@ -516,4 +486,7 @@ def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagen
         acp_section=acp_section,
     )
 
-    return prompt + f"\n<current_date>{datetime.now().strftime('%Y-%m-%d, %A')}</current_date>"
+    # NOTE: Current date/time is injected per-message by the channel manager
+    # (see manager.py _stamp_message), NOT here. Injecting here would freeze
+    # the date at agent creation time since the graph factory runs once.
+    return prompt

@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-08-002",
+  "timestamp": "2026-04-08T00:58:47.189787+00:00",
+  "skill": "gmail",
+  "situation": "Used gmail_tool.py draft command to reply to an email with CC recipients (Isabel, Shalom). The tool only replied to the sender (Alex), dropping the CC recipients entirely. Brian corrected this.",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "gmail_tool.py draft does NOT preserve CC recipients \u2014 it only replies to the From address. For reply-all, always pull full headers manually (To, Cc, Message-ID), then build a MIME message with explicit To/Cc fields and post via drafts().create(). This is non-negotiable \u2014 reply-all is Brian s default.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

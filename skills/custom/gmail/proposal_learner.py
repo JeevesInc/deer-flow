@@ -281,7 +281,7 @@ Respond with ONLY valid JSON in this exact format:
             max_tokens=400,
             messages=[{'role': 'user', 'content': prompt}],
         )
-        text = resp.content[0].text.strip()
+        text = _text_from_response(resp)
         if text.startswith('```'):
             text = text.split('```')[1]
             if text.startswith('json'):
@@ -328,6 +328,43 @@ def _build_synth_pairs(proposals: list[dict], outcomes: list[dict]) -> list[dict
             continue
         pairs.append({'proposal': p, 'outcome': o})
     return pairs
+
+
+def _text_from_response(resp) -> str:
+    """Concatenate text blocks from an Anthropic response.
+
+    claude-sonnet-5 has adaptive thinking always on, so `resp.content[0]` is a
+    ThinkingBlock (no `.text`) — indexing [0].text raised on every synthesizer
+    call, silently producing zero patterns even after the model-id 404 was fixed
+    (2026-06-30). Always skip non-text blocks.
+    """
+    return "".join(
+        getattr(b, "text", "") or "" for b in resp.content if getattr(b, "type", None) == "text"
+    ).strip()
+
+
+def _parse_patterns_json(text: str) -> dict | None:
+    """Best-effort parse of the synthesizer's JSON.
+
+    Robust to markdown fences and to trailing prose after the object (the old
+    ```-split + raw json.loads failed a batch on 2026-07-01). Falls back to the
+    outermost {...} slice if a direct parse fails.
+    """
+    s = text.strip()
+    if s.startswith("```"):
+        s = re.sub(r"^```[a-zA-Z]*\n?", "", s)
+        s = re.sub(r"\n?```$", "", s).strip()
+    try:
+        return json.loads(s)
+    except Exception:
+        pass
+    m = re.search(r"\{.*\}", s, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            return None
+    return None
 
 
 def synthesize_patterns(pairs: list[dict]) -> list[str]:
@@ -407,18 +444,14 @@ If no patterns, return: {{"patterns": []}}
     try:
         resp = client.messages.create(
             model=SYNTHESIZER_MODEL,
-            max_tokens=1500,
+            max_tokens=4000,  # was 1500 — long batches truncated mid-JSON, failing the parse
             messages=[{'role': 'user', 'content': prompt}],
         )
-        text = resp.content[0].text.strip()
+        text = _text_from_response(resp)
         if text.upper().startswith('NONE'):
             return []
-        if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        data = json.loads(text.strip())
-        patterns = data.get('patterns', []) or []
+        data = _parse_patterns_json(text)
+        patterns = (data or {}).get('patterns', []) or []
         # Return just the text strings; metadata is currently informational only
         # (mem0 dedup is text-based via its add() pipeline).
         return [p.get('text', '').strip() for p in patterns if p.get('text')]
@@ -447,7 +480,11 @@ def write_pattern_to_mem0(text: str) -> None:
         return
     try:
         m = _get_mem0()
-        m.add(text, user_id=PROPOSAL_PATTERNS_USER_ID)
+        # infer=False: store the curated pattern sentence verbatim rather than
+        # letting mem0's extractor reword/atomize it (same rationale as the
+        # strategic-context layer). The classifier retrieves these by semantic
+        # search, so the exact sentence is what we want surfaced.
+        m.add(text, user_id=PROPOSAL_PATTERNS_USER_ID, infer=False)
     except Exception as e:
         log.error('mem0.add failed for pattern %r: %s', text[:80], e)
 
@@ -510,6 +547,51 @@ def run_daily(dry_run: bool = False) -> dict:
     return summary
 
 
+def run_backfill(dry_run: bool = False, batch_size: int = 12) -> dict:
+    """One-shot: synthesize patterns from ALL historical labeled outcomes.
+
+    run_daily() only synthesizes the batch it just labeled, so the outcomes
+    labeled before the synthesizer worked (SYNTHESIZER_MODEL 404'd until
+    2026-06-30, compounded by the May–Jun Gmail-watch outage) never produced
+    patterns — the proposal-patterns mem0 namespace has been empty, making the
+    classifier feedback loop a silent no-op. This replays every outcome already
+    in proposal_outcomes.jsonl (no re-labeling) in batches, dedupes the pattern
+    text, and writes to mem0. Safe to re-run: mem0's add() dedupes, and the
+    namespace can be reset with delete_all_memories(user_id='proposal-patterns').
+    """
+    summary = {'outcomes': 0, 'pairs': 0, 'batches': 0, 'patterns_added': 0}
+
+    outcomes = _read_jsonl(OUTCOMES_LOG_PATH)
+    proposals = _read_jsonl(PROPOSAL_LOG_PATH)
+    summary['outcomes'] = len(outcomes)
+    pairs = _build_synth_pairs(proposals, outcomes)
+    summary['pairs'] = len(pairs)
+    if not pairs:
+        log.info('Backfill: no proposal/outcome pairs to synthesize.')
+        return summary
+
+    seen: set[str] = set()
+    for i in range(0, len(pairs), batch_size):
+        chunk = pairs[i:i + batch_size]
+        summary['batches'] += 1
+        patterns = synthesize_patterns(chunk)
+        log.info('Backfill batch %d (%d pairs) → %d patterns', summary['batches'], len(chunk), len(patterns))
+        for pat in patterns:
+            key = pat.strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            if dry_run:
+                log.info('[dry-run] would add pattern: %s', pat)
+            else:
+                write_pattern_to_mem0(pat)
+            summary['patterns_added'] += 1
+            log.info('%sPattern: %s', '[dry-run] ' if dry_run else 'Added ', pat[:140])
+
+    log.info('Backfill summary: %s', summary)
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -519,6 +601,13 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Proposal feedback learner')
     parser.add_argument('--dry-run', action='store_true',
-                        help='Label proposals and print synthesized patterns but do not write outcomes or mem0')
+                        help='Label/synthesize but do not write outcomes or mem0')
+    parser.add_argument('--backfill', action='store_true',
+                        help='One-shot: synthesize patterns from ALL historical labeled outcomes '
+                             '(proposal_outcomes.jsonl), not just today\'s batch. Seeds an empty '
+                             'proposal-patterns namespace.')
     args = parser.parse_args()
-    run_daily(dry_run=args.dry_run)
+    if args.backfill:
+        run_backfill(dry_run=args.dry_run)
+    else:
+        run_daily(dry_run=args.dry_run)

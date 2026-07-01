@@ -73,8 +73,41 @@ def validate_sql(sql: str) -> list[str]:
     sql_lower = sql.lower()
 
     # Block non-SELECT statements
-    # Strip leading WITH (CTE) to find the actual statement type
-    stripped = re.sub(r'(?i)^\s*WITH\s+.*?\)\s*', '', sql, flags=re.DOTALL)
+    # Strip leading WITH (CTE) to find the actual statement type.
+    # NOTE: previously used a non-greedy regex `WITH\s+.*?\)` which stops at the
+    # FIRST closing paren -- this breaks on any CTE body containing nested parens
+    # (e.g. SUM(CASE WHEN ... THEN x ELSE 0 END), ROUND(...), etc.), which is
+    # extremely common in real queries (e.g. a "cash_paid" aggregate). It would
+    # truncate mid-expression and misidentify a fragment like "AS" or ",0)" as
+    # the leading keyword, incorrectly rejecting valid SELECT/CTE queries.
+    # Fixed by walking the string and tracking paren depth to find the true end
+    # of each top-level CTE definition, then repeating for chained CTEs
+    # (WITH a AS (...), b AS (...) SELECT ...).
+    def _strip_leading_ctes(text: str) -> str:
+        s = text.lstrip()
+        if not re.match(r'(?i)^WITH\s', s):
+            return s
+        s = re.sub(r'(?i)^WITH\s+', '', s, count=1)
+        while True:
+            m = re.match(r'(?i)^\s*[a-zA-Z0-9_]+\s*(\([^()]*\)\s*)?AS\s*\(', s)
+            if not m:
+                break
+            depth = 1
+            i = m.end()
+            while i < len(s) and depth > 0:
+                if s[i] == '(':
+                    depth += 1
+                elif s[i] == ')':
+                    depth -= 1
+                i += 1
+            s = s[i:].lstrip()
+            if s.startswith(','):
+                s = s[1:].lstrip()
+                continue
+            break
+        return s
+
+    stripped = _strip_leading_ctes(sql)
     first_keyword = stripped.strip().split()[0].upper() if stripped.strip() else ''
     if first_keyword and first_keyword not in ('SELECT', 'WITH', 'EXPLAIN'):
         return [f"ERROR: Only SELECT queries are allowed. Got: {first_keyword}"]

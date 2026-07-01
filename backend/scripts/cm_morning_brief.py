@@ -21,8 +21,10 @@ log = logging.getLogger("cm_brief")
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 STATE_FILE   = BACKEND_DIR / ".deer-flow" / "_cap_markets_state.json"
 CICO_FILE    = BACKEND_DIR / ".deer-flow" / "_cico_state.json"
-SLACK_TOOL   = Path(__file__).resolve().parent.parent.parent / "deer-flow" / "skills" / "custom" / "slack-search" / "slack_tool.py"
-BRIAN_ID     = "U05B5HGNCN9"
+# parents[2] from backend/scripts/ == the deer-flow root; skills/ lives directly
+# under it (the old path had a spurious extra "deer-flow" segment → didn't exist).
+SLACK_TOOL   = Path(__file__).resolve().parents[2] / "skills" / "custom" / "slack-search" / "slack_tool.py"
+BRIAN_ID     = os.environ.get("SLACK_OWNER_USER_ID", "U05B5HGNCN9")
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────
@@ -98,7 +100,6 @@ def build_brief() -> str:
     mx_bb_usd     = mx.get("borrowing_base")
     mx_drawn      = mx.get("total_drawn")
     mx_avail      = mx.get("availability")
-    mx_usdmxn     = mx.get("usdmxn_rate") or 17.44
     mx_tape_dt    = (mx.get("tape_as_of") or mx.get("source_mtime") or "")[:10]
 
     def mxn_m(v):
@@ -110,7 +111,7 @@ def build_brief() -> str:
     cico_cash       = cico.get("total_cash_usd")
     cico_daca       = cico.get("daca_pledged_usd")
     cico_restricted = cico.get("restricted_deposits_usd")
-    cico_dt         = (cico.get("source_date") or "")[:16]
+    cico_dt         = (cico.get("source_date") or "")[:10]
 
     # ── Alerts ───────────────────────────────────────────────────────────
     alerts = []
@@ -146,7 +147,7 @@ def build_brief() -> str:
         f"  Final BB:     {_m(mx_bb_usd, 1)}",
         f"  Drawn:        {_m(mx_drawn, 1)}   {_avail_emoji(mx_avail)} {_m(mx_avail, 1)} avail",
         "",
-        f"*💵 CICO Cash* _(Jun 8)_",
+        f"*💵 CICO Cash* _({cico_dt or 'n/a'})_",
         f"  Total Cash:      {_m(cico_cash, 1)}",
         f"  DACA / Pledged:  {_m(cico_daca, 1)}",
         f"  Restricted:      {_m(cico_restricted, 1)}",

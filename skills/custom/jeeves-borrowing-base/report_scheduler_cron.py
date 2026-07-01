@@ -71,6 +71,45 @@ def save_state(state: dict):
         json.dump(state, f, indent=2)
 
 
+def _reconcile_stale_running(today_str: str):
+    """Clear + alert on any '_running' state left over from a killed process.
+
+    _launch_background's wrapper only marks a task '{date}' (done) inside a
+    `finally` -- but that only runs if the *thread* survives to completion.
+    If the whole scheduler process is killed/restarted mid-run (deploy, OOM,
+    crash), the thread dies with it: nothing survives to post a Slack alert,
+    and the state file is left stuck at '{today}_running' forever for that
+    day. Since _state_completed_today() treats any '_running' value as
+    "already handled", this silently blocks every retry for the rest of the
+    day -- the run just vanishes with no message, no error, nothing.
+
+    Call this once when the scheduler (re)starts, before entering the loop.
+    Clears any '_running' flags so the task is free to refire on the next
+    matching schedule window, and tells Brian what was orphaned.
+    """
+    with _state_lock:
+        state = load_state()
+        changed = False
+        for key, val in list(state.items()):
+            if not isinstance(val, str) or not val.endswith('_running'):
+                continue
+            date_part = val[:-len('_running')]
+            label = key.replace('last_', '').replace('_', ' ')
+            log.warning(f"Orphaned running state on startup: {key}={val}")
+            _post_slack(
+                f":rotating_light: *{label}* never finished -- state was still "
+                f"`{val}` when the scheduler (re)started, meaning the process "
+                f"died mid-run with no chance to alert. Clearing the flag so "
+                f"it retries on the next scheduled pass"
+                + (f" (targeting {date_part})." if date_part != today_str else ".")
+            )
+            del state[key]
+            changed = True
+        if changed:
+            save_state(state)
+        return changed
+
+
 def _state_completed_today(state: dict, key: str, today_str: str) -> bool:
     """True when the task completed OR is already running today.
 
@@ -715,7 +754,9 @@ def run_morning_brief():
     """Post daily Capital Markets brief to Brian's Slack DM (~8am weekdays)."""
     import subprocess
     log.info("Posting morning Capital Markets brief...")
-    script = str(pathlib.Path(__file__).resolve().parent.parent / 'scripts' / 'cm_morning_brief.py')
+    # cm_morning_brief.py lives in backend/scripts/, not skills/custom/scripts/.
+    # parents[3] from skills/custom/jeeves-borrowing-base/ == the deer-flow root.
+    script = str(Path(__file__).resolve().parents[3] / 'backend' / 'scripts' / 'cm_morning_brief.py')
     try:
         result = subprocess.run(
             [sys.executable, script],
@@ -783,6 +824,7 @@ def run_cico_dashboard():
 
 def run_loop():
     log.info(f"Report scheduler started. Interval={CHECK_INTERVAL}s, max_task={MAX_TASK_SECONDS}s.")
+    _reconcile_stale_running(datetime.now().date().isoformat())
     while True:
         try:
             with _state_lock:

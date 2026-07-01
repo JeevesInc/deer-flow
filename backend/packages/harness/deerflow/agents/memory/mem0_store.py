@@ -61,11 +61,21 @@ def get_mem0() -> Any:
         data_dir = _get_mem0_data_dir()
         Path(data_dir).mkdir(parents=True, exist_ok=True)
 
+        # Vector store: connect to a Qdrant SERVER (not embedded/on-disk).
+        # Embedded Qdrant takes an exclusive filesystem lock on mem0_data that
+        # lets only ONE process attach — so the agent, gateway, and webhook
+        # receiver would fight over it and whoever lost ran with NO memory
+        # (see project_mem0_lock_contention, 2026-07-01). A server lets all
+        # three connect concurrently. Host/port are env-overridable; default to
+        # the local docker container (monitoring/docker-compose.yml).
+        qdrant_host = os.environ.get("MEM0_QDRANT_HOST", "localhost")
+        qdrant_port = int(os.environ.get("MEM0_QDRANT_PORT", "6333"))
+
         config = {
             "llm": {
                 "provider": "anthropic",
                 "config": {
-                    "model": "claude-sonnet-4-6",
+                    "model": "claude-sonnet-5",
                     "api_key": api_key,
                     "max_tokens": 4096,
                 },
@@ -81,14 +91,15 @@ def get_mem0() -> Any:
                 "provider": "qdrant",
                 "config": {
                     "collection_name": "deerflow_memories",
-                    "path": data_dir,
+                    "host": qdrant_host,
+                    "port": qdrant_port,
                     "embedding_model_dims": 384,
                 },
             },
             "version": "v1.1",
         }
 
-        logger.info("Initializing mem0 with local Qdrant at %s", data_dir)
+        logger.info("Initializing mem0 with Qdrant server at %s:%s", qdrant_host, qdrant_port)
         _mem0_instance = Memory.from_config(config_dict=config)
         return _mem0_instance
 

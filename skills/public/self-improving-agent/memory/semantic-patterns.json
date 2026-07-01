@@ -2191,6 +2191,38 @@
       "target_skills": [
         "jeeves-borrowing-base"
       ]
+    },
+    "pat-2026-06-30-138": {
+      "id": "pat-2026-06-30-138",
+      "name": "merge_template is SHARED across US/MX/portfolio. _EXPECTED_F",
+      "source": "ep-2026-06-30-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-30",
+      "last_applied": "2026-06-30T16:58:02.785267+00:00",
+      "category": "general",
+      "pattern": "merge_template is SHARED across US/MX/portfolio. _EXPECTED_FORMULA_TABS hard-coded US Summary tabs, misfiring on every SOFOM run (SOFOM formula tabs = Exhibit A/B,elig,lista,bank_accts,historical_draws,hedge). Warning was benign only while stdin non-interactive (auto-y); failed when input() hit EOF. When Brian says \"nothing changed, runs daily\" GET FILE EVIDENCE (downloaded masters 6/20-6/28: NONE ever had Summary tab) before theorizing. Fix: derive formula tabs as template-minus-data (name-agnostic) + default --non-interactive.",
+      "problem": "MX BB cron failed: merge_template warned no formula tabs and aborted rc=1. Initial theory (US-specific check fires daily but survived interactively) was wrong.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-06-30-139": {
+      "id": "pat-2026-06-30-139",
+      "name": "The Jeeves Box custom app lacks the Manage Signature Request",
+      "source": "ep-2026-06-30-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-06-30",
+      "last_applied": "2026-06-30T18:56:46.300952+00:00",
+      "category": "general",
+      "pattern": "The Jeeves Box custom app lacks the Manage Signature Requests scope -> create_sign_request returns 403 insufficient_scope. Shared-link creation also 403. Upload/list/version work fine. To enable Box Sign programmatically, IT must add the scope in Developer Console and re-authorize in Admin Console; otherwise stage the filled doc in Box and initiate Box Sign from the web UI.",
+      "problem": "Tried to create a Box Sign request via SDK (sign_requests.create_sign_request)",
+      "solution": "",
+      "target_skills": [
+        "box"
+      ]
     }
   }
 }

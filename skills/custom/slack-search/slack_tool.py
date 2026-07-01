@@ -308,6 +308,86 @@ def cmd_allowlist(action, target=None):
         print('ERROR: unknown allowlist action: ' + action, file=sys.stderr)
         sys.exit(1)
 
+def _find_proposal(card_ts):
+    """Look up a proposal_log.jsonl record by the queue card's ts.
+
+    Returns the record dict or None. Walks up from this file to the repo root
+    (marker = start.sh) to locate backend/.deer-flow/proposal_log.jsonl.
+    """
+    cur = Path(__file__).resolve().parent
+    log_path = None
+    for _ in range(8):
+        cand = cur / "deer-flow" / "backend" / ".deer-flow" / "proposal_log.jsonl"
+        if cand.exists():
+            log_path = cand
+            break
+        if (cur / "start.sh").exists():
+            cand2 = cur / "deer-flow" / "backend" / ".deer-flow" / "proposal_log.jsonl"
+            log_path = cand2 if cand2.exists() else None
+            break
+        cur = cur.parent
+    # Fallback: relative to this skill (skills/custom/slack-search → backend)
+    if not log_path:
+        cand = Path(__file__).resolve().parents[3] / "backend" / ".deer-flow" / "proposal_log.jsonl"
+        log_path = cand if cand.exists() else None
+    if not log_path or not log_path.exists():
+        return None
+    match = None
+    with open(log_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("slack_ts") == card_ts:
+                match = rec  # last write wins
+    return match
+
+
+def cmd_send_as_owner(channel, message, thread_ts=None, from_proposal=None):
+    """Send a message AS the owner (Brian) using the user token (xoxp-...).
+
+    Used by the approval-queue flow: when Brian approves a drafted Slack reply,
+    the message is posted under HIS identity into the original conversation, not
+    the bot's. `channel` is the target conversation id (a DM channel id like
+    D..., or a channel C.../G...). `thread_ts` optionally replies in a thread.
+
+    When `from_proposal` (a queue card ts) is given, the target channel and draft
+    text are read from proposal_log.jsonl — so the caller never has to re-quote a
+    multi-line draft on the command line.
+    """
+    if from_proposal:
+        rec = _find_proposal(from_proposal)
+        if not rec:
+            print(f"ERROR: no proposal found for card ts {from_proposal}.", file=sys.stderr)
+            sys.exit(1)
+        channel = channel or rec.get("slack_target_channel", "")
+        thread_ts = thread_ts or rec.get("slack_target_thread") or None
+        if not message or not message.strip():
+            message = rec.get("draft_reply", "")
+    if not message or not message.strip():
+        print("ERROR: empty message — refusing to send.", file=sys.stderr)
+        sys.exit(1)
+    channel = (channel or '').strip()
+    if not channel:
+        print("ERROR: --channel (target conversation id) is required.", file=sys.stderr)
+        sys.exit(1)
+    user = _get_client()  # user token → posts as Brian
+    kwargs = {'channel': channel, 'text': message, 'unfurl_links': False, 'unfurl_media': False}
+    if thread_ts:
+        kwargs['thread_ts'] = thread_ts
+    try:
+        resp = user.chat_postMessage(**kwargs)
+        loc = f"{channel}" + (f" thread {thread_ts}" if thread_ts else "")
+        print(f"SENT as owner to {loc} (ts={resp.get('ts', '')})")
+    except Exception as e:
+        print(f"ERROR: send-as-owner to {channel} failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -316,7 +396,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python slack_tool.py <command> [args]")
-        print("Commands: search, lookup, send, allowlist")
+        print("Commands: search, lookup, send, send-as-owner, allowlist")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -357,6 +437,27 @@ def main():
             print('Usage: python slack_tool.py allowlist <add|remove|list> [user-id-or-email]', file=sys.stderr)
             sys.exit(1)
         cmd_allowlist(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
+
+    elif command == 'send-as-owner':
+        # python slack_tool.py send-as-owner --from-proposal <card_ts>
+        # python slack_tool.py send-as-owner --channel <id> [--thread <ts>] "message text"
+        channel = thread = msg = from_proposal = None
+        i = 2
+        while i < len(sys.argv):
+            a = sys.argv[i]
+            if a == '--channel' and i + 1 < len(sys.argv):
+                channel = sys.argv[i + 1]; i += 2
+            elif a == '--thread' and i + 1 < len(sys.argv):
+                thread = sys.argv[i + 1]; i += 2
+            elif a == '--from-proposal' and i + 1 < len(sys.argv):
+                from_proposal = sys.argv[i + 1]; i += 2
+            else:
+                msg = sys.argv[i]; i += 1
+        if not from_proposal and (not channel or not msg):
+            print('Usage: python slack_tool.py send-as-owner --from-proposal <card_ts>', file=sys.stderr)
+            print('   or: python slack_tool.py send-as-owner --channel <id> [--thread <ts>] "message text"', file=sys.stderr)
+            sys.exit(1)
+        cmd_send_as_owner(channel, msg, thread, from_proposal)
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

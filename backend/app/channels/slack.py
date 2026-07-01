@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 import os
 import re
@@ -58,6 +59,9 @@ class SlackChannel(Channel):
         # Entries are TTL-pruned after 10 minutes to prevent leaks.
         self._progress_message_ts: dict[str, tuple[str, float]] = {}
         self._PROGRESS_TTL = 600  # seconds
+        # Approval queue: dedup reactions so an added/removed/re-added emoji on a
+        # proposal card only fires the action once. Key: "<msg_ts>:<approve|reject>".
+        self._handled_reactions: set[str] = set()
         # Assistant threads: track threads opened via the Slack assistant panel
         # so we can use assistant-specific UX (setStatus, suggested prompts, titles).
         # Persisted to disk so they survive gateway restarts.
@@ -549,6 +553,8 @@ class SlackChannel(Channel):
             # Handle message events (DM or @mention)
             if etype in ("message", "app_mention"):
                 self._handle_message_event(event)
+            elif etype == "reaction_added":
+                self._handle_reaction_event(event)
             elif etype == "assistant_thread_started":
                 self._handle_assistant_thread_started(event)
             elif etype == "assistant_thread_context_changed":
@@ -556,6 +562,164 @@ class SlackChannel(Channel):
 
         except Exception:
             logger.exception("Error processing Slack event")
+
+    # -- Approval queue (reaction-driven) ----------------------------------
+
+    def _queue_channel(self) -> str:
+        return os.environ.get("ANALYST_QUEUE_CHANNEL_ID", "")
+
+    def _proposal_log_path(self) -> Path:
+        # slack.py lives at backend/app/channels/slack.py → backend/.deer-flow/...
+        return Path(__file__).resolve().parents[2] / ".deer-flow" / "proposal_log.jsonl"
+
+    def _handle_reaction_event(self, event: dict) -> None:
+        """Drive the approval queue from the owner's emoji reactions.
+
+        :+1:/:white_check_mark: on a proposal card → execute the proposed action.
+        :-1:/:x: → reject and log. Only the owner's reactions in the configured
+        queue channel are honored; everything else is ignored. Inert unless
+        ANALYST_QUEUE_CHANNEL_ID is set and the bot has reactions:read +
+        the reaction_added event subscription.
+        """
+        queue_channel = self._queue_channel()
+        if not queue_channel:
+            return
+        if self._owner_user_id and event.get("user", "") != self._owner_user_id:
+            return
+        item = event.get("item", {})
+        if item.get("type") != "message":
+            return
+        channel_id = item.get("channel", "")
+        msg_ts = item.get("ts", "")
+        if channel_id != queue_channel or not msg_ts:
+            return
+
+        # Normalize skin-tone variants like "+1::skin-tone-3".
+        reaction = (event.get("reaction") or "").split("::", 1)[0].lower()
+        approve = reaction in ("+1", "thumbsup", "white_check_mark", "heavy_check_mark")
+        reject = reaction in ("-1", "thumbsdown", "x", "no_entry")
+        if not (approve or reject):
+            return
+
+        dedup_key = f"{msg_ts}:{'approve' if approve else 'reject'}"
+        if dedup_key in self._handled_reactions:
+            return
+
+        proposal = self._lookup_proposal(channel_id, msg_ts)
+        if not proposal:
+            logger.info("[Queue] reaction %s on %s/%s — no matching proposal in log", reaction, channel_id, msg_ts)
+            return
+
+        self._handled_reactions.add(dedup_key)
+        if approve:
+            self._approve_proposal(proposal, channel_id, msg_ts)
+        else:
+            self._reject_proposal(proposal, channel_id, msg_ts)
+
+    def _lookup_proposal(self, channel_id: str, msg_ts: str) -> dict | None:
+        """Find the proposal_log record for a queue card by (channel, ts)."""
+        path = self._proposal_log_path()
+        if not path.exists():
+            return None
+        try:
+            match = None
+            with path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except Exception:
+                        continue
+                    if rec.get("slack_ts") == msg_ts and rec.get("slack_channel") == channel_id:
+                        match = rec  # last write wins
+            return match
+        except Exception as exc:
+            logger.warning("[Queue] failed reading proposal log: %s", exc)
+            return None
+
+    def _record_outcome(self, proposal: dict, outcome: str) -> None:
+        """Append a reaction-sourced outcome to proposal_outcomes.jsonl.
+
+        Keyed by proposal_slack_ts so the nightly proposal_learner skips
+        re-labeling it from the thread and the signal is retained for synthesis.
+        """
+        try:
+            from datetime import datetime, timezone
+            path = self._proposal_log_path().parent / "proposal_outcomes.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            entry = {
+                "proposal_slack_ts": proposal.get("slack_ts"),
+                "labeled_at": datetime.now(timezone.utc).isoformat(),
+                "outcome": outcome,            # 'approved' | 'rejected'
+                "source": "reaction",
+                "brian_reply": "",
+                "brian_reply_ts": "",
+                "agent_response": "",
+                "lag_seconds": 0,
+                "label_reasoning": f"Owner reaction in approval queue ({outcome}).",
+            }
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as exc:
+            logger.warning("[Queue] failed recording outcome: %s", exc)
+
+    def _post_thread(self, channel_id: str, thread_ts: str, text: str) -> None:
+        if not self._web_client:
+            return
+        try:
+            self._web_client.chat_postMessage(channel=channel_id, text=text, thread_ts=thread_ts)
+        except Exception as exc:
+            logger.warning("[Queue] thread post failed: %s", exc)
+
+    def _approve_proposal(self, proposal: dict, channel_id: str, msg_ts: str) -> None:
+        action = (proposal.get("proposed_action") or "").strip()
+        logger.info("[Queue] APPROVED ts=%s category=%s", msg_ts, proposal.get("category", ""))
+        self._record_outcome(proposal, "approved")
+        self._post_thread(channel_id, msg_ts, ":arrow_forward: *Approved* — executing…")
+
+        lines = [
+            "APPROVED ACTION from the analyst approval queue. Carry this out now:",
+            "",
+            action or "(no concrete action was named — infer the right next step from the context below)",
+            "",
+            "Context (the inbound email that triggered this):",
+            f"- From: {proposal.get('sender_display', '')} <{proposal.get('sender_email', '')}>",
+            f"- Subject: {proposal.get('subject', '')}",
+            f"- Summary: {proposal.get('summary', '')}",
+        ]
+        gid = proposal.get("gmail_msg_id")
+        if gid:
+            lines.append(f"- gmail_msg_id: {gid} (read the full email thread with the Gmail tool before acting)")
+        lines.append("")
+        lines.append(
+            "If this requires sending an external email, create a Gmail DRAFT and post it in this "
+            "thread for a final check rather than sending it outright. For reversible/internal steps "
+            "(pull data, build a file, internal forward, calendar hold), just do them and report back here."
+        )
+        text = "\n".join(lines)
+
+        inbound = self._make_inbound(
+            chat_id=channel_id,
+            user_id=self._owner_user_id or "",
+            text=text,
+            msg_type=InboundMessageType.CHAT,
+            thread_ts=msg_ts,
+            metadata={"source": "approval_queue", "proposal_ts": msg_ts},
+        )
+        inbound.topic_id = msg_ts
+
+        if self._loop and self._loop.is_running():
+            self._send_running_reply(channel_id, msg_ts)
+            asyncio.run_coroutine_threadsafe(self.bus.publish_inbound(inbound), self._loop)
+        else:
+            logger.warning("[Queue] event loop not running; cannot dispatch approval for ts=%s", msg_ts)
+
+    def _reject_proposal(self, proposal: dict, channel_id: str, msg_ts: str) -> None:
+        logger.info("[Queue] REJECTED ts=%s category=%s", msg_ts, proposal.get("category", ""))
+        self._record_outcome(proposal, "rejected")
+        self._post_thread(channel_id, msg_ts, ":no_entry_sign: *Rejected* — no action taken. Logged for learning.")
 
     @staticmethod
     def _clean_slack_text(text: str) -> str:

@@ -8,18 +8,20 @@ token_usage:
 # ── Models ─────────────────────────────────────────────────────────
 models:
   - name: claude-sonnet
-    display_name: Claude Sonnet 4.6
+    display_name: Claude Sonnet 5
     use: langchain_anthropic:ChatAnthropic
-    model: claude-sonnet-4-6
+    model: claude-sonnet-5
     api_key: $ANTHROPIC_API_KEY
-    fallback: claude-opus   # step down to Opus 4.8 if Sonnet fails
+    fallback: claude-opus   # step down to Opus 4.8 if Sonnet 5 fails
     max_tokens: 64000
-    temperature: 1.0
+    # Sonnet 5 (Mythos/5 family) is adaptive-thinking ONLY: {type: enabled,
+    # budget_tokens} 400s ("use thinking.type.adaptive"), and sampling params
+    # (temperature/top_p/top_k) are rejected alongside adaptive thinking — same
+    # constraints as Opus 4.8. Verified against the API 2026-06-30.
     supports_vision: true
     supports_thinking: true
     thinking:
-      type: enabled
-      budget_tokens: 10000
+      type: adaptive
 
   # Fable 5 access was revoked on this API key (2026-06-12): Anthropic returns
   # 404 not_found_error "Claude Fable 5 is not available. Please use Opus 4.8."
@@ -39,11 +41,11 @@ models:
     thinking:
       type: adaptive
 
-# claude-sonnet = general / conversational tasks
-# claude-opus  = coding and reasoning tasks
+# All roles run Sonnet 5 (claude-sonnet). Opus 4.8 (claude-opus) is retained
+# only as the resilience fallback if Sonnet 5 errors.
 basic_model: claude-sonnet
-reasoning_model: claude-opus
-coding_model: claude-opus
+reasoning_model: claude-sonnet
+coding_model: claude-sonnet
 
 # ── Tools ──────────────────────────────────────────────────────────
 tool_groups:

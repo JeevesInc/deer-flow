@@ -86,6 +86,36 @@ def _create_summarization_middleware() -> SummarizationMiddleware | None:
         # Falls back to default model if not explicitly specified
         model = create_chat_model(thinking_enabled=False)
 
+    # SummarizationMiddleware raises at construction time ("Model profile
+    # information is required to use fractional token limits") whenever a
+    # `fraction` trigger/keep is configured but the model exposes no
+    # profile["max_input_tokens"]. langchain's model-profiles registry has no
+    # entry for the current Claude ids (claude-sonnet-5, claude-opus-4-8), so
+    # ChatAnthropic.profile is {} — which means the fraction: 0.8 trigger in
+    # config.yaml made EVERY agent run fail with an "internal error". Inject a
+    # max_input_tokens so the fraction resolves. Claude's standard context
+    # window is 200K input tokens (the [1m] variant is a separate beta id).
+    def _uses_fraction(cs) -> bool:
+        if cs is None:
+            return False
+        if isinstance(cs, list):
+            return any(item.type == "fraction" for item in cs)
+        return cs.type == "fraction"
+
+    if _uses_fraction(config.trigger) or _uses_fraction(config.keep):
+        try:
+            profile = dict(getattr(model, "profile", None) or {})
+            if not isinstance(profile.get("max_input_tokens"), int):
+                profile["max_input_tokens"] = 200000
+                model.profile = profile
+                logger.info(
+                    "Injected max_input_tokens=200000 into summarization model profile "
+                    "(model id %r has no registry profile) so the fractional trigger resolves.",
+                    getattr(model, "model", "?"),
+                )
+        except Exception:  # pragma: no cover - defensive
+            logger.warning("Could not inject max_input_tokens into summarization model profile", exc_info=True)
+
     # Prepare kwargs
     kwargs = {
         "model": model,

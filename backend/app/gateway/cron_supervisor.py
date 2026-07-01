@@ -170,6 +170,9 @@ def start_crons() -> None:
     _load_and_start("checkpoint-cleanup", backend_dir / "scripts" / "checkpoint_cleanup_cron.py")
     _load_and_start("idle-thread-cleanup", backend_dir / "scripts" / "idle_thread_cleanup_cron.py")
     _load_and_start("slack-dm-monitor", skills_dir / "slack-search" / "slack_dm_monitor_cron.py")
+    # owner-slack-draft: drafts replies to DMs BRIAN receives (user token) and posts
+    # them to the approval queue channel. 30-min settle + skip-if-replied keep it quiet.
+    _load_and_start("owner-slack-draft", skills_dir / "slack-search" / "owner_slack_draft_cron.py")
     _load_and_start("bot-dm-history", backend_dir / "scripts" / "bot_dm_history_cron.py")
     _load_and_start("cap-markets-refresh", backend_dir / "scripts" / "cap_markets_metrics_refresh.py")
     _load_and_start("cico-cash", backend_dir / "scripts" / "cico_cash_extract.py")
@@ -180,6 +183,10 @@ def start_crons() -> None:
     _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
     _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
+    # gmail-watch-renew: Gmail watch expires after 7 days; without renewal,
+    # Pub/Sub silently stops and inbound-email proposals die (33-day outage
+    # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.
+    _load_and_start("gmail-watch-renew", backend_dir / "scripts" / "gmail_watch_renew_cron.py")
     # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
     # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
     # top level executed the full dashboard render + 3 synchronous Redshift

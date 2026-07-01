@@ -48,7 +48,7 @@ CHECK_INTERVAL = int(os.environ.get('DOSSIER_CRON_INTERVAL', '600'))  # 10 min
 LOOKAHEAD_MIN = 15  # Look for events starting in 15-25 min
 LOOKAHEAD_MAX = 25
 MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
-SYNTHESIS_MODEL = os.environ.get('DOSSIER_SYNTHESIS_MODEL', 'claude-sonnet-4-6')
+SYNTHESIS_MODEL = os.environ.get('DOSSIER_SYNTHESIS_MODEL', 'claude-sonnet-5')
 SYNTHESIS_MAX_RETRIES = 3
 ALERT_FAILURE_THRESHOLD = 3  # consecutive failures before alerting
 

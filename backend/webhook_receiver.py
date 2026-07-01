@@ -76,10 +76,15 @@ ASSISTANT_ID = 'lead_agent'
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
 SLACK_OWNER_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U09PQTZ5DHC')
+# Approval queue: when set, actionable-email proposals post to this channel
+# (e.g. #analyst-queue) instead of DMing the owner. Falls back to the owner DM
+# when unset, so the pipeline is unchanged until the channel is configured.
+ANALYST_QUEUE_CHANNEL_ID = os.environ.get('ANALYST_QUEUE_CHANNEL_ID', '')
 SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET', '')
 PUBSUB_VERIFICATION_TOKEN = os.environ.get('PUBSUB_VERIFICATION_TOKEN', '')
 MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
-CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001'  # fast + cheap for classification
+CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001'  # Haiku — fast/cheap per-message classification
+DRAFTER_MODEL = 'claude-sonnet-5'     # drafting inbound replies
 RUN_TIMEOUT = 20 * 60  # seconds
 
 # Proposal feedback loop — paths and config
@@ -277,6 +282,62 @@ def _default_classification(reason: str) -> dict:
     }
 
 
+def draft_reply(sender: str, subject: str, body: str, summary: str,
+                proposed_action: str, source: str = 'email') -> str:
+    """Draft a reply in Brian's voice for an inbound message that warrants one.
+
+    Returns the draft body text, or '' if a written reply isn't the right next
+    step (e.g. the action is to pull data, review internally, or schedule) or on
+    any error. Used for both inbound email and inbound Slack so the queue card
+    can show a ready-to-send draft Brian approves/edits inline.
+    """
+    if not ANTHROPIC_API_KEY:
+        return ''
+    channel_hint = (
+        "This is a SLACK message — keep the reply short, conversational, and Slack-appropriate "
+        "(no email greeting/sign-off)." if source == 'slack' else
+        "This is an EMAIL — write just the reply body: no subject line, no signature block."
+    )
+    try:
+        client = Anthropic(api_key=ANTHROPIC_API_KEY)
+        prompt = f"""{ANALYST_CONTEXT}
+
+You are drafting a reply ON BEHALF OF Brian Mauck to the message below.
+
+Only draft a reply if a written response FROM BRIAN is genuinely the right next step
+(i.e. the proposed action is to reply / respond / confirm / answer / acknowledge). If the
+right next step is something else — pull data, review a document internally, schedule,
+forward to counsel, or nothing — respond with exactly: NONE
+
+Write in Brian's voice: concise, professional, warm but direct, no filler. {channel_hint}
+Do NOT invent facts, numbers, dates, or commitments not supported by the message/context.
+Where you'd need info Brian hasn't given, leave a clearly bracketed placeholder like
+[confirm Aforo amount]. Keep it tight.
+
+## Message being replied to
+From: {sender}
+Subject: {subject}
+Body:
+{(body or '')[:3000]}
+
+## What Brian intends to do
+{proposed_action}
+
+Respond with ONLY the draft reply text, or exactly NONE."""
+        resp = client.messages.create(
+            model=DRAFTER_MODEL,
+            max_tokens=700,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        text = resp.content[0].text.strip()
+        if not text or text.upper().startswith('NONE') or len(text) < 5:
+            return ''
+        return text
+    except Exception as e:
+        log.warning('draft_reply failed: %s', e)
+        return ''
+
+
 # ---------------------------------------------------------------------------
 # Proposal feedback loop — logging + mem0 pattern injection
 # ---------------------------------------------------------------------------
@@ -312,6 +373,7 @@ def _log_proposal(classification: dict, from_header: str, subject: str,
         'actionable': bool(classification.get('actionable')),
         'summary': classification.get('summary', ''),
         'proposed_action': classification.get('proposed_action', ''),
+        'draft_reply': classification.get('draft_reply', ''),
         'reasoning': classification.get('reasoning', ''),
     }
 
@@ -432,16 +494,26 @@ then produce the output. Post a summary to Slack when done.
 # Slack notifications
 # ---------------------------------------------------------------------------
 
-def _post_slack(text: str, blocks: list | None = None) -> dict:
-    """Post to Brian's DM. Returns {channel, ts} on success, empty dict on failure."""
-    if not SLACK_BOT_TOKEN or not SLACK_OWNER_USER_ID:
+def _post_slack(text: str, blocks: list | None = None, channel: str | None = None) -> dict:
+    """Post a Slack message. Returns {channel, ts} on success, empty dict on failure.
+
+    If ``channel`` is given (e.g. the approval queue channel), posts there.
+    Otherwise opens and posts to the owner's DM (default for notifications).
+    """
+    if not SLACK_BOT_TOKEN:
         log.warning('Slack not configured')
         return {}
     try:
         from slack_sdk import WebClient
         client = WebClient(token=SLACK_BOT_TOKEN)
-        dm = client.conversations_open(users=[SLACK_OWNER_USER_ID])
-        channel_id = dm['channel']['id']
+        if channel:
+            channel_id = channel
+        else:
+            if not SLACK_OWNER_USER_ID:
+                log.warning('Slack owner not configured')
+                return {}
+            dm = client.conversations_open(users=[SLACK_OWNER_USER_ID])
+            channel_id = dm['channel']['id']
         resp = client.chat_postMessage(channel=channel_id, text=text, blocks=blocks)
         return {'channel': channel_id, 'ts': resp.get('ts', '')}
     except Exception as e:
@@ -503,12 +575,24 @@ def _post_action_proposal(from_header: str, subject: str, classification: dict,
         lines.append("*Proposed action:* _(classifier could not name a concrete step — reply with direction)_")
     if reasoning and not proposed_action:
         lines.append(f"_Why surfaced:_ {reasoning}")
+
+    draft = classification.get('draft_reply', '').strip()
+    if draft:
+        lines.append("")
+        lines.append("*Draft reply* (review before it goes out):")
+        lines.append("```")
+        lines.append(draft)
+        lines.append("```")
+
     lines.append("")
-    lines.append("_Reply in thread to direct the agent (e.g. \"go\", \"draft the reply\", \"not now\")._")
+    if draft:
+        lines.append("_Reply in thread to direct me — *send it* to send as-is, or paste your edits. (:+1:/:-1: also work once enabled.)_")
+    else:
+        lines.append("_Reply in thread to direct me (e.g. \"go\", \"draft a reply\", \"not now\")._")
     if gmail_msg_id:
         lines.append(f"_gmail_msg_id: {gmail_msg_id}_")
 
-    return _post_slack("\n".join(lines))
+    return _post_slack("\n".join(lines), channel=ANALYST_QUEUE_CHANNEL_ID or None)
 
 
 # ---------------------------------------------------------------------------
@@ -710,6 +794,14 @@ def _handle_gmail_message(msg: dict) -> None:
         log.info('Non-actionable, no alert: %s | %s',
                  classification.get('action_type'), classification.get('reasoning', '')[:80])
         return
+
+    # Proactively draft a reply (when a written response is the right move) so Brian
+    # can approve/edit inline without a round-trip. Empty string when N/A.
+    draft = draft_reply(from_header, subject, body_text or snippet,
+                        classification.get('summary', ''),
+                        classification.get('proposed_action', ''), source='email')
+    if draft:
+        classification['draft_reply'] = draft
 
     # Actionable: post a PROPOSAL to Slack so Brian can approve/redirect before any dispatch.
     # No auto-dispatch — the agent runs only when Brian replies in the proposal thread.

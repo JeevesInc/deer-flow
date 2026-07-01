@@ -39,9 +39,20 @@ python /mnt/skills/custom/slack-search/slack_tool.py send shalom@tryjeeves.com "
 ```
 Sends a DM **as the bot's identity** (deerflow_analyst), not as Brian. The recipient is either a Slack user_id (UXXX/WXXX) or an email — emails are auto-resolved via `users.lookupByEmail`. Every send appends a `[Slack outbound]` line to `bot_dm_history.log` for the owner's audit dashboard, so you do NOT need to write any ad-hoc Python to call `chat_postMessage` directly — that approach bypasses the audit trail.
 
+### Send a reply AS Brian (approval queue)
+```bash
+# Approve a drafted reply by its queue-card ts (reads target + draft from the proposal log):
+python /mnt/skills/custom/slack-search/slack_tool.py send-as-owner --from-proposal 1782845760.433329
+# Or send explicit text as Brian to a conversation:
+python /mnt/skills/custom/slack-search/slack_tool.py send-as-owner --channel D0123ABCD "Sounds good — Friday works."
+```
+Sends **as Brian's own identity** (user token), not the bot. This is how the analyst executes an approved Slack reply that the `owner-slack-draft` cron drafted.
+
+**Approval-queue convention:** the cron posts reply-draft cards to the pool channel; each card carries its own approval one-liner (`send-as-owner --from-proposal <ts>`). When Brian replies **"send it"** (or equivalent) in a card's thread, run that one-liner to send the draft verbatim as him. If he gives edits instead, compose the revised reply and send with `send-as-owner --channel <target> "<revised text>"` (the target id is in the card footer). Only ever send after Brian's explicit approval in the thread.
+
 ## Rules
 
-- Search and lookup use the **user token** (xoxp); send uses the **bot token** (xoxb).
+- Search and lookup use the **user token** (xoxp); send uses the **bot token** (xoxb); **send-as-owner** uses the user token to post as Brian.
 - Always try `lookup` first if you need to search by a person's name and only have their email.
 - Slack search syntax supports: `from:`, `to:`, `in:`, `has:`, `before:`, `after:`, `during:`, and boolean operators. Results are sorted newest-first by default.
 - **Do not write your own `chat_postMessage` scripts.** Always use `slack_tool.py send` — it logs every send to the owner's audit log. Ad-hoc Python skips the log and makes the dashboard miss real activity.

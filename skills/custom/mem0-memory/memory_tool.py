@@ -29,7 +29,7 @@ CONFIG = {
     "llm": {
         "provider": "anthropic",
         "config": {
-            "model": "claude-haiku-4-5",
+            "model": "claude-haiku-4-5-20251001",
             "temperature": 0.1,
             "max_tokens": 2000,
         }

@@ -823,7 +823,7 @@ def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
             if not last_history_id:
                 # First push ever: anchor and start from here.
                 if history_id:
-                    state['last_history_id'] = history_id
+                    state['last_history_id'] = _as_int_history_id(history_id)
                     _save_gmail_state(state)
                 return []
 
@@ -836,7 +836,7 @@ def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
                     log.error('Gmail history 404 (start id too old) — re-anchoring to %s; '
                               'messages in the gap were NOT classified: %s', history_id, e)
                     if history_id:
-                        state['last_history_id'] = history_id
+                        state['last_history_id'] = _as_int_history_id(history_id)
                         _save_gmail_state(state)
                 else:
                     log.warning('Gmail history listing failed — NOT advancing '
@@ -862,13 +862,23 @@ def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
 
             # Listing succeeded — safe to advance past this window (failed
             # individual messages live on in pending_retry).
-            state['last_history_id'] = latest_hid or history_id or last_history_id
+            state['last_history_id'] = _as_int_history_id(latest_hid or history_id or last_history_id)
             _save_gmail_state(state)
             return new_messages
 
         except Exception as e:
             log.error('_fetch_new_gmail_messages failed: %s', e)
             return []
+
+
+def _as_int_history_id(val):
+    """Gmail returns historyId as a STRING in history.list responses but a
+    number in push notifications; the state file must hold one type (int) or
+    downstream comparisons break (the 2026-07-02 watch-renewal str>int bug)."""
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return val
 
 
 def _mark_gmail_seen(msg_id: str) -> None:

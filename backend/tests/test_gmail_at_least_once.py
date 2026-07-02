@@ -153,7 +153,7 @@ def test_fetch_advances_pointer_on_success(state_path, monkeypatch):
     msgs = wr._fetch_new_gmail_messages("850")
     # "a" already seen -> only "b" fetched; pointer -> response historyId.
     assert [m["meta"]["id"] for m in msgs] == ["b"]
-    assert _state(state_path)["last_history_id"] == "900"
+    assert _state(state_path)["last_history_id"] == 900
 
 
 def test_transient_listing_failure_keeps_pointer(state_path, monkeypatch):
@@ -171,7 +171,7 @@ def test_404_too_old_reanchors(state_path, monkeypatch):
     fake = FakeGmail(list_error=RuntimeError("HttpError 404: history not found"))
     monkeypatch.setattr(wr, "_get_gmail_service", lambda: fake)
     assert wr._fetch_new_gmail_messages("850") == []
-    assert _state(state_path)["last_history_id"] == "850"
+    assert _state(state_path)["last_history_id"] == 850
 
 
 def test_per_message_fetch_failure_goes_to_pending(state_path, monkeypatch):
@@ -184,13 +184,13 @@ def test_per_message_fetch_failure_goes_to_pending(state_path, monkeypatch):
     assert [m["meta"]["id"] for m in msgs] == ["good"]
     s = _state(state_path)
     assert [p["id"] for p in s["pending_retry"]] == ["flaky"]
-    assert s["last_history_id"] == "900"  # listing succeeded -> advance
+    assert s["last_history_id"] == 900  # listing succeeded -> advance
 
 
 def test_first_push_anchors_without_fetch(state_path, monkeypatch):
     monkeypatch.setattr(wr, "_get_gmail_service", lambda: FakeGmail())
     assert wr._fetch_new_gmail_messages("500") == []
-    assert _state(state_path)["last_history_id"] == "500"
+    assert _state(state_path)["last_history_id"] == 500
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +206,40 @@ def test_sweep_retries_and_marks_seen(state_path, monkeypatch):
     s = _state(state_path)
     assert "r1" in s["seen_ids"]
     assert s["pending_retry"] == []
+
+
+def test_history_id_stored_as_int_even_when_api_returns_string(state_path, monkeypatch):
+    """Gmail's history.list returns historyId as a STRING; storing it verbatim
+    broke the watch-renewal cron with str>int (2026-07-02 incident)."""
+    state_path.write_text(json.dumps({"last_history_id": 700, "seen_ids": [],
+                                      "pending_retry": []}))
+    fake = FakeGmail(pages=[_page(["a"], hid="900")])  # string hid, like the real API
+    monkeypatch.setattr(wr, "_get_gmail_service", lambda: fake)
+    wr._fetch_new_gmail_messages("850")
+    assert _state(state_path)["last_history_id"] == 900  # int, not "900"
+
+
+def test_watch_seed_survives_string_state(tmp_path):
+    """Renewal must not die when the state file holds a string history id."""
+    import setup_gmail_watch as sgw
+    p = tmp_path / "state.json"
+    p.write_text(json.dumps({"last_history_id": "5851800", "seen_ids": []}))
+    # New watch id is AHEAD of stored -> keep the stored (older) pointer so the
+    # gap still gets fetched; crucially: no str>int TypeError.
+    assert sgw.seed_state_pointer(p, 5851900) is False
+    assert json.loads(p.read_text())["last_history_id"] == "5851800"
+
+
+def test_watch_seed_reseeds_on_rewind_and_missing(tmp_path):
+    import setup_gmail_watch as sgw
+    p = tmp_path / "state.json"
+    # Missing state -> seed
+    assert sgw.seed_state_pointer(p, 100) is True
+    assert json.loads(p.read_text())["last_history_id"] == 100
+    # Stored ahead of the fresh watch (Gmail reset / new mailbox) -> reseed
+    p.write_text(json.dumps({"last_history_id": "999999", "seen_ids": []}))
+    assert sgw.seed_state_pointer(p, 500) is True
+    assert json.loads(p.read_text())["last_history_id"] == 500
 
 
 def test_sweep_gives_up_after_max_attempts(state_path, monkeypatch):

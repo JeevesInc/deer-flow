@@ -40,6 +40,34 @@ if _shared.exists():
     except ImportError:
         pass
 
+def seed_state_pointer(state_path: Path, history_id: int) -> bool:
+    """Seed/repair the webhook state's last_history_id from a fresh watch.
+
+    Only overwrites when missing or REWINDING (fresh watch after a gap).
+    The state file may hold the id as a STRING — Gmail's history.list returns
+    historyId as a string and older receiver builds stored it verbatim — so
+    coerce before comparing, or renewal dies on str>int (2026-07-02 incident:
+    the watch-renew cron alerted on every gateway start).
+    """
+    import json
+    existing = {}
+    if state_path.exists():
+        try:
+            existing = json.loads(state_path.read_text())
+        except Exception:
+            existing = {}
+    try:
+        prior_hid = int(existing.get('last_history_id') or 0)
+    except (TypeError, ValueError):
+        prior_hid = 0
+    if not prior_hid or prior_hid > history_id:
+        existing['last_history_id'] = int(history_id)
+        existing.setdefault('seen_ids', [])
+        state_path.write_text(json.dumps(existing, indent=2))
+        return True
+    return False
+
+
 def watch_gmail(topic_name: str, label_ids: list[str] = None):
     import json
     from google_auth import get_credentials
@@ -72,17 +100,7 @@ def watch_gmail(topic_name: str, label_ids: list[str] = None):
 
     # Seed the webhook's state file so the first push has a valid history starting point.
     state_path = Path(__file__).resolve().parent / '.webhook_gmail_state.json'
-    existing = {}
-    if state_path.exists():
-        try:
-            existing = json.loads(state_path.read_text())
-        except Exception:
-            existing = {}
-    # Only overwrite last_history_id if missing or rewinding (e.g. fresh watch).
-    if not existing.get('last_history_id') or existing.get('last_history_id', 0) > history_id:
-        existing['last_history_id'] = history_id
-        existing.setdefault('seen_ids', [])
-        state_path.write_text(json.dumps(existing, indent=2))
+    if seed_state_pointer(state_path, history_id):
         print(f'  Wrote initial state to {state_path.name} (last_history_id={history_id})')
 
     print(f'\nRemember to re-run this before it expires (set a 6-day cron).')

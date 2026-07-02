@@ -31,6 +31,11 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
     def __init__(self, top_k: int = 10):
         super().__init__()
         self._top_k = top_k
+        # Per-run memoization: this middleware is rebuilt by the graph factory
+        # every run, so a plain instance cache never leaks across threads/runs.
+        # Within one run the query (latest human message) is constant across all
+        # tool-loop model calls, so we search mem0 once and reuse the injection.
+        self._injection_cache: dict[str, str | None] = {}
 
     def _get_latest_user_query(self, messages: list) -> str | None:
         """Extract the latest human message text from the request messages."""
@@ -48,12 +53,28 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                 return str(content).strip() or None
         return None
 
-    def _build_injection(self, query: str) -> str | None:
-        """Search mem0 and format results for injection."""
+    def _build_injection(self, query: str, min_score: float = 0.0) -> str | None:
+        """Search mem0 and format results for injection.
+
+        Results scoring below ``min_score`` are dropped (Mem-H1): mem0 search
+        always returns top_k rows however weak the match, so an ungated
+        injection pads every turn with off-topic memories.
+        """
         try:
             from deerflow.agents.memory.mem0_store import search_memories
 
             memories = search_memories(query, top_k=self._top_k)
+            if not memories:
+                return None
+
+            if min_score > 0:
+                kept = [m for m in memories
+                        if float(m.get("score", 0.0) or 0.0) >= min_score]
+                if len(kept) < len(memories):
+                    logger.info(
+                        "mem0 injection gate: kept %d/%d memories (min_score=%.2f)",
+                        len(kept), len(memories), min_score)
+                memories = kept
             if not memories:
                 return None
 
@@ -89,7 +110,11 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
         if not query:
             return request
 
-        injection = self._build_injection(query)
+        if query not in self._injection_cache:
+            raw = getattr(config, "mem0_min_injection_score", None)
+            min_score = float(raw) if isinstance(raw, (int, float)) else 0.0
+            self._injection_cache[query] = self._build_injection(query, min_score=min_score)
+        injection = self._injection_cache[query]
         if not injection:
             return request
 

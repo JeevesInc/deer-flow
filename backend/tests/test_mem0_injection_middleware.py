@@ -197,3 +197,81 @@ class TestMem0InjectionShortCircuits:
         request = _make_request([AIMessage(content="ai only")])
         out = mw._inject(request)
         assert out is request
+
+
+class TestMem0InjectionScoreGate:
+    """P2-2 (Mem-H1): per-turn injection is score-gated — mem0 search always
+    returns top_k rows however weak the match, so an ungated injection padded
+    every turn with off-topic memories."""
+
+    def _config_with_gate(self, min_score):
+        cfg = MagicMock()
+        cfg.enabled = True
+        cfg.injection_enabled = True
+        cfg.mem0_min_injection_score = min_score
+        return cfg
+
+    @patch("deerflow.agents.memory.mem0_store.search_memories")
+    @patch("deerflow.agents.middlewares.mem0_injection_middleware.get_memory_config")
+    def test_low_score_memories_filtered_out(self, mock_config, mock_search):
+        mock_config.return_value = self._config_with_gate(0.22)
+        mock_search.return_value = [
+            {"memory": "relevant fact", "score": 0.61},
+            {"memory": "off-topic noise", "score": 0.08},
+        ]
+
+        mw = Mem0InjectionMiddleware()
+        out = mw._inject(_make_request([HumanMessage(content="question")]))
+
+        flat = str(out.messages[0].content)
+        assert "relevant fact" in flat
+        assert "off-topic noise" not in flat
+
+    @patch("deerflow.agents.memory.mem0_store.search_memories")
+    @patch("deerflow.agents.middlewares.mem0_injection_middleware.get_memory_config")
+    def test_all_below_gate_means_no_injection(self, mock_config, mock_search):
+        mock_config.return_value = self._config_with_gate(0.22)
+        mock_search.return_value = [
+            {"memory": "noise 1", "score": 0.05},
+            {"memory": "noise 2", "score": 0.11},
+        ]
+
+        mw = Mem0InjectionMiddleware()
+        request = _make_request([HumanMessage(content="off-topic question")])
+        out = mw._inject(request)
+        assert out is request  # nothing injected at all
+
+    @patch("deerflow.agents.memory.mem0_store.search_memories")
+    @patch("deerflow.agents.middlewares.mem0_injection_middleware.get_memory_config")
+    def test_zero_gate_keeps_everything(self, mock_config, mock_search):
+        mock_config.return_value = self._config_with_gate(0.0)
+        mock_search.return_value = [
+            {"memory": "weak but kept", "score": 0.01},
+        ]
+
+        mw = Mem0InjectionMiddleware()
+        out = mw._inject(_make_request([HumanMessage(content="q")]))
+        assert "weak but kept" in str(out.messages[0].content)
+
+    @patch("deerflow.agents.memory.mem0_store.search_memories")
+    @patch("deerflow.agents.middlewares.mem0_injection_middleware.get_memory_config")
+    def test_missing_score_treated_as_zero(self, mock_config, mock_search):
+        mock_config.return_value = self._config_with_gate(0.22)
+        mock_search.return_value = [{"memory": "scoreless"}]
+
+        mw = Mem0InjectionMiddleware()
+        request = _make_request([HumanMessage(content="q")])
+        out = mw._inject(request)
+        assert out is request  # scoreless rows can't pass a positive gate
+
+
+def test_static_prompt_no_longer_searches_mem0():
+    """P2-2: the static system prompt block must not query mem0 — that made
+    every turn carry a second, topOfMind-queried top-10 on top of the
+    per-turn injection (double-injection, Mem-H1)."""
+    from pathlib import Path
+
+    prompt_py = (Path(__file__).resolve().parent.parent / "packages" / "harness"
+                 / "deerflow" / "agents" / "lead_agent" / "prompt.py")
+    src = prompt_py.read_text(encoding="utf-8")
+    assert "search_memories" not in src

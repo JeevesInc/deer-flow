@@ -288,8 +288,10 @@ def _get_memory_context(agent_name: str | None = None) -> str:
     """Get memory context for injection into system prompt.
 
     Injects the slim profile (workContext, personalContext, topOfMind,
-    history summaries) from memory.json, plus the top mem0 memories
-    retrieved using the user's current priorities as the search query.
+    history summaries) from memory.json ONLY. mem0 memories are injected
+    per-turn by Mem0InjectionMiddleware, score-gated against the user's
+    actual message — the static topOfMind-queried block that used to live
+    here made every turn carry up to 20 overlapping memories (Mem-H1).
 
     Args:
         agent_name: If provided, loads per-agent memory. If None, loads global memory.
@@ -307,26 +309,9 @@ def _get_memory_context(agent_name: str | None = None) -> str:
 
         memory_data = get_memory_data(agent_name)
 
-        # Retrieve mem0 memories using topOfMind + workContext as search query
-        mem0_memories = []
-        try:
-            from deerflow.agents.memory.mem0_store import search_memories
-
-            # Build a query from the user's current focus areas
-            top_of_mind = memory_data.get("user", {}).get("topOfMind", {}).get("summary", "")
-            work_ctx = memory_data.get("user", {}).get("workContext", {}).get("summary", "")
-            query = f"{top_of_mind} {work_ctx}".strip()
-            if query:
-                mem0_memories = search_memories(query, top_k=10)
-                if mem0_memories:
-                    logger.info("mem0 retrieved %d memories for system prompt", len(mem0_memories))
-        except Exception as e:
-            logger.warning("mem0 search failed, continuing without: %s", e)
-
         memory_content = format_memory_for_injection(
             memory_data,
             max_tokens=config.max_injection_tokens,
-            mem0_memories=mem0_memories,
         )
 
         if not memory_content.strip():

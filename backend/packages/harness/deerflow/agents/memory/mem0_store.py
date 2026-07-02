@@ -35,6 +35,43 @@ MEM0_COLLECTION = "deerflow_memories"
 STRATEGIC_CONTEXT_USER_ID = "strategic-context"
 
 
+def build_mem0_config(api_key: str, qdrant_host: str, qdrant_port: int) -> dict:
+    """Build the mem0 config dict (pure — no I/O, unit-testable)."""
+    return {
+        "llm": {
+            "provider": "anthropic",
+            "config": {
+                "model": "claude-sonnet-5",
+                "api_key": api_key,
+                "max_tokens": 4096,
+                # mem0's BaseLlmConfig defaults temperature=0.1 and its
+                # Anthropic wrapper sends it unless explicitly None.
+                # claude-sonnet-5 rejects temperature outright (400
+                # "`temperature` is deprecated for this model"), which
+                # silently killed every fact extraction.
+                "temperature": None,
+            },
+        },
+        "embedder": {
+            "provider": "huggingface",
+            "config": {
+                "model": "sentence-transformers/all-MiniLM-L6-v2",
+                "embedding_dims": 384,
+            },
+        },
+        "vector_store": {
+            "provider": "qdrant",
+            "config": {
+                "collection_name": MEM0_COLLECTION,
+                "host": qdrant_host,
+                "port": qdrant_port,
+                "embedding_model_dims": 384,
+            },
+        },
+        "version": "v1.1",
+    }
+
+
 def get_mem0() -> Any:
     """Get or create the global mem0 Memory instance.
 
@@ -71,33 +108,7 @@ def get_mem0() -> Any:
         qdrant_host = os.environ.get("MEM0_QDRANT_HOST", "localhost")
         qdrant_port = int(os.environ.get("MEM0_QDRANT_PORT", "6333"))
 
-        config = {
-            "llm": {
-                "provider": "anthropic",
-                "config": {
-                    "model": "claude-sonnet-5",
-                    "api_key": api_key,
-                    "max_tokens": 4096,
-                },
-            },
-            "embedder": {
-                "provider": "huggingface",
-                "config": {
-                    "model": "sentence-transformers/all-MiniLM-L6-v2",
-                    "embedding_dims": 384,
-                },
-            },
-            "vector_store": {
-                "provider": "qdrant",
-                "config": {
-                    "collection_name": MEM0_COLLECTION,
-                    "host": qdrant_host,
-                    "port": qdrant_port,
-                    "embedding_model_dims": 384,
-                },
-            },
-            "version": "v1.1",
-        }
+        config = build_mem0_config(api_key, qdrant_host, qdrant_port)
 
         logger.info("Initializing mem0 with Qdrant server at %s:%s", qdrant_host, qdrant_port)
         _mem0_instance = Memory.from_config(config_dict=config)

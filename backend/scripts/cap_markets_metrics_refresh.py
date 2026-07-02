@@ -38,6 +38,18 @@ load_dotenv(BACKEND_DIR / ".env")
 # Allow imports from the BB skill (for redshift_util) and the capital-markets skill
 sys.path.insert(0, str(SKILLS_DIR / "custom" / "jeeves-borrowing-base"))
 sys.path.insert(0, str(SKILLS_DIR / "custom" / "jeeves-capital-markets"))
+sys.path.insert(0, str(SKILLS_DIR / "custom" / "_shared"))
+
+# Business config (facility sizes, FX fallbacks) — hot-reloads from
+# cap_markets_config.json; helpers fall back to baked defaults (P3-4).
+from cap_markets_config import facility_size_usd, fx_local_per_usd  # noqa: E402
+
+def _fallback_to_usd(amount: float, currency) -> float:
+    """Approximate conversion for glance-dashboard cash figures; unknown
+    currencies pass through unconverted (pre-existing behavior)."""
+    cur = "USD" if currency in ("USD", 840) else ("BRL" if currency == 6540 else str(currency))
+    rate = fx_local_per_usd(cur)
+    return float(amount) / rate if rate else float(amount)
 
 # OUTPUTS / WORKSPACE need to exist before importing dashboard_full_update —
 # the module uses them at import time. Point them at a scratch dir under
@@ -212,10 +224,9 @@ def _read_us_bridge(wb) -> dict:
         if advance is not None:              out["additional_advance"] = round(advance, 2)
         if excess_deficit is not None:       out["bb_excess_deficit"] = round(excess_deficit, 2)
         # The file's Facility Size cell reads $50M (template default) but
-        # the actual CIM Bridge facility has been upsized — hardcoded.
-        # If/when the template gets refreshed, remove this override.
-        BRIDGE_FACILITY_SIZE_OVERRIDE = 75_000_000.0
-        out["facility_size"] = BRIDGE_FACILITY_SIZE_OVERRIDE
+        # the actual CIM Bridge facility has been upsized — override from
+        # cap_markets_config.json (hot-reloads; edit there on any resize).
+        out["facility_size"] = facility_size_usd("us_bridge") or 75_000_000.0
         if facility_size is not None:        out["facility_size_template"] = round(facility_size, 2)
 
         # Bridge concentration covenants — find the "Excess Concentration"
@@ -467,18 +478,10 @@ def _read_us_bridge(wb) -> dict:
             country, _acct, currency, bal = row[0], row[1], row[2], row[3]
             if not isinstance(bal, (int, float)) or bal <= 0:
                 continue
-            # Approximate FX — for a glance-dashboard only. Cash is small
-            # relative to receivables (<$3M typically for Bridge).
-            if currency in ("USD", 840):
-                bal_usd = float(bal)
-            elif currency == "MXN":
-                bal_usd = float(bal) / 17.35
-            elif currency == "COP":
-                bal_usd = float(bal) / 4100.0
-            elif currency in ("BRL", 6540):
-                bal_usd = float(bal) / 5.5
-            else:
-                bal_usd = float(bal)
+            # Approximate FX (cap_markets_config.json fallbacks) — for a
+            # glance-dashboard only. Cash is small relative to receivables
+            # (<$3M typically for Bridge).
+            bal_usd = _fallback_to_usd(bal, currency)
             label = str(country) if country else "Unknown"
             bank_balances[label] = bank_balances.get(label, 0.0) + bal_usd
         out["bank_balances_by_country"] = {k: round(v, 2) for k, v in bank_balances.items()}
@@ -531,11 +534,10 @@ def _read_us_bridge(wb) -> dict:
         out["concentration_breaches"] = {k: round(v, 2) for k, v in breaches.items()}
         out["concentration_breaches_total"] = round(sum(breaches.values()), 2)
 
-        # Bridge facility size: $75M (CIM contractual ceiling).
-        # If Summary's canonical BB was read above, use that. Otherwise
-        # fall back to gross_eligible × 0.85.
-        BRIDGE_FACILITY_SIZE = 75_000_000.0
-        out.setdefault("facility_size", BRIDGE_FACILITY_SIZE)
+        # Bridge facility size (CIM contractual ceiling) — from
+        # cap_markets_config.json. If Summary's canonical BB was read above,
+        # use that. Otherwise fall back to gross_eligible × 0.85.
+        out.setdefault("facility_size", facility_size_usd("us_bridge") or 75_000_000.0)
         if "borrowing_base" not in out:
             out["borrowing_base"] = round(gross_eligible * 0.85, 2)
             out["borrowing_base_estimate"] = True
@@ -797,23 +799,18 @@ def _read_mx_sofom(wb) -> dict:
     if "bank_accts" in wb.sheetnames:
         ba = wb["bank_accts"]
         bank_balances: dict[str, float] = {}
-        usdmxn = out.get("usdmxn_rate") or 17.35
+        usdmxn = out.get("usdmxn_rate") or fx_local_per_usd("MXN") or 17.35
         for row in ba.iter_rows(min_row=2, values_only=True):
             if not row or len(row) < 4:
                 continue
             country, _acct, currency, bal = row[0], row[1], row[2], row[3]
             if not isinstance(bal, (int, float)) or bal <= 0:
                 continue
-            if currency in ("USD", 840):
-                bal_usd = float(bal)
-            elif currency == "MXN":
+            if currency == "MXN":
+                # Prefer the sheet's live rate over the config fallback.
                 bal_usd = float(bal) / usdmxn
-            elif currency == "COP":
-                bal_usd = float(bal) / 4100.0
-            elif currency in ("BRL", 6540):
-                bal_usd = float(bal) / 5.5
             else:
-                bal_usd = float(bal)
+                bal_usd = _fallback_to_usd(bal, currency)
             label = str(country) if country else "Unknown"
             bank_balances[label] = bank_balances.get(label, 0.0) + bal_usd
         out["bank_balances_by_country"] = {k: round(v, 2) for k, v in bank_balances.items()}

@@ -220,12 +220,23 @@ def main() -> int:
         log.info("  → %d rows extracted", len(rows))
         all_rows.extend(rows)
 
-    # Approximate FX rates for balances without explicit USD equivalent.
-    # Sourced from the SOFOM hedge sheet (USDMXN ≈ 17.35) and standard
-    # market spot for others. Acceptable for at-a-glance dashboard.
+    # Approximate FX (USD per unit) for balances without an explicit USD
+    # equivalent — overridden from cap_markets_config.json (local-per-USD,
+    # hot-reloads); baked table below is the fallback. Acceptable for an
+    # at-a-glance dashboard.
     _FX = {"USD": 1.0, "MXN": 1.0 / 17.35, "BRL": 1.0 / 5.5, "COP": 1.0 / 4100.0,
            "EUR": 1.08, "GBP": 1.27, "CAD": 1.0 / 1.37, "ARS": 1.0 / 1000.0,
            "CLP": 1.0 / 950.0, "PEN": 1.0 / 3.75}
+    try:
+        _shared = Path(__file__).resolve().parents[2] / "skills" / "custom" / "_shared"
+        if str(_shared) not in sys.path:
+            sys.path.insert(0, str(_shared))
+        from cap_markets_config import get_cm_config
+        for _ccy, _local_per_usd in (get_cm_config().get("fx_fallback") or {}).items():
+            if isinstance(_local_per_usd, (int, float)) and _local_per_usd > 0:
+                _FX[_ccy.upper()] = 1.0 / float(_local_per_usd)
+    except Exception as _e:
+        log.warning("cap_markets_config unavailable — using baked FX table: %s", _e)
 
     # Aggregate by category
     by_cat: dict[str, dict] = {}

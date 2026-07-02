@@ -138,40 +138,20 @@ _gmail_state_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # ANALYST CONTEXT — injected into every LLM classification call
 # This is what makes classification smart vs keyword matching.
-# Update this as priorities/deals change.
+# Stable framework lives here; the VOLATILE business state (active deals,
+# counterparty domains) lives in deer-flow/cap_markets_config.json and
+# hot-reloads on edit — no restart needed (P3-4).
 # ---------------------------------------------------------------------------
-ANALYST_CONTEXT = """
+_ANALYST_FRAMEWORK_HEAD = """
 You are classifying inbound messages for Brian Mauck, Head of Capital Markets at Jeeves Financial Technology.
 
 ## Who Brian is
-Brian runs capital markets at Jeeves — a B2B fintech providing corporate cards and working capital 
-to businesses across Latin America and the US. He manages lender relationships, credit facilities, 
+Brian runs capital markets at Jeeves — a B2B fintech providing corporate cards and working capital
+to businesses across Latin America and the US. He manages lender relationships, credit facilities,
 borrowing bases, and portfolio analytics. He works directly with the CFO (Alex Melikian).
+"""
 
-## Active deals and workstreams (as of May 2026)
-- **BBVA** — SBLC ($14MM) + Fideicomiso Trust Agreement under negotiation. W&C (White & Case) 
-  is Jeeves' counsel. Documents exchanged May 14–19. Aforo amount still TBD. Ball is in BBVA's 
-  court after May 19 revisions. CONTACT: David García (BBVA Spark).
-- **Neuberger Berman (NB)** — $100MM facility (expandable to $150MM), SOFR+7.5%, 24mo. Term 
-  sheet executed April 2026. Legal docs in progress via Akin Gump (NB counsel) + Goodwin (Jeeves).
-- **CIM** — 5th Amendment active. Section 7b concentration/cap dispute ongoing. CIM trying to push 
-  Colombian portfolio into an SPV.
-- **Gramercy, Francisco Partners, Vista Credit** — active lender relationships, periodic reporting.
-- **Daily borrowing bases** — US Bridge and MX SOFOM produced daily.
-- **BBVA diligence** — 40-item checklist, ~9 items still outstanding as of late April.
-
-## Key counterparties (emails from these domains are higher priority)
-- bbva.com — BBVA lender
-- nb.com, neuberger.com — Neuberger Berman
-- cim-llc.com — CIM
-- gramercyfunds.com — Gramercy
-- franciscopartners.com — Francisco Partners
-- vistaequity.com, vistacredit.com — Vista Credit
-- whitecase.com — W&C (Jeeves' counsel — outbound legal work, NOT inbound requests)
-- akingump.com — Akin Gump (NB's counsel)
-- goodwinlaw.com — Goodwin (Jeeves' counsel)
-- tryjeeves.com — Internal Jeeves (usually not actionable unless from Alex Melikian or leadership)
-
+_ANALYST_FRAMEWORK_TAIL = """
 ## What IS actionable (Brian needs to do something, or have the agent do it)
 - Lender/counterparty asks for data, a tape, a report, or documents
 - Counterparty asks a specific question that requires Brian's input or pulling data
@@ -208,6 +188,21 @@ Ask: "Is there something specific Brian (or an agent on his behalf) needs to do?
     "Handle this request"
     "Follow up"
 """
+
+
+def _analyst_context() -> str:
+    """Framework + hot-reloaded business state from cap_markets_config.json.
+    Fails open to the framework alone — a bad config edit must never take
+    the classifier down."""
+    deals = ''
+    try:
+        from cap_markets_config import analyst_deals_section  # _shared on sys.path
+        deals = analyst_deals_section()
+    except Exception as e:
+        log.warning('cap_markets_config unavailable — classifying without deal context: %s', e)
+    middle = f"\n{deals}\n" if deals else "\n"
+    return f"{_ANALYST_FRAMEWORK_HEAD}{middle}{_ANALYST_FRAMEWORK_TAIL}"
+
 
 # ---------------------------------------------------------------------------
 # LLM Classifier
@@ -249,7 +244,7 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
 
     prompt = f"""You are a classifier for Brian Mauck's inbound communications.
 
-{ANALYST_CONTEXT}{patterns_block}
+{_analyst_context()}{patterns_block}
 
 ---
 
@@ -381,7 +376,7 @@ def draft_reply(sender: str, subject: str, body: str, summary: str,
     ) if peer_ctx else ''
     try:
         client = Anthropic(api_key=ANTHROPIC_API_KEY)
-        prompt = f"""{ANALYST_CONTEXT}{peer_block}
+        prompt = f"""{_analyst_context()}{peer_block}
 
 You are drafting a reply ON BEHALF OF Brian Mauck to the message below.
 

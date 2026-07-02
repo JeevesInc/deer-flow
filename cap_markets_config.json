@@ -1,0 +1,32 @@
+{
+  "_readme": [
+    "Capital-markets business config (P3-4). Edit freely — consumers hot-reload",
+    "on file mtime, no restart needed. Consumers: webhook classifier/drafter",
+    "(analyst_context), cap_markets_metrics_refresh + cico_cash_extract",
+    "(fx_fallback, facilities). Loader: skills/custom/_shared/cap_markets_config.py.",
+    "If this file is missing or corrupt, consumers fall back to baked defaults."
+  ],
+  "analyst_context": {
+    "as_of": "May 2026",
+    "active_deals_md": "- **BBVA** — SBLC ($14MM) + Fideicomiso Trust Agreement under negotiation. W&C (White & Case) is Jeeves' counsel. Documents exchanged May 14–19. Aforo amount still TBD. Ball is in BBVA's court after May 19 revisions. CONTACT: David García (BBVA Spark).\n- **Neuberger Berman (NB)** — $100MM facility (expandable to $150MM), SOFR+7.5%, 24mo. Term sheet executed April 2026. Legal docs in progress via Akin Gump (NB counsel) + Goodwin (Jeeves).\n- **CIM** — 5th Amendment active. Section 7b concentration/cap dispute ongoing. CIM trying to push Colombian portfolio into an SPV.\n- **Gramercy, Francisco Partners, Vista Credit** — active lender relationships, periodic reporting.\n- **Daily borrowing bases** — US Bridge and MX SOFOM produced daily.\n- **BBVA diligence** — 40-item checklist, ~9 items still outstanding as of late April.",
+    "counterparty_domains_md": "- bbva.com — BBVA lender\n- nb.com, neuberger.com — Neuberger Berman\n- cim-llc.com — CIM\n- gramercyfunds.com — Gramercy\n- franciscopartners.com — Francisco Partners\n- vistaequity.com, vistacredit.com — Vista Credit\n- whitecase.com — W&C (Jeeves' counsel — outbound legal work, NOT inbound requests)\n- akingump.com — Akin Gump (NB's counsel)\n- goodwinlaw.com — Goodwin (Jeeves' counsel)\n- tryjeeves.com — Internal Jeeves (usually not actionable unless from Alex Melikian or leadership)"
+  },
+  "fx_fallback": {
+    "_comment": "Values are LOCAL units per 1 USD (USD per unit = 1/rate). Approximate — glance-dashboard + cash-conversion fallbacks only; live rates win where available. USDMXN sourced from the SOFOM hedge sheet.",
+    "MXN": 17.35,
+    "BRL": 5.5,
+    "COP": 4100.0,
+    "EUR": 0.926,
+    "GBP": 0.787,
+    "CAD": 1.37,
+    "ARS": 1000.0,
+    "CLP": 950.0,
+    "PEN": 3.75
+  },
+  "facilities": {
+    "us_bridge": {
+      "facility_size_usd": 75000000,
+      "_comment": "Bridge template's Facility Size cell is stale; this override is authoritative until the template is fixed."
+    }
+  }
+}

@@ -76,18 +76,12 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    # Callers stamp last_run explicitly — a rejected or failed dispatch must
+    # not look like a completed review (GW-F3 class).
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    state['last_run'] = datetime.now().isoformat()
     with open(p, 'w') as f:
         json.dump(state, f, indent=2)
-
-
-def _already_ran_today(state: dict) -> bool:
-    last = state.get('last_run')
-    if not last:
-        return False
-    return datetime.fromisoformat(last).date() == datetime.now().date()
 
 
 def _build_prompt(review_number: int) -> str:
@@ -189,9 +183,12 @@ def run_review() -> None:
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from dispatch_queue import enqueue_or_dispatch
+        # Plain dispatch, NOT enqueue_or_dispatch: run_loop retries every tick
+        # while last_run is unstamped, and a persisted-queue copy can't stamp
+        # our state — it would re-run a review the queue already dispatched.
+        from autonomous_dispatch import dispatch
 
-        dispatched = enqueue_or_dispatch(
+        dispatched = dispatch(
             prompt,
             notification=notification,
             category="Weekly Open Items",
@@ -209,24 +206,26 @@ def run_review() -> None:
         traceback.print_exc()
         return
 
+    state['last_run'] = datetime.now().isoformat()
     save_state(state)
 
 
 def run_loop() -> None:
+    from cron_schedule import weekly_run_due
+
     wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][REVIEW_WEEKDAY]
     log.info("Weekly Open Items cron started. Triggers %s at %02d:00." % (wd, REVIEW_HOUR))
     while True:
         now = datetime.now()
-        if now.weekday() == REVIEW_WEEKDAY and now.hour == REVIEW_HOUR:
-            state = load_state()
-            if not _already_ran_today(state):
-                try:
-                    run_review()
-                except Exception as e:
-                    log.error("Weekly loop error: %s", e)
-                    traceback.print_exc()
-            else:
-                log.info("Already ran weekly review today, skipping.")
+        # Due whenever the last run predates the most recent scheduled time —
+        # a Monday missed to downtime catches up on the next tick instead of
+        # silently skipping the whole week (GW-F10).
+        if weekly_run_due(load_state().get('last_run'), now, REVIEW_WEEKDAY, REVIEW_HOUR):
+            try:
+                run_review()
+            except Exception as e:
+                log.error("Weekly loop error: %s", e)
+                traceback.print_exc()
         time.sleep(CHECK_INTERVAL_SECS)
 
 

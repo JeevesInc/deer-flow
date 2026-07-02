@@ -49,6 +49,14 @@ class CronSupervisor:
         self._stop_event = threading.Event()
         self._restart_delay = _INITIAL_RESTART_DELAY
         self._crash_count = 0
+        # Observability (read by app/gateway/metrics.py):
+        self.crash_count = 0          # public mirror of _crash_count
+        self.exited = False           # run_loop returned — abnormal, not running
+        self.last_heartbeat = 0.0     # wall-clock ts: target (re)start or record_heartbeat()
+
+    @property
+    def running(self) -> bool:
+        return bool(self._thread and self._thread.is_alive() and not self.exited)
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -82,15 +90,24 @@ class CronSupervisor:
             started_at = time.monotonic()
             try:
                 logger.info("[CronSupervisor] %s starting", self.name)
+                self.last_heartbeat = time.time()
                 self._target()
-                if self._crash_count > 0:
-                    _slack_alert(
-                        ":white_check_mark: *Cron recovered: `" + self.name + "`* -- "
-                        + "running normally after " + str(self._crash_count) + " crash(es)."
-                    )
+                # run_loop returned. Cron run_loops are `while True` — a return is
+                # ABNORMAL (e.g. bot_dm_history returned on one failed auth_test,
+                # silently disabling itself). Do NOT restart (a returning loop
+                # usually returns again immediately) and do NOT claim "recovered".
+                # Mark it not-running and alert loudly; the gateway must restart
+                # to relaunch it.
+                self.exited = True
+                logger.error("[CronSupervisor] %s exited (run_loop returned) — NOT running", self.name)
+                _slack_alert(
+                    ":warning: *Cron exited: `" + self.name + "`* — run_loop returned, so it is "
+                    + "*not running*. It will not restart on its own; fix the cause and restart the gateway."
+                )
                 break
             except Exception:
                 self._crash_count += 1
+                self.crash_count = self._crash_count
                 elapsed = time.monotonic() - started_at
                 if elapsed > _RESET_AFTER:
                     self._restart_delay = _INITIAL_RESTART_DELAY
@@ -122,6 +139,26 @@ class CronSupervisor:
 
 
 _supervisors: list[CronSupervisor] = []
+
+
+def record_heartbeat(name: str) -> None:
+    """Record a liveness heartbeat for a cron by name (best-effort, never raises).
+
+    The supervisor only observes crashes and clean exits — a cron whose inner
+    loop hangs on a network call, or catches-and-logs forever, stays 'alive' and
+    is otherwise invisible (GW-F4). Crons that call this once per iteration get a
+    true `deerflow_cron_last_heartbeat_ts` gauge, so a Grafana staleness alert
+    ("heartbeat older than 2x the expected interval") can catch die-in-place.
+    Adoption is incremental; without it the gauge reflects the last (re)start.
+    """
+    try:
+        now = time.time()
+        for sv in _supervisors:
+            if sv.name == name:
+                sv.last_heartbeat = now
+                return
+    except Exception:
+        pass
 
 # Seconds between each cron's first run, to avoid a thundering-herd startup
 # burst that starves the gateway's /health probe (see _supervised_loop).
@@ -187,6 +224,19 @@ def start_crons() -> None:
     # Pub/Sub silently stops and inbound-email proposals die (33-day outage
     # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.
     _load_and_start("gmail-watch-renew", backend_dir / "scripts" / "gmail_watch_renew_cron.py")
+    # GW-F8: the dispatch queue's drain thread only starts when something new
+    # is enqueued in THIS process — items persisted before a restart stranded
+    # until the 12h expiry deleted them silently. Kick the drain at boot.
+    try:
+        import sys
+        shared = str(skills_dir / "_shared")
+        if shared not in sys.path:
+            sys.path.insert(0, shared)
+        import dispatch_queue
+        dispatch_queue.ensure_drain_on_boot()
+    except Exception:
+        logger.exception("[CronSupervisor] dispatch-queue boot drain failed")
+
     # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
     # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
     # top level executed the full dashboard render + 3 synchronous Redshift

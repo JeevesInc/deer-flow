@@ -72,9 +72,10 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    # Callers stamp last_eod explicitly — a rejected or failed dispatch must
+    # not look like a completed review (GW-F3 class).
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    state['last_eod'] = datetime.now().isoformat()
     with open(p, 'w') as f:
         json.dump(state, f, indent=2)
 
@@ -265,9 +266,12 @@ def run_eod_review() -> None:
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from dispatch_queue import enqueue_or_dispatch
+        # Plain dispatch, NOT enqueue_or_dispatch: run_loop retries every tick
+        # while last_eod is unstamped, and a persisted-queue copy can't stamp
+        # our state — it would re-run a review the queue already dispatched.
+        from autonomous_dispatch import dispatch
 
-        dispatched = enqueue_or_dispatch(
+        dispatched = dispatch(
             prompt,
             notification=notification,
             category="EOD Review",
@@ -286,6 +290,7 @@ def run_eod_review() -> None:
         traceback.print_exc()
         return
 
+    state['last_eod'] = datetime.now().isoformat()
     save_state(state)
 
 
@@ -299,7 +304,10 @@ def run_loop() -> None:
     while True:
         now = datetime.now()
 
-        if now.hour == EOD_HOUR:
+        # >= instead of ==: downtime (or tick drift) across the target hour
+        # delays the review to the next tick that day instead of silently
+        # skipping the whole day (GW-F10).
+        if now.hour >= EOD_HOUR:
             state = load_state()
             if not _already_ran_today(state):
                 try:

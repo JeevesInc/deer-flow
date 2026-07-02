@@ -30,6 +30,8 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage
 from langgraph.runtime import Runtime
 
+from deerflow.utils.text import extract_text
+
 logger = logging.getLogger(__name__)
 
 # Defaults — can be overridden via constructor
@@ -216,13 +218,18 @@ class LoopDetectionMiddleware(AgentMiddleware[AgentState]):
         if hard_stop:
             # Strip tool_calls from the last AIMessage to force text output.
             # Safe to mutate now: no tool will run, so no tool_use/tool_result
-            # adjacency pair to preserve.
+            # adjacency pair to preserve. content is normalized to a plain string
+            # via extract_text: with thinking enabled it is a list of blocks
+            # (thinking/text/tool_use), so `list + str` would raise TypeError
+            # exactly when the breaker fires, and leftover tool_use blocks would
+            # 400 the next call. extract_text drops both and keeps only text.
             messages = state.get("messages", [])
             last_msg = messages[-1]
+            new_content = (extract_text(last_msg.content) + f"\n\n{_HARD_STOP_MSG}").strip()
             stripped_msg = last_msg.model_copy(
                 update={
                     "tool_calls": [],
-                    "content": (last_msg.content or "") + f"\n\n{_HARD_STOP_MSG}",
+                    "content": new_content,
                 }
             )
             return {"messages": [stripped_msg]}

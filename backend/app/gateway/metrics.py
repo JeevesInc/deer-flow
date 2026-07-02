@@ -72,6 +72,33 @@ g_scrape_seconds = Gauge(
     registry=registry,
 )
 
+# ── Cron supervisor gauges (fed by app/gateway/cron_supervisor._supervisors) ──
+g_cron_running = Gauge(
+    "deerflow_cron_running",
+    "1 if the cron's supervised thread is alive and has not exited; else 0.",
+    labelnames=("cron",),
+    registry=registry,
+)
+g_cron_crash_total = Gauge(
+    "deerflow_cron_crash_total",
+    "Cumulative crash count for the cron since gateway start.",
+    labelnames=("cron",),
+    registry=registry,
+)
+g_cron_exited = Gauge(
+    "deerflow_cron_exited",
+    "1 if the cron's run_loop returned (abnormal — the cron is not running).",
+    labelnames=("cron",),
+    registry=registry,
+)
+g_cron_heartbeat_ts = Gauge(
+    "deerflow_cron_last_heartbeat_ts",
+    "Unix ts of the cron's last heartbeat (target (re)start, or record_heartbeat() "
+    "if the cron opted in). Alert on staleness > 2x the cron's expected interval.",
+    labelnames=("cron",),
+    registry=registry,
+)
+
 # ── Capital Markets gauges (fed by .deer-flow/_cap_markets_state.json) ──
 # State JSON is written by backend/scripts/cap_markets_metrics_writer.py,
 # which dashboard_full_update.py calls at end of each refresh.
@@ -670,6 +697,29 @@ def _refresh_cap_markets() -> None:
                     pass
 
 
+def _refresh_crons() -> None:
+    """Per-cron liveness gauges, read from the supervisor registry.
+
+    Lets a Grafana alert catch the silent-failure class this whole review is
+    about: a cron that died, exited (run_loop returned), or crash-loops. Clears
+    stale label sets first so a removed cron doesn't linger.
+    """
+    try:
+        from app.gateway.cron_supervisor import _supervisors
+
+        g_cron_running.clear()
+        g_cron_crash_total.clear()
+        g_cron_exited.clear()
+        g_cron_heartbeat_ts.clear()
+        for sv in _supervisors:
+            g_cron_running.labels(cron=sv.name).set(1 if sv.running else 0)
+            g_cron_crash_total.labels(cron=sv.name).set(getattr(sv, "crash_count", 0))
+            g_cron_exited.labels(cron=sv.name).set(1 if getattr(sv, "exited", False) else 0)
+            g_cron_heartbeat_ts.labels(cron=sv.name).set(getattr(sv, "last_heartbeat", 0.0))
+    except Exception:
+        pass
+
+
 def refresh_all(langgraph_url: str = "http://localhost:2024") -> None:
     """Recompute all metrics. Called from the /metrics handler."""
     started = time.monotonic()
@@ -680,4 +730,5 @@ def refresh_all(langgraph_url: str = "http://localhost:2024") -> None:
     _refresh_thread_map()
     _refresh_langgraph_threads(langgraph_url)
     _refresh_cap_markets()
+    _refresh_crons()
     g_scrape_seconds.set(time.monotonic() - started)

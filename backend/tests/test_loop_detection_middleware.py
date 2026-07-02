@@ -134,6 +134,33 @@ class TestLoopDetection:
         assert msgs[0].tool_calls == []
         assert _HARD_STOP_MSG in msgs[0].content
 
+    def test_hard_stop_with_list_content_thinking_enabled(self):
+        """Regression: with thinking on, AIMessage.content is a list of blocks.
+        The old `(content or "") + str` raised TypeError exactly when the hard
+        stop fired, and leftover tool_use blocks would 400 the next call.
+        """
+        mw = LoopDetectionMiddleware(warn_threshold=2, hard_limit=4)
+        runtime = _make_runtime()
+        call = [_bash_call("ls")]
+        list_content = [
+            {"type": "thinking", "thinking": "let me try ls again"},
+            {"type": "text", "text": "partial progress so far"},
+            {"type": "tool_use", "id": "call_ls", "name": "bash", "input": {"command": "ls"}},
+        ]
+
+        result = None
+        for _ in range(4):
+            result = _step(mw, _make_state(tool_calls=call, content=list_content), runtime)
+
+        assert result is not None
+        msg = result["messages"][0]
+        assert isinstance(msg, AIMessage)
+        assert msg.tool_calls == []
+        assert isinstance(msg.content, str)          # normalized, no more list
+        assert _HARD_STOP_MSG in msg.content
+        assert "partial progress so far" in msg.content   # text block preserved
+        assert "tool_use" not in msg.content and "let me try ls" not in msg.content
+
     def test_different_calls_dont_trigger(self):
         mw = LoopDetectionMiddleware(warn_threshold=2)
         runtime = _make_runtime()

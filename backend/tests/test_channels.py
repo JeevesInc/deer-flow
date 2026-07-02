@@ -1598,6 +1598,10 @@ class TestFeishuChannel:
         _run(go())
 
     def test_streaming_reuses_single_running_card(self):
+        # lark_oapi's message API transitively imports Crypto (pycryptodome), an
+        # optional dep not installed on this Slack-only deployment. Skip cleanly
+        # rather than erroring when it's absent (CI installs it).
+        pytest.importorskip("Crypto")
         from lark_oapi.api.im.v1 import (
             CreateMessageReactionRequest,
             CreateMessageReactionRequestBody,

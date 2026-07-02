@@ -23,6 +23,8 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
+from deerflow.utils.text import extract_text
+
 logger = logging.getLogger(__name__)
 
 # Approximate graph steps consumed per model→tool round-trip.
@@ -133,10 +135,15 @@ class StepBudgetMiddleware(AgentMiddleware[AgentState]):
             # Already a text-only response — nothing to strip.
             return None
 
+        # Normalize content to a plain string via extract_text: with thinking
+        # enabled last_msg.content is a list of blocks, so `list + str` would
+        # raise TypeError here (exactly when the budget wrap-up must fire), and
+        # leftover tool_use blocks would 400 the next call. See loop_detection.
+        new_content = (extract_text(last_msg.content) + f"\n\n{_WRAP_UP_MSG}").strip()
         stripped_msg = last_msg.model_copy(
             update={
                 "tool_calls": [],
-                "content": (last_msg.content or "") + f"\n\n{_WRAP_UP_MSG}",
+                "content": new_content,
             }
         )
         return {"messages": [stripped_msg]}

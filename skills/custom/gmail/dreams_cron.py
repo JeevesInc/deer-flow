@@ -74,9 +74,11 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    # Callers stamp last_dream explicitly — a capacity-rejected or failed
+    # dispatch must NOT look like a completed dream, or the whole night is
+    # silently skipped (GW-F3).
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    state['last_dream'] = datetime.now().isoformat()
     with open(p, 'w') as f:
         json.dump(state, f, indent=2)
 
@@ -575,11 +577,14 @@ def run_dream() -> None:
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from dispatch_queue import enqueue_or_dispatch
+        from autonomous_dispatch import dispatch
 
+        # Plain dispatch, NOT enqueue_or_dispatch: run_loop already retries every
+        # CHECK_INTERVAL within the overnight window while last_dream is unstamped,
+        # and a queued copy on top of that would double-dispatch the dream (GW-F3).
         # notification=None: dreams are silent — the only message Brian ever
         # sees is the problems/improvements DM the agent itself may send.
-        dispatched = enqueue_or_dispatch(
+        dispatched = dispatch(
             prompt,
             notification=None,
             category="Dream",
@@ -588,14 +593,14 @@ def run_dream() -> None:
         )
         if dispatched:
             state['dream_count'] = state.get('dream_count', 0) + 1
+            state['last_dream'] = datetime.now().isoformat()
+            save_state(state)
             log.info("Dream session dispatched successfully.")
         else:
             log.warning("Dream rejected — agent at capacity. Will retry next cycle.")
     except Exception as e:
         log.error("Dream dispatch failed: %s", e)
         traceback.print_exc()
-
-    save_state(state)
 
 
 # ------------------------------------------------------------------ #

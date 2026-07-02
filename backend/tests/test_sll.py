@@ -205,10 +205,11 @@ def test_apply_sentiment_implicit_negative_stores_failure(sll_env):
 
     lessons = sll_env.all_lessons()
     assert lessons[0]["outcome"] == "failure"
-    assert abs(lessons[0]["composite"] - 0.25) < 1e-9
+    # 0.6 + (-0.40) implicit_negative penalty = 0.20 (penalty was re-tuned 0.35→0.40)
+    assert abs(lessons[0]["composite"] - 0.20) < 1e-9
 
 
-def test_apply_sentiment_implicit_positive_is_neutral(sll_env):
+def test_apply_sentiment_implicit_positive_stores_success(sll_env):
     import sll_score  # noqa: WPS433
 
     sll_env.write_pending({
@@ -224,12 +225,15 @@ def test_apply_sentiment_implicit_positive_is_neutral(sll_env):
         args = MagicMock(apply_sentiment=True, user_reply="ok now do Y", verbose=False)
         sll_score.mode_apply_sentiment(args)
 
-    # 0.6 + 0.15 = 0.75 → neutral (not above 0.8) → no lesson
-    assert sll_env.all_lessons() == []
+    # Re-tuned: boost 0.15→0.25 and SUCCESS_THRESHOLD 0.80→0.72, so
+    # 0.6 + 0.25 = 0.85 ≥ 0.72 → success (building-on-output now reinforces).
+    lessons = sll_env.all_lessons()
+    assert len(lessons) == 1
+    assert lessons[0]["outcome"] == "success"
+    assert abs(lessons[0]["composite"] - 0.85) < 1e-9
     log = sll_env.read_jsonl(sll_env.LOG_PATH)
-    assert log[0]["outcome"] == "neutral"
-    assert log[0]["lesson_stored"] is None
-    assert log[0]["lesson_id"] is None
+    assert log[0]["outcome"] == "success"
+    assert log[0]["lesson_stored"] == "[+] DO be precise"
 
 
 def test_apply_sentiment_clamps_to_range(sll_env):

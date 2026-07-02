@@ -34,6 +34,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -282,6 +283,54 @@ def _default_classification(reason: str) -> dict:
     }
 
 
+# --- Peer-aware drafting (PRD §7 H1) ---------------------------------------
+# The Honcho peer card knows how this correspondent prefers to be spoken to
+# and what's open between them and Brian; condition the draft on it.
+
+_pct_module = None  # honcho-peers module, or False after a failed load
+
+
+def _peer_card_module():
+    global _pct_module
+    if _pct_module is not None:
+        return _pct_module or None
+    try:
+        import importlib.util
+        path = Path(__file__).resolve().parent.parent / 'skills' / 'custom' / 'honcho-peers' / 'peer_card_tool.py'
+        spec = importlib.util.spec_from_file_location('peer_card_tool_webhook', path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _pct_module = mod
+    except Exception as e:
+        log.warning('peer_card_tool unavailable — peer-aware drafting off: %s', e)
+        _pct_module = False
+    return _pct_module or None
+
+
+def _extract_email(sender: str) -> str:
+    """'Name <a@b.com>' -> 'a@b.com'; bare addresses pass through."""
+    m = re.search(r'<([^<>\s]+@[^<>\s]+)>', sender or '')
+    if m:
+        return m.group(1).strip().lower()
+    s = (sender or '').strip().lower()
+    return s if ('@' in s and ' ' not in s) else ''
+
+
+def _peer_context_for(sender: str) -> str:
+    """Drafting context for this correspondent, or '' (always fail-open)."""
+    email = _extract_email(sender)
+    if not email:
+        return ''
+    mod = _peer_card_module()
+    if not mod:
+        return ''
+    try:
+        return mod.peer_context(email) or ''
+    except Exception as e:
+        log.warning('peer_context failed for %s: %s', email, e)
+        return ''
+
+
 def draft_reply(sender: str, subject: str, body: str, summary: str,
                 proposed_action: str, source: str = 'email') -> str:
     """Draft a reply in Brian's voice for an inbound message that warrants one.
@@ -298,9 +347,16 @@ def draft_reply(sender: str, subject: str, body: str, summary: str,
         "(no email greeting/sign-off)." if source == 'slack' else
         "This is an EMAIL — write just the reply body: no subject line, no signature block."
     )
+    peer_ctx = _peer_context_for(sender)
+    peer_block = (
+        f"\n## What we know about this correspondent (from relationship history)\n"
+        f"{peer_ctx}\n"
+        f"Match their preferred style and, where natural, acknowledge open items — "
+        f"but do NOT invent specifics beyond the message and this context.\n"
+    ) if peer_ctx else ''
     try:
         client = Anthropic(api_key=ANTHROPIC_API_KEY)
-        prompt = f"""{ANALYST_CONTEXT}
+        prompt = f"""{ANALYST_CONTEXT}{peer_block}
 
 You are drafting a reply ON BEHALF OF Brian Mauck to the message below.
 

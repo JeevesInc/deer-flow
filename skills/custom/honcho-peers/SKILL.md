@@ -56,7 +56,9 @@ python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> --react-t
 directions; `--react-to` = predict their reaction to a scenario and how to frame it.
 Use these before negotiations, difficult asks, or renewals — they beat the generic
 card when you need decision support rather than a bio. The pre-meeting dossier
-briefing includes an automatic short version of this (peer_brief) per attendee.
+briefing includes an automatic short version of this (peer_brief) per attendee,
+and the webhook/owner-DM reply drafters automatically condition drafts on the
+correspondent's card (peer_context — communication style + open items).
 
 ### Ingest recent interactions for one peer
 ```bash

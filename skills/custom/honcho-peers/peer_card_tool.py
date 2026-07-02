@@ -581,6 +581,47 @@ def peer_brief(email):
         return None
 
 
+_PEER_CONTEXT_PROMPT = (
+    "Brian is about to write a message to this person. In under 120 words, "
+    "give the drafting-relevant context: (1) how they prefer to be "
+    "communicated with — tone, length, formality; (2) open items or asks "
+    "currently outstanding between them and Brian; (3) anything in-flight a "
+    "reply should acknowledge or avoid stepping on. Plain prose, no headers. "
+    "Skip anything you have no evidence for."
+)
+
+# peer_context is called per inbound message by the webhook drafter, so cache
+# per-process (negative results too — a dead Honcho must not add latency to
+# every draft).
+_peer_context_cache: dict = {}
+_PEER_CONTEXT_TTL_SECONDS = 3600.0
+
+
+def peer_context(email):
+    """Short drafting brief for OUTBOUND messages to this peer (H1), used by
+    the webhook/owner-slack drafters. 1h per-process cache. Returns None when
+    Honcho is unconfigured/unreachable or has nothing — never raises."""
+    if not _honcho_enabled():
+        return None
+    email = (email or '').strip().lower()
+    if not email or '@' not in email:
+        return None
+    import time as _time
+    hit = _peer_context_cache.get(email)
+    if hit and _time.time() - hit[0] < _PEER_CONTEXT_TTL_SECONDS:
+        return hit[1]
+    text = None
+    try:
+        client = _get_honcho_client()
+        peer = client.peer(_peer_id(email), metadata={'email': email})
+        resp = peer.chat(_PEER_CONTEXT_PROMPT)
+        text = (resp or '').strip() or None
+    except Exception as e:
+        print(f"peer_context({email}) failed: {e}", file=sys.stderr)
+    _peer_context_cache[email] = (_time.time(), text)
+    return text
+
+
 def _require_honcho():
     if not _honcho_enabled():
         print("ERROR: Honcho is not configured. Set HONCHO_API_KEY (cloud) or "

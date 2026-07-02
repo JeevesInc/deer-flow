@@ -97,11 +97,20 @@ def _bot_client():
 
 
 def _display_name(user_client, user_id: str) -> str:
+    name, _ = _sender_ident(user_client, user_id)
+    return name
+
+
+def _sender_ident(user_client, user_id: str) -> tuple:
+    """(display_name, email) for a Slack user. Email needs users:read.email
+    on the user token; '' when unavailable. The email lets draft_reply pull
+    the correspondent's Honcho peer context (H1 peer-aware drafting)."""
     try:
         prof = user_client.users_info(user=user_id)["user"]["profile"]
-        return prof.get("display_name") or prof.get("real_name") or user_id
+        name = prof.get("display_name") or prof.get("real_name") or user_id
+        return name, (prof.get("email") or "").strip().lower()
     except Exception:
-        return user_id
+        return user_id, ""
 
 
 def _list_dm_channels(user_client, cutoff_epoch: float) -> set:
@@ -164,15 +173,18 @@ def _discover_dm_channels(user_client, cutoff_epoch: float) -> set:
 
 
 # --------------------------------------------------------------- classify + draft
-def _classify_and_draft(name: str, text: str):
+def _classify_and_draft(name: str, text: str, email: str = ""):
     """Returns (classification dict, draft str) reusing the webhook's models.
 
-    classification is None / draft is '' when no reply is warranted.
+    classification is None / draft is '' when no reply is warranted. When the
+    sender's email is known it's passed as 'Name <email>' so draft_reply can
+    condition on their Honcho peer context (H1 peer-aware drafting).
     """
     import webhook_receiver as wr
+    sender = f"{name} <{email}>" if email else name
     cls = wr.classify_with_llm(
         source="slack",
-        sender=name,
+        sender=sender,
         subject=f"Slack DM from {name}",
         body_preview=text,
         extra_context="This is a direct message Brian received and has NOT replied to.",
@@ -180,7 +192,7 @@ def _classify_and_draft(name: str, text: str):
     if not cls.get("actionable"):
         return cls, ""
     draft = wr.draft_reply(
-        name, f"Slack DM from {name}", text,
+        sender, f"Slack DM from {name}", text,
         cls.get("summary", ""), cls.get("proposed_action", ""), source="slack",
     )
     return cls, draft
@@ -207,7 +219,7 @@ def _card_text(name: str, msg_text: str, draft: str, dm_id: str, card_ts: str | 
 
 
 def _log_proposal(card_ts: str, dm_id: str, name: str, sender_id: str,
-                  msg_text: str, draft: str, cls: dict) -> None:
+                  msg_text: str, draft: str, cls: dict, sender_email: str = "") -> None:
     entry = {
         "posted_at": datetime.now(timezone.utc).isoformat(),
         "source": "slack",
@@ -216,7 +228,7 @@ def _log_proposal(card_ts: str, dm_id: str, name: str, sender_id: str,
         "slack_ts": card_ts,                   # the card ts
         "slack_target_channel": dm_id,         # where the reply should go (as Brian)
         "slack_target_thread": "",
-        "sender_email": "",
+        "sender_email": sender_email,
         "sender_domain": "slack",
         "sender_display": name,
         "sender_slack_id": sender_id,
@@ -278,8 +290,8 @@ def _poll_once(dry_run: bool = False) -> None:
         if ts in processed:
             continue
 
-        name = _display_name(user, other)
-        cls, draft = _classify_and_draft(name, text)
+        name, sender_email = _sender_ident(user, other)
+        cls, draft = _classify_and_draft(name, text, sender_email)
         if not draft:
             log.info("DM from %s: no reply warranted (actionable=%s)", name, cls.get("actionable"))
             if not dry_run:
@@ -317,7 +329,7 @@ def _poll_once(dry_run: bool = False) -> None:
                     )
                 log.info("posted reply-draft card for DM from %s", name)
             open_cards[dm_id] = {"card_ts": card_ts, "msg_ts": ts}
-            _log_proposal(card_ts, dm_id, name, other, text, draft, cls)
+            _log_proposal(card_ts, dm_id, name, other, text, draft, cls, sender_email)
         except Exception as e:
             log.error("failed to post/update card for DM from %s: %s", name, e)
 

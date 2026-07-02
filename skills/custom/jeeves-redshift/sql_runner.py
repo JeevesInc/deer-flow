@@ -66,11 +66,78 @@ def _error(msg: str) -> None:
     print(f"✗ ERROR: {msg}", file=sys.stderr)
 
 
-def validate_sql(sql: str) -> list[str]:
-    """Validate SQL and return list of warnings. Returns errors as strings prefixed with 'ERROR:'."""
+def _strip_comments(sql: str, strip_strings: bool = False) -> str:
+    """Remove -- and /* */ comments (and optionally 'string literals').
+
+    Guards must not be fooled by keywords/semicolons hidden in comments, nor
+    fire on dates/semicolons inside string literals.
+    """
+    out = []
+    i, n = 0, len(sql)
+    while i < n:
+        two = sql[i:i + 2]
+        if two == '--':
+            j = sql.find('\n', i)
+            i = n if j == -1 else j
+        elif two == '/*':
+            j = sql.find('*/', i + 2)
+            i = n if j == -1 else j + 2
+            out.append(' ')
+        elif sql[i] == "'":
+            j = i + 1
+            while j < n:
+                if sql[j] == "'":
+                    if sql[j + 1:j + 2] == "'":  # escaped ''
+                        j += 2
+                        continue
+                    break
+                j += 1
+            if strip_strings:
+                out.append("''")
+            else:
+                out.append(sql[i:j + 1])
+            i = j + 1
+        else:
+            out.append(sql[i])
+            i += 1
+    return ''.join(out)
+
+
+# Schemas the agent may always introspect (catalog/metadata, read-only views).
+_SYSTEM_SCHEMAS = {'information_schema', 'pg_catalog', 'pg_internal'}
+
+# Today-valued SQL functions. Bare use means "query today's data", which does
+# not exist yet (Redshift lags a day); yesterday-relative arithmetic is fine.
+_TODAY_FUNCS = re.compile(r'(?i)\b(CURRENT_DATE|CURRENT_TIMESTAMP|GETDATE\s*\(\s*\)|SYSDATE|NOW\s*\(\s*\))')
+
+
+def _bare_today_func_uses(cleaned: str) -> list[str]:
+    """Occurrences of CURRENT_DATE/GETDATE()/... NOT part of a minus-offset."""
+    bad = []
+    for m in _TODAY_FUNCS.finditer(cleaned):
+        if re.match(r'\s*-', cleaned[m.end():]):
+            continue  # CURRENT_DATE - 1 etc.
+        before = cleaned[max(0, m.start() - 80):m.start()]
+        if re.search(r"(?i)DATE_?ADD\s*\(\s*'?\w+'?\s*,\s*-\s*\d+\s*,\s*$", before):
+            continue  # DATEADD(day, -1, CURRENT_DATE)
+        bad.append(m.group(1).strip())
+    return bad
+
+
+def validate_sql(sql: str, allow_today: bool = False, extra_tables=None) -> list[str]:
+    """Validate SQL and return list of warnings. Returns errors as strings prefixed with 'ERROR:'.
+
+    allow_today: downgrade the today/future-date and bare-CURRENT_DATE errors
+        to warnings (--allow-today).
+    extra_tables: iterable of extra allowed 'schema.table' names, or the
+        string '*' to skip whitelist enforcement (--allow-tables).
+    """
     warnings = []
-    sql_upper = sql.upper()
     sql_lower = sql.lower()
+    # Comments removed for all structural checks; strings additionally removed
+    # where a quoted literal could hide a semicolon or a fake table name.
+    no_comments = _strip_comments(sql)
+    cleaned = _strip_comments(sql, strip_strings=True)
 
     # Block non-SELECT statements
     # Strip leading WITH (CTE) to find the actual statement type.
@@ -107,10 +174,34 @@ def validate_sql(sql: str) -> list[str]:
             break
         return s
 
-    stripped = _strip_leading_ctes(sql)
+    stripped = _strip_leading_ctes(cleaned)
     first_keyword = stripped.strip().split()[0].upper() if stripped.strip() else ''
     if first_keyword and first_keyword not in ('SELECT', 'WITH', 'EXPLAIN'):
         return [f"ERROR: Only SELECT queries are allowed. Got: {first_keyword}"]
+
+    # Multi-statement injection: the first-keyword check above only sees the
+    # FIRST statement, so 'SELECT 1; DELETE ...' used to pass validation and
+    # rely solely on DB grants. A trailing ';' is fine; content after one is not.
+    body = cleaned.rstrip().rstrip(';')
+    if ';' in body:
+        return ["ERROR: Multiple SQL statements are not allowed — content found after a ';'. "
+                "Run one statement at a time."]
+
+    # Table whitelist (enforced; was advisory-only). Qualified schema.table
+    # references only — unqualified FROM targets are CTE names.
+    if extra_tables != '*':
+        allowed = {t.lower() for t in ALLOWED_TABLES}
+        if extra_tables:
+            allowed |= {t.strip().lower() for t in extra_tables if t.strip()}
+        refs = {r.lower() for r in re.findall(
+            r'(?i)\b(?:FROM|JOIN)\s+([a-zA-Z_][\w$]*\.[a-zA-Z_][\w$]*)', cleaned)}
+        unknown = sorted(r for r in refs
+                         if r not in allowed and r.split('.')[0] not in _SYSTEM_SCHEMAS)
+        if unknown:
+            return ["ERROR: Table(s) not in the allowed list: " + ', '.join(unknown)
+                    + ". Allowed: " + ', '.join(sorted(ALLOWED_TABLES))
+                    + ". If a table is genuinely needed, re-run with "
+                    + "--allow-tables <schema.table>[,...] (or --allow-tables '*')."]
 
     # Check for deprecated columns
     for col, fix in DEPRECATED_COLUMNS.items():
@@ -121,10 +212,30 @@ def validate_sql(sql: str) -> list[str]:
     if re.search(r"DATE_TRUNC\s*\([^)]*['\"]month['\"][^)]*\bdt\b", sql, re.IGNORECASE):
         warnings.append("DATE_TRUNC on dt column detected. Use 'dt BETWEEN ... AND ...' instead for loc_tape/gwc_tape.")
 
-    # Check for today/future dates
-    today = dt.date.today().isoformat()
-    if f"'{today}'" in sql:
-        warnings.append(f"Today's date ({today}) used. Redshift data is only available through yesterday. Use {(dt.date.today() - dt.timedelta(days=1)).isoformat()} instead.")
+    # Today/future dates and today-valued functions are ERRORS (were a warning
+    # matching only the literal string): data lags a day, so today-dated tape /
+    # borrowing-base queries return nulls that cascade into wrong eligibility.
+    today = dt.date.today()
+    yesterday = (today - dt.timedelta(days=1)).isoformat()
+    bad_dates = []
+    for lit in re.findall(r"'(\d{4}-\d{2}-\d{2})", no_comments):
+        try:
+            if dt.date.fromisoformat(lit) >= today:
+                bad_dates.append(lit)
+        except ValueError:
+            pass
+    bad_funcs = _bare_today_func_uses(cleaned)
+    if bad_dates or bad_funcs:
+        what = ', '.join(sorted(set(bad_dates)) + sorted(set(bad_funcs)))
+        msg = (f"Today/future date reference ({what}). Redshift data is only available "
+               f"through yesterday ({yesterday}) — today-dated rows don't exist and "
+               f"null-cascade into eligibility fields. Use '{yesterday}' or "
+               f"CURRENT_DATE - 1"
+               + ("." if allow_today else ", or re-run with --allow-today if intentional."))
+        if allow_today:
+            warnings.append(msg)
+        else:
+            return ["ERROR: " + msg]
 
     # Check loc_tape queries for missing filters
     if 'loc_tape' in sql_lower:
@@ -324,6 +435,10 @@ def main():
                         help='Save the query to the SQL repo after successful execution (provide a descriptive name)')
     parser.add_argument('--tags', type=str, default=None,
                         help='Comma-separated tags for --save (e.g. "portfolio,balance,loc")')
+    parser.add_argument('--allow-today', action='store_true',
+                        help='Downgrade the today/future-date guard from error to warning (data lags a day — only use when querying non-tape tables)')
+    parser.add_argument('--allow-tables', type=str, default=None,
+                        help="Comma-separated extra tables to allow beyond the whitelist, or '*' to skip the table check")
     args = parser.parse_args()
 
     # Generate SQL from natural language if --generate is used
@@ -353,7 +468,13 @@ def main():
         sys.exit(1)
 
     # Validate
-    issues = validate_sql(sql)
+    if args.allow_tables and args.allow_tables.strip() == '*':
+        extra_tables = '*'
+    elif args.allow_tables:
+        extra_tables = [t for t in args.allow_tables.split(',') if t.strip()]
+    else:
+        extra_tables = None
+    issues = validate_sql(sql, allow_today=args.allow_today, extra_tables=extra_tables)
     errors = [i for i in issues if i.startswith('ERROR:')]
     warnings = [i for i in issues if not i.startswith('ERROR:')]
 

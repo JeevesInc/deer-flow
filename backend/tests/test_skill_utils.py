@@ -60,12 +60,21 @@ class TestSQLValidation:
         warnings = [i for i in issues if not i.startswith("ERROR:")]
         assert any("DATE_TRUNC" in w for w in warnings)
 
-    def test_warns_today_date(self):
+    def test_today_date_is_error(self):
+        """P2-5: today-dated queries are now rejected (data lags a day)."""
         today = dt.date.today().isoformat()
         sql = f"SELECT * FROM capital_markets_dm.loc_tape WHERE dt = '{today}'"
         issues = validate_sql(sql)
-        warnings = [i for i in issues if not i.startswith("ERROR:")]
-        assert any("today" in w.lower() for w in warnings)
+        errors = [i for i in issues if i.startswith("ERROR:")]
+        assert any("Today/future" in e for e in errors)
+
+    def test_today_date_allowed_with_flag(self):
+        today = dt.date.today().isoformat()
+        sql = f"SELECT * FROM capital_markets_dm.loc_tape WHERE dt = '{today}'"
+        issues = validate_sql(sql, allow_today=True)
+        errors = [i for i in issues if i.startswith("ERROR:")]
+        assert not errors
+        assert any("Today/future" in i for i in issues)
 
     def test_warns_missing_charge_off_filter(self):
         sql = "SELECT SUM(balance_usd) FROM capital_markets_dm.loc_tape WHERE dt = '2026-04-02'"
@@ -100,6 +109,112 @@ class TestSQLValidation:
         warnings = [i for i in issues if not i.startswith("ERROR:")]
         charge_off_warnings = [w for w in warnings if "charge_off_flag" in w]
         assert not charge_off_warnings
+
+
+class TestSQLGuardEnforcement:
+    """P2-5 (Skills-H1): guards upgraded from advisory to enforcing."""
+
+    def _errors(self, sql, **kw):
+        return [i for i in validate_sql(sql, **kw) if i.startswith("ERROR:")]
+
+    # -- multi-statement ----------------------------------------------------
+
+    def test_multi_statement_blocked(self):
+        errors = self._errors("SELECT 1; DELETE FROM capital_markets_dm.loc_tape")
+        assert any("Multiple SQL statements" in e for e in errors)
+
+    def test_trailing_semicolon_allowed(self):
+        assert not self._errors("SELECT 1;")
+
+    def test_semicolon_inside_string_allowed(self):
+        assert not self._errors("SELECT 'a;b' AS x")
+
+    def test_semicolon_in_comment_allowed(self):
+        assert not self._errors("SELECT 1 -- note; not a statement")
+
+    def test_statement_hidden_after_comment_blocked(self):
+        errors = self._errors("SELECT 1; /* x */ DROP TABLE foo")
+        assert errors
+
+    # -- table whitelist ----------------------------------------------------
+
+    def test_unknown_table_blocked(self):
+        errors = self._errors("SELECT * FROM secret_schema.salaries")
+        assert any("not in the allowed list" in e for e in errors)
+
+    def test_unknown_table_allowed_via_extra_tables(self):
+        assert not self._errors("SELECT * FROM secret_schema.salaries",
+                                extra_tables=["secret_schema.salaries"])
+
+    def test_wildcard_disables_table_check(self):
+        assert not self._errors("SELECT * FROM secret_schema.salaries", extra_tables="*")
+
+    def test_cte_names_not_flagged(self):
+        sql = ("WITH base AS (SELECT 1 AS x FROM capital_markets_dm.loc_tape "
+               "WHERE dt = '2026-06-30' AND charge_off_flag = false AND is_in_repayment = false) "
+               "SELECT * FROM base")
+        assert not self._errors(sql)
+
+    def test_information_schema_allowed(self):
+        assert not self._errors("SELECT * FROM information_schema.columns")
+
+    def test_join_to_unknown_table_blocked(self):
+        sql = ("SELECT * FROM capital_markets_dm.loc_tape t "
+               "JOIN rogue.other o ON o.id = t.id WHERE dt = '2026-06-30' "
+               "AND charge_off_flag = false AND is_in_repayment = false")
+        errors = self._errors(sql)
+        assert any("rogue.other" in e for e in errors)
+
+    # -- today-valued functions ----------------------------------------------
+
+    def test_bare_current_date_blocked(self):
+        errors = self._errors(
+            "SELECT * FROM capital_markets_dm.loc_tape WHERE dt = CURRENT_DATE "
+            "AND charge_off_flag = false AND is_in_repayment = false")
+        assert any("CURRENT_DATE" in e for e in errors)
+
+    def test_current_date_minus_offset_allowed(self):
+        assert not self._errors(
+            "SELECT * FROM capital_markets_dm.loc_tape WHERE dt = CURRENT_DATE - 1 "
+            "AND charge_off_flag = false AND is_in_repayment = false")
+
+    def test_dateadd_negative_allowed(self):
+        assert not self._errors(
+            "SELECT * FROM capital_markets_dm.loc_tape "
+            "WHERE dt = DATEADD(day, -1, CURRENT_DATE) "
+            "AND charge_off_flag = false AND is_in_repayment = false")
+
+    def test_getdate_blocked(self):
+        errors = self._errors(
+            "SELECT * FROM master_transactions_dm.transactions_ssot "
+            "WHERE posted_at > GETDATE() AND is_company_test = false")
+        assert errors
+
+    def test_bare_current_date_ok_with_allow_today(self):
+        assert not self._errors(
+            "SELECT * FROM capital_markets_dm.loc_tape WHERE dt = CURRENT_DATE "
+            "AND charge_off_flag = false AND is_in_repayment = false",
+            allow_today=True)
+
+    def test_future_date_blocked(self):
+        future = (dt.date.today() + dt.timedelta(days=30)).isoformat()
+        errors = self._errors(
+            f"SELECT * FROM capital_markets_dm.loc_tape WHERE dt = '{future}' "
+            "AND charge_off_flag = false AND is_in_repayment = false")
+        assert any("Today/future" in e for e in errors)
+
+    def test_yesterday_date_allowed(self):
+        y = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+        assert not self._errors(
+            f"SELECT * FROM capital_markets_dm.loc_tape WHERE dt = '{y}' "
+            "AND charge_off_flag = false AND is_in_repayment = false")
+
+    def test_timestamp_literal_today_blocked(self):
+        today = dt.date.today().isoformat()
+        errors = self._errors(
+            f"SELECT * FROM master_transactions_dm.transactions_ssot "
+            f"WHERE posted_at >= '{today} 00:00:00' AND is_company_test = false")
+        assert any("Today/future" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------

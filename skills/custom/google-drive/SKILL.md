@@ -42,12 +42,17 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/output
 ```
 
 The script:
-- Without `--folder`: uploads to "DeerFlow Output" — **NEVER do this. Brian does not use DeerFlow Output (explicit correction, 2026-06-11).** ALWAYS pass `--folder <ID>` with the correct destination from the jeeves-capital-markets folder map. If you do not know the right folder, ask Brian — do not default.
+- Without `--folder`: uploads to "DeerFlow Output" at Drive root.
 - With `--folder`: uploads directly to the specified Drive folder
 - Makes it viewable by anyone with the link
 - Prints the shareable link
 
-**IMPORTANT:** Always upload generated files to Google Drive and share the link in your response. Do NOT just say the file was created — the user cannot access local files.
+**The actual rule (clarified 2026-07-01, supersedes the old 2026-06-11 note): Brian's objection was never to the DeerFlow Output folder name specifically — it's that files must never be left ONLY in a session-scratch folder he will never find (C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/11a3d829-f0ac-4d03-a651-0ee6f7047a8b/user-data/outputs, thread-local temp dirs, etc). Default behavior: actively search Drive first for an appropriate existing home (search by counterparty/project/topic name; use the jeeves-capital-markets folder map for CM work, or a files().list name-contains search for anything else) before uploading. Walk up a candidate folder's parents to confirm it is actually the right project, not a name coincidence.**
+- Clear existing folder found -> upload with --folder <ID>.
+- Genuinely new, non-Capital-Markets work with no existing home (e.g. a cross-team ops PRD) -> do not guess-create a folder. Tell Brian what you searched and ask where it should live.
+- Only fall back to bare DeerFlow Output for true one-off asks with no clear home -- and say so explicitly, do not do it silently.
+
+**IMPORTANT:** Always upload generated files to Google Drive and share the link in your response. Do NOT just say the file was created -- the user cannot access local files. Never leave a deliverable only in C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/11a3d829-f0ac-4d03-a651-0ee6f7047a8b/user-data/outputs or another session/thread-scoped path.
 
 ## Browse a Google Drive folder
 

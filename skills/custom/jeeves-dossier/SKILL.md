@@ -123,6 +123,10 @@ When creating or updating a dossier, produce JSON in this format:
 }
 ```
 
+## Known failure mode — verify before claiming "no direct communication"
+
+The automated dossier_cron.py synthesis (Claude call) has been observed to gather 30 Slack items for a contact (including real DMs) and then still write "No direct 1:1 communication observed" in the summary — the LLM synthesis step silently dropped the slack data. **Before ever writing or repeating a "no direct 1:1 contact" / "structural only" claim, cross-check it**: run  and  directly. If DMs exist, the claim is wrong — do not trust the synthesized dossier text at face value when the gathered data (visible in the  output's  count) shows items but the written summary claims otherwise. When Brian pushes back on a dossier claim ("how is this even true"), always re-verify against raw Slack/Gmail search before defending or repeating the claim.
+
 ## Synthesis Instructions
 
 When synthesizing a dossier, you are a **relationship analyst**. Read raw interaction data and extract actionable interpersonal intelligence.

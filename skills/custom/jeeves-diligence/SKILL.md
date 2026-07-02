@@ -84,6 +84,9 @@ If you do not have a source, you have three options:
 ## Confirmed Facts — Do Not Deviate
 
 - **Jeeves investor list (confirmed)**: CRV, Tencent, Andreessen Horowitz, GIC, Stanford StartX. Do NOT list Visa or any other investor not on this list. Visa was hallucinated into the NB Diligence deck — it is not a Jeeves investor.
+- **Kroll P2 internal team roles (confirmed 2026-07-01, cost a full redo cycle when assigned wrong):** Brandon = lawyer (handles clickwrap/click-through acknowledgments, NOT bank statements). Thiago = lawyer, works for Brandon. Isa (Isabel) = FinOps lead (bank statements, financial ops docs). William and Axel work for Isa (FinOps). Do not reassign document types across these roles without an explicit correction from Brian.
+- **Kroll P2 / diligence document requests are NEVER split up by country.** Brian repeated this correction multiple times on 2026-07-01: "we're not breaking this up by country at all." Organize by artifact type or owner, never by country segmentation, unless Brian explicitly asks for a country cut.
+- **When rebuilding a rows-based artifact (e.g. the Sample Selection file) via script, never regenerate from scratch** — start from the last-known-good copy, merge/append, then diff row counts (and country coverage, e.g. Mexico rows) before vs. after as a sanity check. This file has had Mexico rows silently dropped on rebuild multiple times (2026-06-25 and again 2026-07-01).
 - **For any investor-facing deck or diligence document**: all company facts must be sourced from a document Brian has provided or a verified data pull. If no source exists, flag as "[Needs Confirmation]" — never fill gaps with general knowledge.
 
 ---
@@ -198,6 +201,26 @@ Lessons from BBVA DD reconciliation:
   never present duplicate copies to Brian as independent triage rows. The registry
   refresh script now groups duplicates into a "DUPLICATES TO DECONFLICT" section
   and flags each affected item.
+- **Same filename != same content -- verify md5Checksum before trashing (learned 2026-07-01)**:
+  Filename-only duplicate detection produces false positives. Before deconflicting,
+  pull md5Checksum/size/createdTime/lastModifyingUser via the Drive API for
+  every copy in a group. Three real patterns seen:
+  (1) True duplicates - identical md5, safe to trash one immediately.
+  (2) Iterative resaves - same filename, different md5, all created within
+  minutes/hours of each other by the same editor (classic "regenerated PDF/deck each
+  time I fixed a comment" pattern). Keep the LAST-created/modified copy, trash the rest.
+  (3) Genuinely different documents that happen to share a filename (different
+  owner/editor, big size gap, days/weeks apart) -- do NOT auto-resolve; flag for Brian.
+  ~BROMIUM folders are junk, not documents: HP Sure Click/Bromium endpoint
+  security software silently creates a ~BROMIUM subfolder inside legitimate DD
+  folders containing tiny (2-4KB) sandboxed stub copies of real files under the
+  identical filename. These get picked up by recursive crawls and misreported as
+  "new items" and false-positive "duplicates" of the real, full-size document
+  elsewhere in the same tree. Always check the parent folder name for ~BROMIUM
+  before treating a small same-named file as a duplicate to reconcile -- it's not
+  a document, it's a security-software artifact. Trash it outright; do not add it
+  to the registry. Exclude ~BROMIUM folder names from future recursive crawls of
+  BBVA DD entirely.
 - **No cross-contamination**: Never reference BBVA DD folder links in a Vista tracker (or vice versa). Each counterparty tracker must reference only that counterparty VDR/folder structure.
 - **When updating a tracker, delete any notes Brian left for the agent (e.g. "Draft an email", "Ask X") once actioned - they are directives to the assistant, not durable tracker content. Empty folders are not done**: A folder with no file is an open item, not a placeholder. Either upload the file or mark the tracker row RED.
 - **When a reconciliation reveals a fixable gap** (file ID + folder ID both known): execute the fix immediately -- do not list it as a user action item. Only put items on the user's plate when they require a human decision or a document Brian must provide.

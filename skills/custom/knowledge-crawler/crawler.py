@@ -728,6 +728,17 @@ def write_intelligence(synthesis: str, drive_files: list, email_threads: dict, s
                     ctx = ctx[:next_newline] + "\n" + new_entries + ctx[next_newline:]
                     STRATEGIC_CONTEXT.write_text(ctx, encoding="utf-8")
                     log.info("Updated STRATEGIC_CONTEXT.md with new learnings")
+                    # Eagerly re-index the strategic-context retrieval layer so
+                    # the change is searchable immediately, instead of paying the
+                    # re-embed latency inline on the agent's next message. Best
+                    # effort — the middleware's lazy sync is the safety net.
+                    try:
+                        from deerflow.agents.memory.strategic_context_store import sync_if_changed
+
+                        if sync_if_changed():
+                            log.info("Re-indexed strategic-context retrieval layer")
+                    except Exception as e:
+                        log.warning("Strategic-context re-index skipped: %s", e)
 
     # Write per-counterparty summaries
     for cp_name in set(list(email_threads.keys()) + list({f["folder"].split("/")[0] for f in drive_files if "/" in f.get("folder", "")})):

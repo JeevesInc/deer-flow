@@ -12,6 +12,7 @@ from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionM
 from deerflow.agents.middlewares.step_budget_middleware import StepBudgetMiddleware
 from deerflow.agents.middlewares.mem0_injection_middleware import Mem0InjectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
+from deerflow.agents.middlewares.strategic_context_middleware import StrategicContextMiddleware
 from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
 from deerflow.agents.middlewares.todo_middleware import TodoMiddleware
@@ -278,6 +279,11 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     # recalled memories per-turn based on the user's actual message.
     # This is in addition to the static profile injection in the system prompt.
     middlewares.append(Mem0InjectionMiddleware(top_k=10))
+
+    # Strategic context semantic layer — retrieves only the STRATEGIC_CONTEXT.md
+    # sections relevant to the user's message, threshold-gated so off-topic turns
+    # inject nothing. Lazily re-indexes when the crons rewrite the file.
+    middlewares.append(StrategicContextMiddleware())
 
     # Add TodoList middleware if plan mode is enabled
     is_plan_mode = config.get("configurable", {}).get("is_plan_mode", False)

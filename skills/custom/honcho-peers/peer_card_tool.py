@@ -563,22 +563,29 @@ def _resolve_query_question(args):
     return head
 
 
-def peer_brief(email):
-    """Short pre-meeting theory-of-mind brief (H2), used by the dossier cron.
+def peer_ask(email, prompt):
+    """Ask the dialectic ONE question about a peer — the generic library
+    entry point behind peer_brief/peer_dossier_read/the weekly digest.
     Returns None when Honcho is unconfigured, unreachable, or has no
-    representation — never raises, so briefing callers degrade gracefully."""
+    representation — never raises, so callers degrade gracefully."""
     if not _honcho_enabled():
         return None
+    email = (email or '').strip().lower()
+    if not email or '@' not in email:
+        return None
     try:
-        email = email.strip().lower()
         client = _get_honcho_client()
         peer = client.peer(_peer_id(email), metadata={'email': email})
-        resp = peer.chat(_MEETING_BRIEF_PROMPT)
-        text = (resp or '').strip()
-        return text or None
+        resp = peer.chat(prompt)
+        return (resp or '').strip() or None
     except Exception as e:
-        print(f"peer_brief({email}) failed: {e}", file=sys.stderr)
+        print(f"peer_ask({email}) failed: {e}", file=sys.stderr)
         return None
+
+
+def peer_brief(email):
+    """Short pre-meeting theory-of-mind brief (H2), used by the dossier cron."""
+    return peer_ask(email, _MEETING_BRIEF_PROMPT)
 
 
 _DOSSIER_READ_PROMPT = (
@@ -594,18 +601,7 @@ def peer_dossier_read(email):
     """Dialectic relationship-state read used as an INPUT to dossier
     synthesis (H3) — Honcho is the relationship engine, the dossier its
     projection. Returns None fail-open (unconfigured/unreachable/empty)."""
-    if not _honcho_enabled():
-        return None
-    try:
-        email = email.strip().lower()
-        client = _get_honcho_client()
-        peer = client.peer(_peer_id(email), metadata={'email': email})
-        resp = peer.chat(_DOSSIER_READ_PROMPT)
-        text = (resp or '').strip()
-        return text or None
-    except Exception as e:
-        print(f"peer_dossier_read({email}) failed: {e}", file=sys.stderr)
-        return None
+    return peer_ask(email, _DOSSIER_READ_PROMPT)
 
 
 _PEER_CONTEXT_PROMPT = (
@@ -637,14 +633,7 @@ def peer_context(email):
     hit = _peer_context_cache.get(email)
     if hit and _time.time() - hit[0] < _PEER_CONTEXT_TTL_SECONDS:
         return hit[1]
-    text = None
-    try:
-        client = _get_honcho_client()
-        peer = client.peer(_peer_id(email), metadata={'email': email})
-        resp = peer.chat(_PEER_CONTEXT_PROMPT)
-        text = (resp or '').strip() or None
-    except Exception as e:
-        print(f"peer_context({email}) failed: {e}", file=sys.stderr)
+    text = peer_ask(email, _PEER_CONTEXT_PROMPT)
     _peer_context_cache[email] = (_time.time(), text)
     return text
 

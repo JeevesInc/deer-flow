@@ -170,6 +170,143 @@ def _build_prompt(review_number: int) -> str:
     )
 
 
+# ------------------------------------------------------------------ #
+# Relationship-health digest (PRD §7 H4)                               #
+# ------------------------------------------------------------------ #
+# ONA staleness ("gone quiet") + a small dialectic pass over the most
+# active external counterparties. Posts a SECOND short Monday DM — and
+# only when there's signal (silent when nothing to report).
+
+DIGEST_TOP_N = int(os.environ.get('WEEKLY_DIGEST_TOP_PEERS', '5'))
+_INTERNAL_DOMAIN = 'tryjeeves.com'
+
+_DIGEST_FLAG_PROMPT = (
+    "Looking at the last few weeks of interactions with this person: has "
+    "anything been dropped or left hanging, or has their tone or engagement "
+    "noticeably shifted? Answer in at most 40 words grounded in concrete "
+    "interactions. If nothing is notable, answer exactly: NONE"
+)
+
+
+def _ona_edges() -> list:
+    """Brian's edges from ona_graph.json. [] fail-open."""
+    try:
+        path = (Path(__file__).resolve().parents[3] / 'backend' / '.deer-flow'
+                / 'dossiers' / 'ona_graph.json')
+        override = os.environ.get('DOSSIER_PATH', '')
+        if override:
+            path = Path(override) / 'ona_graph.json'
+        if not path.exists():
+            return []
+        return json.loads(path.read_text()).get('edges', [])
+    except Exception as e:
+        log.warning("could not load ona_graph.json: %s", e)
+        return []
+
+
+def _owner_counterpart(edge: dict, owner_email: str):
+    s = (edge.get('source') or '').lower()
+    t = (edge.get('target') or '').lower()
+    if s == owner_email:
+        return t
+    if t == owner_email:
+        return s
+    return None
+
+
+def _is_external_person(email: str) -> bool:
+    e = (email or '').lower()
+    if '@' not in e or e.endswith('@' + _INTERNAL_DOMAIN):
+        return False
+    bad = ('calendar.google.com', 'noreply', 'no-reply', 'donotreply',
+           'notifications@', 'mailer-daemon')
+    return not any(b in e for b in bad)
+
+
+def gone_quiet_peers(edges: list, owner_email: str, min_weight: int = 20, cap: int = 8) -> list:
+    """External counterparties with real history (weight >= min_weight) and
+    ZERO interactions in the last 90 days (weight_90d == 0, per H-BUG-2)."""
+    out = []
+    for e in edges:
+        other = _owner_counterpart(e, owner_email)
+        if not other or not _is_external_person(other):
+            continue
+        if int(e.get('weight') or 0) >= min_weight and int(e.get('weight_90d') or 0) == 0:
+            out.append({
+                'email': other,
+                'weight': int(e.get('weight') or 0),
+                'last_interaction': (e.get('last_interaction') or '')[:10],
+            })
+    out.sort(key=lambda x: -x['weight'])
+    return out[:cap]
+
+
+def top_active_peers(edges: list, owner_email: str, n: int = DIGEST_TOP_N) -> list:
+    """Most-active external counterparties over the last 90 days."""
+    out = []
+    for e in edges:
+        other = _owner_counterpart(e, owner_email)
+        if not other or not _is_external_person(other):
+            continue
+        w90 = int(e.get('weight_90d') or 0)
+        if w90 > 0:
+            out.append({'email': other, 'weight_90d': w90})
+    out.sort(key=lambda x: -x['weight_90d'])
+    return out[:n]
+
+
+def build_relationship_digest(edges: list, ask_fn, owner_email: str, top_n: int = DIGEST_TOP_N) -> str:
+    """Digest text, or '' when there is nothing worth Brian's attention.
+    ask_fn(email) -> str|None is the dialectic (injected for testability)."""
+    quiet = gone_quiet_peers(edges, owner_email)
+    flags = []
+    for peer in top_active_peers(edges, owner_email, top_n):
+        try:
+            resp = ask_fn(peer['email'])
+        except Exception:
+            resp = None
+        if resp and resp.strip() and resp.strip().upper() != 'NONE':
+            flags.append((peer['email'], resp.strip()[:300]))
+    if not quiet and not flags:
+        return ''
+    lines = ["*Relationship health — weekly*"]
+    if flags:
+        lines.append("\n*Flags on active counterparties* (from the relationship model)")
+        for email, flag in flags:
+            lines.append(f"- *{email}* — {flag}")
+    if quiet:
+        lines.append("\n*Gone quiet* (real history, nothing in 90+ days)")
+        for q in quiet:
+            last = f", last touch {q['last_interaction']}" if q['last_interaction'] else ''
+            lines.append(f"- *{q['email']}* — {q['weight']} lifetime interactions{last}")
+    return "\n".join(lines)
+
+
+def run_relationship_digest() -> None:
+    """Best-effort H4 digest. Never raises — must not affect the main review."""
+    try:
+        edges = _ona_edges()
+        if not edges:
+            return
+        import importlib.util
+        pct_path = Path(__file__).resolve().parent.parent / 'honcho-peers' / 'peer_card_tool.py'
+        spec = importlib.util.spec_from_file_location('peer_card_tool_weekly', pct_path)
+        pct = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(pct)
+        digest = build_relationship_digest(
+            edges, lambda email: pct.peer_ask(email, _DIGEST_FLAG_PROMPT), BRIAN_EMAIL)
+        if not digest:
+            log.info("Relationship digest: nothing to report — staying silent.")
+            return
+        from notify import dm_owner
+        if dm_owner(digest):
+            log.info("Relationship digest posted.")
+        else:
+            log.warning("Relationship digest DM failed.")
+    except Exception as e:
+        log.warning("Relationship digest skipped: %s", e)
+
+
 def run_review() -> None:
     log.info("Starting weekly open-items review...")
     state = load_state()
@@ -209,6 +346,10 @@ def run_review() -> None:
 
     state['last_run'] = datetime.now().isoformat()
     save_state(state)
+
+    # H4: relationship-health digest rides the same weekly cadence.
+    # Best-effort and posts only when there's signal.
+    run_relationship_digest()
 
 
 def run_loop() -> None:

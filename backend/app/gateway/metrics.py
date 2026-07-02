@@ -257,6 +257,15 @@ g_cm_cron_last_ts = Gauge(
 )
 
 
+g_store_size_bytes = Gauge(
+    "deerflow_store_size_bytes",
+    "On-disk size of each DeerFlow data store (P2-7: growth is monotonic "
+    "without the retention janitor; alert on unexpected slope).",
+    labelnames=("store",),
+    registry=registry,
+)
+
+
 def _state_dir() -> Path:
     # backend/app/gateway/metrics.py → backend/
     return Path(__file__).resolve().parent.parent.parent / ".deer-flow"
@@ -268,6 +277,54 @@ def _refresh_db_size() -> None:
         g_checkpoints_db_bytes.set(db.stat().st_size if db.exists() else 0)
     except OSError:
         g_checkpoints_db_bytes.set(0)
+
+
+# Store-size collection walks threads/ (~2GB, many files) — do it at most
+# every 10 minutes, not on every 15s scrape.
+_STORE_SIZE_TTL_SEC = 600
+_store_size_last = 0.0
+
+
+def _dir_size(path: Path) -> int:
+    total = 0
+    try:
+        for p in path.rglob("*"):
+            try:
+                if p.is_file():
+                    total += p.stat().st_size
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return total
+
+
+def _refresh_store_sizes() -> None:
+    global _store_size_last
+    now = time.time()
+    if now - _store_size_last < _STORE_SIZE_TTL_SEC:
+        return
+    _store_size_last = now
+    d = _state_dir()
+    targets = {
+        "checkpoints_db": d / "checkpoints.db",
+        "memory_json": d / "memory.json",
+        "dispatch_audit": d / "dispatch_audit.jsonl",
+        "ona_graph": d / "dossiers" / "ona_graph.json",
+        "threads": d / "threads",
+        "knowledge": d / "knowledge",
+        "sll": d / "sll",
+        "dossiers": d / "dossiers",
+    }
+    for store, path in targets.items():
+        try:
+            if path.is_dir():
+                g_store_size_bytes.labels(store=store).set(_dir_size(path))
+            else:
+                g_store_size_bytes.labels(store=store).set(
+                    path.stat().st_size if path.exists() else 0)
+        except OSError:
+            g_store_size_bytes.labels(store=store).set(0)
 
 
 def _refresh_langgraph_up(langgraph_url: str) -> None:
@@ -724,6 +781,7 @@ def refresh_all(langgraph_url: str = "http://localhost:2024") -> None:
     """Recompute all metrics. Called from the /metrics handler."""
     started = time.monotonic()
     _refresh_db_size()
+    _refresh_store_sizes()
     _refresh_langgraph_up(langgraph_url)
     _refresh_active_runs()
     _refresh_dispatch_audit()

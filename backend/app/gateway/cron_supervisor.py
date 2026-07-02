@@ -226,6 +226,9 @@ def start_crons() -> None:
     # Pub/Sub silently stops and inbound-email proposals die (33-day outage
     # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.
     _load_and_start("gmail-watch-renew", backend_dir / "scripts" / "gmail_watch_renew_cron.py")
+    # retention-janitor: prunes intel/scratch, rotates dispatch_audit, monthly
+    # VACUUM of checkpoints.db (P2-7 — .deer-flow only ever grew before this).
+    _load_and_start("retention-janitor", backend_dir / "scripts" / "retention_janitor_cron.py")
     # GW-F8: the dispatch queue's drain thread only starts when something new
     # is enqueued in THIS process — items persisted before a restart stranded
     # until the 12h expiry deleted them silently. Kick the drain at boot.

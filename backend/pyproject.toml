@@ -31,6 +31,40 @@ dependencies = [
     # mem0's HuggingFace embedder needs sentence-transformers. Without it
     # mem0 initializes but every injection fails on the embedder load.
     "sentence-transformers>=2.7.0",
+    # --- P3-7 (2026-07-02): everything below was ad-hoc `uv pip install`ed,
+    # so any bare `uv sync` (or the implicit sync in `uv run` / `make test`)
+    # treated it as extraneous and UNINSTALLED it. Two production wipes
+    # happened exactly that way (2026-06-29 python-dotenv; 2026-07-02 an
+    # interrupted sync removed the alphabetically-first 9 of 36). Every
+    # package the stack imports MUST be declared here — never rely on an
+    # ad-hoc install surviving.
+    # Load-bearing but previously transitive:
+    "python-dotenv>=1.2.1",
+    "pillow>=12.0.0",
+    # In-process BB / cap-markets crons + report tooling:
+    "pandas>=3.0.0",
+    "python-dateutil>=2.9.0",
+    "openpyxl>=3.1.5",
+    "xlsxwriter>=3.2.9",
+    "xlwings>=0.36.2",
+    # CM credit-health dashboard (:8100). Streamlit's /_stcore/health stays
+    # green even when the app script dies on import, so a missing dep here
+    # is invisible to the supervisor.
+    "streamlit>=1.58.0",
+    "plotly>=6.0.0",
+    # Zscaler reauth + Okta FastPass approver automation:
+    "pyautogui>=0.9.54",
+    "pywinauto>=0.6.9",
+    # Honcho peer cards (peer_card_tool, honcho_sync_cron). Capped: the
+    # integration depends on documented SDK quirks (id encoding, peers()),
+    # so minor bumps are deliberate, not drive-by.
+    "honcho-ai>=2.1.2,<2.2",
+    # Agent document-processing toolkit (redline/google-drive skills +
+    # sandbox-authored scripts import these at runtime):
+    "python-docx>=1.2.0",
+    "pymupdf>=1.27.0",
+    "pypdf>=6.0.0",
+    "reportlab>=4.5.0,<5",
 ]
 
 [dependency-groups]

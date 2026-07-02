@@ -127,21 +127,10 @@ def _state_completed_today(state: dict, key: str, today_str: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _post_slack(text, blocks=None):
-    token    = os.environ.get('SLACK_BOT_TOKEN')
-    owner_id = os.environ.get('SLACK_OWNER_USER_ID')
-    if not token or not owner_id:
-        log.warning("Slack not configured.")
-        return False
-    try:
-        from slack_sdk import WebClient
-        client     = WebClient(token=token)
-        dm         = client.conversations_open(users=[owner_id])
-        channel_id = dm['channel']['id']
-        client.chat_postMessage(channel=channel_id, text=text, blocks=blocks)
-        return True
-    except Exception as e:
-        log.error(f"Slack post failed: {e}")
-        return False
+    # Canonical implementation in _shared/slack.py (P2-4 / GW-F13).
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+    from notify import dm_owner
+    return dm_owner(text, blocks=blocks)
 
 
 # ---------------------------------------------------------------------------

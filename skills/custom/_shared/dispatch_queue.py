@@ -74,22 +74,13 @@ def _report_stale_drops(stale, where):
     for i in stale:
         log.warning("Dropping stale queued %s (queued %s, >%dh old) [%s]",
                     i.get("category"), i.get("queued_at"), MAX_ITEM_AGE_HOURS, where)
-    token = os.environ.get("SLACK_BOT_TOKEN")
-    owner = os.environ.get("SLACK_OWNER_USER_ID")
-    if not token or not owner:
-        return
     try:
-        from slack_sdk import WebClient
-        client = WebClient(token=token)
-        ch = client.conversations_open(users=[owner])["channel"]["id"]
+        from notify import dm_owner
         lines = "\n".join(
             f"- {i.get('category', 'general')} (queued {i.get('queued_at', '?')})" for i in stale
         )
-        client.chat_postMessage(
-            channel=ch,
-            text=(f":warning: *Dispatch queue dropped {len(stale)} expired item(s)* "
-                  f"(older than {MAX_ITEM_AGE_HOURS}h, never dispatched):\n{lines}"),
-        )
+        dm_owner(f":warning: *Dispatch queue dropped {len(stale)} expired item(s)* "
+                 f"(older than {MAX_ITEM_AGE_HOURS}h, never dispatched):\n{lines}")
     except Exception as e:
         log.warning("stale-drop alert failed: %s", e)
 

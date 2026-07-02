@@ -24,16 +24,18 @@ _RESET_AFTER = 600
 
 
 def _slack_alert(text: str) -> None:
-    """Post a DM to the owner. Best-effort -- never raises."""
-    token    = os.environ.get("SLACK_BOT_TOKEN")
-    owner_id = os.environ.get("SLACK_OWNER_USER_ID")
-    if not token or not owner_id:
-        return
+    """Post a DM to the owner. Best-effort -- never raises.
+
+    Canonical implementation in skills/custom/_shared/slack.py (P2-4);
+    guarded import so a broken skills tree can't take the supervisor down.
+    """
     try:
-        from slack_sdk import WebClient
-        client = WebClient(token=token)
-        ch = client.conversations_open(users=[owner_id])["channel"]["id"]
-        client.chat_postMessage(channel=ch, text=text)
+        import sys
+        shared = str(Path(__file__).resolve().parent.parent.parent.parent / "skills" / "custom" / "_shared")
+        if shared not in sys.path:
+            sys.path.insert(0, shared)
+        from notify import dm_owner
+        dm_owner(text)
     except Exception as e:
         logger.warning("[CronSupervisor] Slack alert failed: %s", e)
 

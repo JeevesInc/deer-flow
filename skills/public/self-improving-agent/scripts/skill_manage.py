@@ -112,6 +112,21 @@ allowed-tools:
     )
 
 
+# Literal backslash-n glued to markdown structure (\n- item, \n# header, \n**bold)
+# is a shell-mangled newline from an agent self-patch — it corrupted
+# jeeves-redshift/SKILL.md and jeeves-diligence/SKILL.md (Skills-H4). Convert
+# those to real newlines; leave \n inside code/quotes ('\n'.join(...)) alone.
+_FAKE_NEWLINE = re.compile(r"\\n(?=[-#*>|]|\*\*)")
+
+
+def _sanitize_patch_text(text: str) -> str:
+    fixed = _FAKE_NEWLINE.sub("\n", text)
+    if fixed != text:
+        print("WARNING: converted literal \\n-before-markdown to real newlines "
+              "(shell-mangled self-patch)", file=sys.stderr)
+    return fixed
+
+
 def cmd_patch(args):
     """Patch a skill file using old_string/new_string replacement."""
     skill_file = _find_skill(args.skill_name)
@@ -125,7 +140,7 @@ def cmd_patch(args):
         print(f"  Looking for: {args.old[:80]}...", file=sys.stderr)
         sys.exit(1)
 
-    new_content = content.replace(args.old, args.new, 1)
+    new_content = content.replace(args.old, _sanitize_patch_text(args.new), 1)
     skill_file.write_text(new_content, encoding="utf-8")
     print(f"Patched {args.skill_name}/SKILL.md")
     print(f"  Replaced: {args.old[:60]}...")
@@ -148,6 +163,7 @@ def cmd_append(args):
         sys.exit(1)
 
     content = skill_file.read_text(encoding="utf-8")
+    args.content = _sanitize_patch_text(args.content)
 
     # Find the section header
     section_pattern = re.escape(args.section)

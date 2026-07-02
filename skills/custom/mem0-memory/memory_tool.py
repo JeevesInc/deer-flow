@@ -1,118 +1,108 @@
-"""
-Jeeves Agent Memory Tool -- Mem0 + Qdrant embedded + Haiku LLM + local sentence-transformers
+"""Jeeves agent memory tool — thin CLI/import surface over the LIVE mem0 store.
+
+This delegates to the harness module (`deerflow.agents.memory.mem0_store`),
+which talks to the shared **Qdrant server** (deerflow-qdrant container,
+localhost:6333) — the same store the agent, gateway, and webhook use.
+
+History: this tool used to open its OWN thread-scoped embedded Qdrant
+(`jeeves_agent_memory` under a threads/<uuid>/workspace dir) — an orphan
+store nothing else read (Skills-H3). Anything written there was invisible
+to the agent. Do not resurrect embedded-path configs here.
 
 Usage:
-    from memory_tool import add_memory, search_memory, get_all_memories
+    uv run python memory_tool.py search "NB facility terms"
+    uv run python memory_tool.py add "NB facility closed at 100MM SOFR+7.5%"
+    uv run python memory_tool.py recent [k]
+    uv run python memory_tool.py count
+    uv run python memory_tool.py delete <memory_id>
 
-    add_memory("NB facility closed at 100MM SOFR+7.5%")
-    hits = search_memory("NB facility terms")
-    all_mem = get_all_memories()
+    from memory_tool import add_memory, search_memory
 """
 
 import os
+import sys
 import warnings
+from pathlib import Path
+
 warnings.filterwarnings("ignore")
 
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["MEM0_TELEMETRY"] = "false"
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("MEM0_TELEMETRY", "false")
 
-from mem0 import Memory
+# Make the harness + backend .env available when run as a skill script.
+_REPO = Path(__file__).resolve().parents[3]  # .../deer-flow
+sys.path.insert(0, str(_REPO / "backend" / "packages" / "harness"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "_shared"))
+try:
+    from env_loader import load_env
 
-USER_ID = "brian.mauck@tryjeeves.com"
-QDRANT_PATH = os.path.join(
-    os.environ.get("WORKSPACE_PATH", "C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/1d2803e0-70cb-404a-91e0-03b2e2ad76df/user-data/workspace"),
-    "mem0_qdrant"
+    load_env()
+except Exception:
+    pass
+
+from deerflow.agents.memory.mem0_store import (  # noqa: E402
+    MEM0_USER_ID,
+    add_memories,
+    count_memories,
+    get_mem0,
+    get_recent_memories,
+    search_memories,
 )
 
-CONFIG = {
-    "llm": {
-        "provider": "anthropic",
-        "config": {
-            "model": "claude-haiku-4-5-20251001",
-            "temperature": 0.1,
-            "max_tokens": 2000,
-        }
-    },
-    "embedder": {
-        "provider": "huggingface",
-        "config": {
-            "model": "sentence-transformers/all-MiniLM-L6-v2"
-        }
-    },
-    "vector_store": {
-        "provider": "qdrant",
-        "config": {
-            "collection_name": "jeeves_agent_memory",
-            "embedding_model_dims": 384,
-            "path": QDRANT_PATH
-        }
-    }
-}
 
-_memory_instance = None
-
-def _get_memory():
-    global _memory_instance
-    if _memory_instance is None:
-        _memory_instance = Memory.from_config(CONFIG)
-    return _memory_instance
+def add_memory(text, user_id=MEM0_USER_ID):
+    """Extract facts from text and store in the live shared store."""
+    result = add_memories([{"role": "user", "content": text}], user_id=user_id)
+    return result.get("results", []) if isinstance(result, dict) else result
 
 
-def add_memory(text, user_id=USER_ID):
-    """Extract facts from text and store. Returns list of added/updated memories."""
-    m = _get_memory()
-    result = m.add(text, user_id=user_id)
-    return result.get("results", [])
-
-
-def search_memory(query, user_id=USER_ID, limit=8):
+def search_memory(query, user_id=MEM0_USER_ID, limit=8):
     """Search relevant memories. Returns list of {memory, score, id} dicts."""
-    m = _get_memory()
-    result = m.search(query, filters={"user_id": user_id}, limit=limit)
-    return result.get("results", [])
+    return search_memories(query, top_k=limit, user_id=user_id)
 
 
-def get_all_memories(user_id=USER_ID):
-    """Return all stored memories for this user."""
-    m = _get_memory()
-    result = m.get_all(filters={"user_id": user_id})
-    return result.get("results", [])
+def recent_memories(k=30, user_id=MEM0_USER_ID):
+    """Most recent k memory texts (direct Qdrant scroll — mem0's get_all()
+    is blind to the 2026-07-01 bulk-migrated facts; the scroll is not)."""
+    return get_recent_memories(k, user_id=user_id)
+
+
+def memory_count(user_id=MEM0_USER_ID):
+    """True point count for the namespace (direct Qdrant, not mem0 get_all)."""
+    return count_memories(user_id=user_id)
 
 
 def delete_memory(memory_id):
     """Delete a specific memory by ID."""
-    _get_memory().delete(memory_id)
+    get_mem0().delete(memory_id)
 
 
 def update_memory(memory_id, new_text):
     """Manually update a specific memory."""
-    _get_memory().update(memory_id, new_text)
+    get_mem0().update(memory_id, new_text)
 
 
 if __name__ == "__main__":
-    import sys
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-    cmd = sys.argv[1] if len(sys.argv) > 1 else "all"
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "count"
 
     if cmd == "search" and len(sys.argv) > 2:
-        query = " ".join(sys.argv[2:])
-        hits = search_memory(query)
-        for h in hits:
-            print("[%.3f] %s" % (h.get("score", 0), h["memory"]))
-
+        for h in search_memory(" ".join(sys.argv[2:])):
+            print("[%.3f] %s" % (h.get("score", 0) or 0, h.get("memory", "")))
     elif cmd == "add" and len(sys.argv) > 2:
-        text = " ".join(sys.argv[2:])
-        added = add_memory(text)
-        for item in added:
-            print("[%s] %s" % (item["event"], item["memory"]))
-
-    elif cmd == "all":
-        mems = get_all_memories()
-        print("%d memories stored:\n" % len(mems))
-        for item in mems:
-            print("  [%s] %s" % (item["id"][:8], item["memory"]))
-
+        for item in add_memory(" ".join(sys.argv[2:])):
+            print("[%s] %s" % (item.get("event", "?"), item.get("memory", "")))
+    elif cmd == "recent":
+        k = int(sys.argv[2]) if len(sys.argv) > 2 else 30
+        for text in recent_memories(k):
+            print("- %s" % text)
+    elif cmd == "count":
+        print("%d memories in namespace %s" % (memory_count(), MEM0_USER_ID))
     elif cmd == "delete" and len(sys.argv) > 2:
         delete_memory(sys.argv[2])
         print("Deleted %s" % sys.argv[2])
+    else:
+        print(__doc__)

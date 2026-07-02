@@ -1,64 +1,48 @@
-# mem0-memory skill
+---
+name: mem0-memory
+description: Use this skill to inspect, search, add to, or clean up the agent's long-term semantic memory (mem0). Use when the user asks "what do you remember about X", wants a memory added/corrected/deleted, or asks about the memory system's health or counts.
+allowed-tools:
+  - bash
+  - read_file
+---
 
-> ⚠️ STATUS: The live Mem0 store is managed by DeerFlow internally. Do NOT write to it from external scripts while the server is running (Qdrant embedded mode, single-writer).
+# mem0-memory — Long-Term Semantic Memory
 
-## What actually exists
+> **Accuracy is mandatory.** Recalled memories reflect what was true when written — verify numbers/claims before repeating them.
 
-The live Mem0 system is fully operational:
-- **962+ facts** stored at `.deer-flow/mem0_data/collection/deerflow_memories/`
-- **Injection**: `Mem0InjectionMiddleware` fires on every LLM call, injects top-10 relevant memories as a SystemMessage extension
-- **Write**: `MemoryMiddleware` queues post-session fact extraction automatically
-- **LLM**: Claude Haiku (fast, cheap — patched from Sonnet on 2026-05-14)
-- **Embeddings**: sentence-transformers/all-MiniLM-L6-v2 (local, no API cost)
-- **Vector store**: Qdrant embedded at `.deer-flow/mem0_data/`
+## Current architecture (since 2026-07-01)
 
-## Inspecting the store (read-only, while server is running)
+- **Vector store:** Qdrant **server** (`deerflow-qdrant` container from `monitoring/docker-compose.yml`, `localhost:6333`). Shared by the LangGraph agent, the gateway (`/api/memory`), and the webhook receiver — the old embedded single-writer lock is gone.
+- **Collection:** `deerflow_memories`, namespaced by `user_id`:
+  - `deerflow_user` — conversational facts (the agent's main memory)
+  - `strategic-context` — STRATEGIC_CONTEXT.md sections (auto-injected per turn)
+  - `proposal-patterns` — webhook classifier learnings
+- **Embedder:** `sentence-transformers/all-MiniLM-L6-v2` (local, 384-dim). **LLM** for fact extraction: Sonnet 5.
+- **Injection:** `Mem0InjectionMiddleware` searches per turn with the user's message and injects results **score-gated** by `memory.mem0_min_injection_score` (default 0.22).
+- Config lives in `backend/packages/harness/deerflow/agents/memory/mem0_store.py` (env: `MEM0_QDRANT_HOST`/`MEM0_QDRANT_PORT`). Changing it needs a LangGraph restart.
 
-```python
-import sqlite3, pickle, os
+## Commands
 
-backend = os.path.join(os.path.dirname(os.environ.get('SKILLS_PATH','')), 'backend')
-db = os.path.join(backend, '.deer-flow', 'mem0_data', 'collection', 'deerflow_memories', 'storage.sqlite')
-conn = sqlite3.connect(db)
-cur = conn.cursor()
-cur.execute('SELECT COUNT(*) FROM points')
-print('Total facts:', cur.fetchone()[0])
-
-cur.execute('SELECT id, point FROM points ORDER BY rowid DESC LIMIT 20')
-for row_id, point_bytes in cur.fetchall():
-    point = pickle.loads(point_bytes)
-    text = (point.payload or {}).get('data', '')
-    print('-', text[:120])
-conn.close()
+```bash
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py search "NB facility terms"
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py add "NB facility closed at 100MM SOFR+7.5%"
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py recent 30
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py count
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py delete <memory_id>
 ```
 
-## API access (Gateway process — limited due to Qdrant multi-process lock)
+These hit the SAME live store the agent uses — additions are immediately searchable by the running agent.
 
+## Known gotchas
+
+- **`mem0.get_all()` is blind to migrated facts.** The 2026-07-01 bulk migration bypassed mem0's internal index, so `get_all()` sees only natively-written facts (~20) while Qdrant holds 4,400+. `search()` reaches everything. For counts or recency scans use `memory_tool.py count` / `recent` (they scroll Qdrant directly).
+- **mem0 API quirks:** `search()` takes `top_k=` (NOT `limit`, silently ignored); `delete_all` wants `user_id=` (NOT `filters=`).
+- **If Qdrant is down** (`curl localhost:6333/readyz`), the agent runs with no memory and logs `mem0 injection failed`. Restart via `docker compose -f monitoring/docker-compose.yml up -d qdrant`.
+
+## Health check
+
+```bash
+curl -s localhost:6333/readyz                      # Qdrant server
+curl -s localhost:8001/api/memory/status           # gateway view (profile + true mem0 count)
+uv run python /mnt/skills/custom/mem0-memory/memory_tool.py count
 ```
-GET http://localhost:8001/api/memory/status   # profile sections only (works)
-GET http://localhost:8001/api/memory/mem0     # returns error (Gateway can't read locked store)
-```
-
-The Gateway API showing `mem0_count: -1` is expected — it's a multi-process limitation, not a data loss.
-The LangGraph process holds the Qdrant lock and injection works fine within that process.
-
-## Key architecture
-
-- Two processes: LangGraph (port 2024, holds Qdrant lock) + Gateway (port 8001, API only)
-- `Mem0InjectionMiddleware` runs inside LangGraph → injection works ✅
-- Gateway API can't access Qdrant directly → shows -1 → cosmetic, not functional
-
-## What the recalled_memories block is
-
-The `<recalled_memories>` block at the top of each session context IS Mem0 working.
-The injection runs at every LLM call, searching the 962-fact store for the 10 most relevant to the user's message.
-
-## LLM config location
-
-`packages/harness/deerflow/agents/memory/mem0_store.py`
-Model: `claude-haiku-4-5` (fact extraction and dedup — patched 2026-05-14)
-
-## Restart required after patching
-
-After changing `mem0_store.py`, restart the LangGraph server for the new model to take effect.
-The Qdrant store persists across restarts (facts are not lost).

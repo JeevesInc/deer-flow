@@ -189,7 +189,8 @@ When writing a DDQ response document that will be shared externally (e.g., Vista
 
 Lessons from BBVA DD reconciliation:
 
-- **Trackers are ALWAYS native Google Sheets shared via link, never .xlsx** (Brian, 2026-06-17 explicit correction). upload_to_drive.py uploads xlsx-as-xlsx with NO conversion; instead create the file with mimeType 'application/vnd.google-apps.spreadsheet' (Drive converts the xlsx on import), share the link (domain writer for tryjeeves.com), and trash the prior xlsx so there is one canonical Sheet.\n- **Tracker and Folder alignment is mandatory**: Every item in the tracker must map to exactly one folder. Every folder must have a corresponding tracker row. Reconcile before declaring complete.
+- **Trackers are ALWAYS native Google Sheets shared via link, never .xlsx** (Brian, 2026-06-17 explicit correction). upload_to_drive.py uploads xlsx-as-xlsx with NO conversion; instead create the file with mimeType 'application/vnd.google-apps.spreadsheet' (Drive converts the xlsx on import), share the link (domain writer for tryjeeves.com), and trash the prior xlsx so there is one canonical Sheet.
+- **Tracker and Folder alignment is mandatory**: Every item in the tracker must map to exactly one folder. Every folder must have a corresponding tracker row. Reconcile before declaring complete.
 - **No duplicate files**: When a new version of a file is uploaded, delete the old version. Drive folders must contain exactly one copy of each document.
 - **Duplicates are always deconflicted (Brian, 2026-06-10)**: Whenever discovery,
   triage, or any audit surfaces the same document under multiple Drive IDs,

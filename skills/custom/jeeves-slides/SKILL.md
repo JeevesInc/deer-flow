@@ -150,4 +150,4 @@ After building, always:
 2. Upload to the correct Drive folder (use jeeves-capital-markets skill to find it)
 3. Share the Drive link
 
-    python C:/Jeeves/redshift-bot/deer-flow/skills/custom/google-drive/upload_to_drive.py       "C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/8e76efa6-4b88-4aeb-8e80-1243cd84c233/user-data/outputs<filename>.pptx"       --folder "<TARGET_FOLDER_ID>"
+    python /mnt/skills/custom/google-drive/upload_to_drive.py "/mnt/user-data/outputs/<filename>.pptx" --folder "<TARGET_FOLDER_ID>"

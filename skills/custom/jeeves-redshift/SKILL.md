@@ -20,14 +20,18 @@ allowed-tools:
 
 ```bash
 cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb && git pull origin main
-ls C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/*.sql/ngrep -rl "rollforward" C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/ncat C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/total_portfolio_balance.sql/n```
+ls C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/*.sql
+grep -rl "rollforward" C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/
+cat C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/total_portfolio_balance.sql
+```
 
 If an existing query covers 80%+ of what is needed, start from it and adapt.
 
 **Do NOT use `sql_repo.py`.** When a query is worth keeping, commit it to GH:
 
 ```bash
-cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/ngit add sql/new_query.sql
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb
+git add sql/new_query.sql
 git commit -m "Add new_query: description"
 git push origin main
 ```
@@ -54,9 +58,19 @@ python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --limit 500
 
 # Generate SQL from natural language (uses DSPy + Claude)
 python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the total portfolio balance by country?"
+```
 
-# Save a query to the repo after successful execution
-python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "total_portfolio_balance" --tags "portfolio,balance,loc"
+(Do NOT use `--save`/`sql_repo.py` — queries worth keeping go to `cfo-org-kb` on GitHub, per the workflow above.)
+
+### Enforced guards (errors, not warnings)
+
+The runner **rejects**: non-SELECT statements, multi-statement input, tables outside the known whitelist, and today/future dates (literal or bare `CURRENT_DATE`/`GETDATE()` — data lags a day; `CURRENT_DATE - 1` is fine). Overrides when genuinely needed:
+
+```bash
+# Query a legitimate table missing from the whitelist
+python .../sql_runner.py "SELECT ..." --allow-tables "some_schema.new_table"
+# Intentionally reference today (non-tape tables only)
+python .../sql_runner.py "SELECT ..." --allow-today
 ```
 
 The runner automatically:
@@ -284,7 +298,34 @@ Vintage/cohort analysis data for LOC portfolio.
 
 ## Query Examples by Intent
 
-## SQL Style\nALWAYS write SQL with leading commas, not trailing commas. Example:\n  SELECT\n      col1\n    , col2\n    , col3\n  FROM ...\n  ORDER BY\n      col1\n    , col2\n\n## RPP Data Model\nRPP accounts are LOC balances financed into GWC loans. Key facts:\n- Identify via: gwc_tape WHERE loan_reference_number ILIKE 'RPP%'\n- One row per installment = rows WHERE principal_amount_due_usd != 0\n- dt on those rows = the invoice due date\n- balance_usd = running unpaid balance at that point\n- days_past_due = days since that installment was due\n- delinquent_dt = date the current installment became overdue\n- ~99 RPP loans (as of May 2026), one row per installment\n- Do NOT use dms_mysql_jeeves_raw.instalments or company_statements for RPP — gwc_tape is the source of truth\n\nUse these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+## SQL Style
+
+ALWAYS write SQL with leading commas, not trailing commas. Example:
+
+```sql
+SELECT
+    col1
+  , col2
+  , col3
+FROM ...
+ORDER BY
+    col1
+  , col2
+```
+
+## RPP Data Model
+
+RPP accounts are LOC balances financed into GWC loans. Key facts:
+- Identify via: `gwc_tape WHERE loan_reference_number ILIKE 'RPP%'`
+- One row per installment = rows WHERE `principal_amount_due_usd != 0`
+- `dt` on those rows = the invoice due date
+- `balance_usd` = running unpaid balance at that point
+- `days_past_due` = days since that installment was due
+- `delinquent_dt` = date the current installment became overdue
+- ~99 RPP loans (as of May 2026), one row per installment
+- Do NOT use `dms_mysql_jeeves_raw.instalments` or `company_statements` for RPP — gwc_tape is the source of truth
+
+Use these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
 
 ### Balance (portfolio snapshot)
 **Q:** "What's the total portfolio balance?"

@@ -219,3 +219,54 @@ def test_gather_prep_extras_survives_raising_modules(cron, monkeypatch):
 
     monkeypatch.setattr(cron, "_load_honcho_modules", lambda: (Boom, Boom))
     assert cron.gather_prep_extras(["a@b.com"]) == {}
+
+
+# ---------------------------------------------------------------------------
+# H3: dialectic read feeds dossier synthesis
+# ---------------------------------------------------------------------------
+
+def test_synthesis_msg_includes_honcho_read(cron):
+    msg = cron.build_synthesis_user_msg(
+        "p@x.com", {"days_back": 14}, None,
+        honcho_read="Relationship warm; open item: Q3 covenant waiver.")
+    assert "Honcho dialectic" in msg
+    assert "Q3 covenant waiver" in msg
+    assert "prefer the raw data" in msg  # gathered data stays authoritative
+
+
+def test_synthesis_msg_unchanged_without_honcho_read(cron):
+    msg = cron.build_synthesis_user_msg("p@x.com", {"days_back": 14}, {"email": "p@x.com"})
+    assert "Honcho dialectic" not in msg
+    assert "## Existing dossier:" in msg
+
+
+def test_honcho_dossier_read_fails_open(cron, monkeypatch):
+    monkeypatch.setattr(cron, "_load_honcho_modules", lambda: None)
+    assert cron._honcho_dossier_read("p@x.com") is None
+
+    class Boom:
+        @staticmethod
+        def peer_dossier_read(email):
+            raise RuntimeError("honcho down")
+    monkeypatch.setattr(cron, "_load_honcho_modules", lambda: (Boom, None))
+    assert cron._honcho_dossier_read("p@x.com") is None
+
+
+def test_honcho_dossier_read_passes_through(cron, monkeypatch):
+    class Mod:
+        @staticmethod
+        def peer_dossier_read(email):
+            return f"read for {email}"
+    monkeypatch.setattr(cron, "_load_honcho_modules", lambda: (Mod, None))
+    assert cron._honcho_dossier_read("p@x.com") == "read for p@x.com"
+
+
+def test_peer_dossier_read_fails_open(pct, monkeypatch):
+    monkeypatch.setattr(pct, "_honcho_enabled", lambda: False)
+    assert pct.peer_dossier_read("a@b.com") is None
+
+    monkeypatch.setattr(pct, "_honcho_enabled", lambda: True)
+    def boom():
+        raise RuntimeError("down")
+    monkeypatch.setattr(pct, "_get_honcho_client", boom)
+    assert pct.peer_dossier_read("a@b.com") is None

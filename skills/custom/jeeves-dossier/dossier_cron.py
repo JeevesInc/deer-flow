@@ -229,7 +229,34 @@ Output ONLY valid JSON matching this schema:
 }"""
 
 
-def synthesize_dossier(email, gathered_data, existing_dossier):
+def build_synthesis_user_msg(email, gathered_data, existing_dossier, honcho_read=None):
+    """Assemble the synthesis input (pure, testable). The Honcho dialectic
+    read (H3) — when available — feeds relationship state into the dossier,
+    making the dossier the projection of the Honcho representation rather
+    than a parallel silo."""
+    user_msg = f"Contact email: {email}\n\n"
+    user_msg += f"## Raw gathered data (last {gathered_data.get('days_back', 30)} days):\n"
+    user_msg += json.dumps(gathered_data, indent=2, default=str)[:15000]  # Limit size
+
+    if honcho_read:
+        user_msg += (
+            "\n\n## Relationship read from the Honcho dialectic "
+            "(theory-of-mind model over the FULL interaction history, not just the window above):\n"
+            f"{honcho_read[:4000]}\n"
+            "Use this to inform relationship.health_score/trend, communication_style, "
+            "and open_threads. Where it conflicts with the raw gathered data above, "
+            "prefer the raw data — and never copy a claim the gathered data contradicts."
+        )
+
+    if existing_dossier:
+        user_msg += f"\n\n## Existing dossier:\n"
+        user_msg += json.dumps(existing_dossier, indent=2, default=str)[:5000]
+    else:
+        user_msg += "\n\n## No existing dossier — create a new one."
+    return user_msg
+
+
+def synthesize_dossier(email, gathered_data, existing_dossier, honcho_read=None):
     """Call Anthropic API to synthesize/update a dossier."""
     api_key = os.environ.get('ANTHROPIC_API_KEY')
     if not api_key:
@@ -245,15 +272,7 @@ def synthesize_dossier(email, gathered_data, existing_dossier):
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    user_msg = f"Contact email: {email}\n\n"
-    user_msg += f"## Raw gathered data (last {gathered_data.get('days_back', 30)} days):\n"
-    user_msg += json.dumps(gathered_data, indent=2, default=str)[:15000]  # Limit size
-
-    if existing_dossier:
-        user_msg += f"\n\n## Existing dossier:\n"
-        user_msg += json.dumps(existing_dossier, indent=2, default=str)[:5000]
-    else:
-        user_msg += "\n\n## No existing dossier — create a new one."
+    user_msg = build_synthesis_user_msg(email, gathered_data, existing_dossier, honcho_read)
 
     for attempt in range(1, SYNTHESIS_MAX_RETRIES + 1):
         try:
@@ -321,6 +340,18 @@ def _load_honcho_modules():
     except Exception as e:
         log.warning(f"honcho-peers modules unavailable, briefing will omit peer intel: {e}")
         _honcho_modules = False
+        return None
+
+
+def _honcho_dossier_read(email):
+    """Dialectic relationship read for synthesis input (H3). Fail-open."""
+    mods = _load_honcho_modules()
+    if not mods:
+        return None
+    try:
+        return mods[0].peer_dossier_read(email)
+    except Exception as e:
+        log.warning(f"peer_dossier_read failed for {email}: {e}")
         return None
 
 
@@ -506,7 +537,8 @@ def process_event(event, state):
         existing = read_existing_dossier(email)
 
         if gathered:
-            updated = synthesize_dossier(email, gathered, existing)
+            honcho_read = _honcho_dossier_read(email)
+            updated = synthesize_dossier(email, gathered, existing, honcho_read)
             if updated:
                 save_dossier(email, updated)
                 dossiers[email] = updated

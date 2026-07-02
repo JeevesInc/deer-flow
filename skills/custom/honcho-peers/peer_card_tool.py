@@ -581,6 +581,33 @@ def peer_brief(email):
         return None
 
 
+_DOSSIER_READ_PROMPT = (
+    "Assess the current state of the relationship between Brian and this "
+    "person: overall health and trajectory; their communication style and "
+    "preferences; open threads and commitments in both directions; and any "
+    "relationship risks or opportunities. Ground every claim in concrete "
+    "interactions and note where the evidence is thin."
+)
+
+
+def peer_dossier_read(email):
+    """Dialectic relationship-state read used as an INPUT to dossier
+    synthesis (H3) — Honcho is the relationship engine, the dossier its
+    projection. Returns None fail-open (unconfigured/unreachable/empty)."""
+    if not _honcho_enabled():
+        return None
+    try:
+        email = email.strip().lower()
+        client = _get_honcho_client()
+        peer = client.peer(_peer_id(email), metadata={'email': email})
+        resp = peer.chat(_DOSSIER_READ_PROMPT)
+        text = (resp or '').strip()
+        return text or None
+    except Exception as e:
+        print(f"peer_dossier_read({email}) failed: {e}", file=sys.stderr)
+        return None
+
+
 _PEER_CONTEXT_PROMPT = (
     "Brian is about to write a message to this person. In under 120 words, "
     "give the drafting-relevant context: (1) how they prefer to be "

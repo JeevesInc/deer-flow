@@ -8,6 +8,7 @@ Commands:
   graph [--min-weight N] [--format json|dot]   Full adjacency graph + metrics
   top [--n 10]                                  Most connected nodes
   path <email_a> <email_b>                      Shortest connection path
+  mutual <email_a> <email_b> [--n 5]            Warmest mutual connections
   bridge [--n 10]                               Bridge nodes (betweenness centrality)
   cluster                                        Community detection
   query "<question>"                            Natural-language ONA query
@@ -59,6 +60,72 @@ def _load_graph() -> dict:
         print("ERROR: ona_graph.json not found. Run `peer_card_tool.py seed-all` first.", file=sys.stderr)
         sys.exit(1)
     return json.loads(path.read_text())
+
+
+def warmest_mutuals(email_a: str, email_b: str, limit: int = 3) -> list[dict]:
+    """Warmest mutual connections between two people (H5) — used by the
+    dossier pre-meeting briefing so Brian can reference a shared contact.
+    Pure library function: returns [] when the graph is missing/corrupt or
+    either person is unknown; never prints, raises, or exits. Warmth of a
+    mutual = the COLDER of its two legs (a strong tie to only one side is
+    not a warm intro), recency-weighted via weight_90d (H-BUG-2)."""
+    email_a = (email_a or '').strip().lower()
+    email_b = (email_b or '').strip().lower()
+    if not email_a or not email_b or email_a == email_b:
+        return []
+    path = _dossier_dir() / 'ona_graph.json'
+    if not path.exists():
+        return []
+    try:
+        graph = json.loads(path.read_text())
+    except Exception:
+        return []
+
+    adj: dict[str, dict[str, dict]] = {}
+    for e in graph.get('edges', []):
+        s = (e.get('source') or '').strip().lower()
+        t = (e.get('target') or '').strip().lower()
+        if not s or not t:
+            continue
+        adj.setdefault(s, {})[t] = e
+        adj.setdefault(t, {})[s] = e
+
+    mutual = set(adj.get(email_a, {})) & set(adj.get(email_b, {}))
+    mutual -= {email_a, email_b}
+    mutual = {m for m in mutual if _is_person_email(m)}
+    if not mutual:
+        return []
+
+    def _leg_warmth(e: dict) -> int:
+        # weight_90d strictly dominates (H-BUG-2: active ties must outrank
+        # stale-but-heavy ones); capped lifetime weight only breaks ties.
+        return int(e.get('weight_90d') or 0) * 1000 + min(int(e.get('weight') or 0), 999)
+
+    def _warmth(m: str) -> int:
+        return min(_leg_warmth(adj[email_a][m]), _leg_warmth(adj[email_b][m]))
+
+    out = []
+    for m in sorted(mutual, key=_warmth, reverse=True)[:max(0, limit)]:
+        ea, eb = adj[email_a][m], adj[email_b][m]
+        out.append({
+            'email': m,
+            'warmth': _warmth(m),
+            'weight_90d_min': min(int(ea.get('weight_90d') or 0), int(eb.get('weight_90d') or 0)),
+            'last_interaction': min(ea.get('last_interaction') or '', eb.get('last_interaction') or ''),
+        })
+    return out
+
+
+def cmd_mutual(email_a: str, email_b: str, limit: int = 5):
+    results = warmest_mutuals(email_a, email_b, limit=limit)
+    if not results:
+        print(f"No mutual connections between {email_a} and {email_b}.")
+        return
+    print(f"Warmest mutual connections between {email_a} and {email_b}:\n")
+    for i, m in enumerate(results, 1):
+        print(f"  {i}. {m['email']}  [warmth={m['warmth']}, 90d-min={m['weight_90d_min']}, "
+              f"last={m['last_interaction'] or '?'}]")
+    print()
 
 
 def _is_person_email(email: str) -> bool:
@@ -622,6 +689,17 @@ def main():
             sys.exit(1)
         cmd_path(sys.argv[2], sys.argv[3])
 
+    elif cmd == 'mutual':
+        if len(sys.argv) < 4:
+            print("Usage: ona_tool.py mutual <email_a> <email_b> [--n 5]", file=sys.stderr)
+            sys.exit(1)
+        n = 5
+        if '--n' in sys.argv:
+            idx = sys.argv.index('--n')
+            if idx + 1 < len(sys.argv):
+                n = int(sys.argv[idx + 1])
+        cmd_mutual(sys.argv[2], sys.argv[3], n)
+
     elif cmd == 'bridge':
         n = 10
         i = 2
@@ -662,7 +740,7 @@ def main():
 
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)
-        print("Commands: graph, top, path, bridge, cluster, query, export-redshift, export-postgres", file=sys.stderr)
+        print("Commands: graph, top, path, mutual, bridge, cluster, query, export-redshift, export-postgres", file=sys.stderr)
         sys.exit(1)
 
 

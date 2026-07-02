@@ -46,6 +46,18 @@ python /mnt/skills/custom/honcho-peers/peer_card_tool.py read <email>
 python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> "What communication style does this person prefer?"
 ```
 
+### Theory-of-mind presets (predictive questions the dialectic is built for)
+```bash
+python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> --concerns
+python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> --commitments
+python /mnt/skills/custom/honcho-peers/peer_card_tool.py query <email> --react-to "a 15% pricing increase on the facility"
+```
+`--concerns` = stated + unstated worries; `--commitments` = open promises in both
+directions; `--react-to` = predict their reaction to a scenario and how to frame it.
+Use these before negotiations, difficult asks, or renewals — they beat the generic
+card when you need decision support rather than a bio. The pre-meeting dossier
+briefing includes an automatic short version of this (peer_brief) per attendee.
+
 ### Ingest recent interactions for one peer
 ```bash
 python /mnt/skills/custom/honcho-peers/peer_card_tool.py ingest <email> [--days 30]
@@ -86,6 +98,14 @@ python /mnt/skills/custom/honcho-peers/ona_tool.py top [--n 10]
 ```bash
 python /mnt/skills/custom/honcho-peers/ona_tool.py path <email_a> <email_b>
 ```
+
+### Warmest mutual connections (warm-intro candidates)
+```bash
+python /mnt/skills/custom/honcho-peers/ona_tool.py mutual <email_a> <email_b> [--n 5]
+```
+Ranks shared contacts by the COLDER of the two legs, recency-weighted
+(`weight_90d` dominates) — a strong tie to only one side is not a warm intro.
+The pre-meeting dossier briefing auto-includes the top 2 per attendee.
 
 ### Bridge nodes — people who connect otherwise-separate clusters
 ```bash

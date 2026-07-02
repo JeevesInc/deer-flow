@@ -298,7 +298,69 @@ def synthesize_dossier(email, gathered_data, existing_dossier):
 # Slack DM posting
 # ---------------------------------------------------------------------------
 
-def post_briefing(event, dossiers):
+_honcho_modules = None  # (peer_card_tool, ona_tool) or False after a failed load
+
+
+def _load_honcho_modules():
+    """Lazily import the honcho-peers skill modules (peer_card_tool, ona_tool).
+    Cached; returns None if the skill is missing so callers fail open."""
+    global _honcho_modules
+    if _honcho_modules is not None:
+        return _honcho_modules or None
+    try:
+        import importlib.util
+        skill_dir = Path(__file__).resolve().parent.parent / 'honcho-peers'
+        mods = []
+        for name in ('peer_card_tool', 'ona_tool'):
+            spec = importlib.util.spec_from_file_location(f'{name}_dossier_prep', skill_dir / f'{name}.py')
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mods.append(mod)
+        _honcho_modules = tuple(mods)
+        return _honcho_modules
+    except Exception as e:
+        log.warning(f"honcho-peers modules unavailable, briefing will omit peer intel: {e}")
+        _honcho_modules = False
+        return None
+
+
+def gather_prep_extras(emails, max_attendees=4):
+    """Per-attendee Honcho theory-of-mind brief (H2) + warmest mutual
+    connections from the ONA graph (H5). Fail-open: any failure just means
+    the briefing posts without that section."""
+    extras = {}
+    mods = _load_honcho_modules()
+    if not mods:
+        return extras
+    pct, ona = mods
+    for email in list(emails)[:max_attendees]:
+        brief, mutuals = None, []
+        try:
+            brief = pct.peer_brief(email)
+        except Exception as e:
+            log.warning(f"peer_brief failed for {email}: {e}")
+        try:
+            mutuals = ona.warmest_mutuals(MY_EMAIL, email, limit=2)
+        except Exception as e:
+            log.warning(f"warmest_mutuals failed for {email}: {e}")
+        if brief or mutuals:
+            extras[email] = {'brief': brief, 'mutuals': mutuals}
+    return extras
+
+
+def format_prep_extras(ex):
+    """Render one attendee's prep extras as mrkdwn lines (pure, testable)."""
+    parts = []
+    if ex.get('brief'):
+        parts.append(f"\n:brain: *Read on them:* {ex['brief'][:800]}")
+    mutuals = ex.get('mutuals') or []
+    if mutuals:
+        names = ', '.join(m.get('email', '?') for m in mutuals)
+        parts.append(f"\n:handshake: *Warm mutual connections:* {names}")
+    return ''.join(parts)
+
+
+def post_briefing(event, dossiers, prep_extras=None):
     """Post a pre-meeting briefing to Slack DM."""
     bot_token = os.environ.get('SLACK_BOT_TOKEN')
     owner_id = os.environ.get('SLACK_OWNER_USER_ID')
@@ -359,6 +421,8 @@ def post_briefing(event, dossiers):
             section_text += coaching_text
         if threads_text:
             section_text += f"\n*Open threads:*\n{threads_text}"
+        if prep_extras and email in prep_extras:
+            section_text += format_prep_extras(prep_extras[email])
 
         blocks.append({
             "type": "section",
@@ -452,7 +516,9 @@ def process_event(event, state):
             dossiers[email] = existing
 
     if dossiers:
-        success = post_briefing(event, dossiers)
+        # H2/H5: Honcho theory-of-mind brief + ONA warm mutuals per attendee.
+        prep_extras = gather_prep_extras(list(dossiers.keys()))
+        success = post_briefing(event, dossiers, prep_extras)
         if success:
             _consecutive_failures = 0
         else:

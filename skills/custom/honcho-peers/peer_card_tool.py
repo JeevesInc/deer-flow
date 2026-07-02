@@ -14,6 +14,9 @@ so the ONA/Grafana pipeline is usable before signing up at app.honcho.dev.
 Commands:
   read <email>                     Dialectic synthesis: full peer card
   query <email> "<question>"       Ask the dialectic a specific question
+  query <email> --concerns         Preset: stated + unstated concerns
+  query <email> --commitments      Preset: open commitments, both directions
+  query <email> --react-to "<x>"   Preset: predict their reaction to x
   ingest <email> [--days 30]       Pull recent interactions for one peer
   list                             List peers tracked in Honcho
   seed-dossiers                    Seed Honcho from existing dossier JSONs
@@ -509,6 +512,74 @@ _CARD_PROMPT = (
     "and ground every claim in concrete interactions."
 )
 
+# Theory-of-mind query presets (H2). The dialectic models the PEER's
+# perspective — these ask the predictive questions it's actually built for,
+# instead of the generic-summary _CARD_PROMPT.
+_QUERY_PRESETS = {
+    '--concerns': (
+        "What are this person's current concerns — both stated and unstated? "
+        "Distinguish what they have said explicitly from what their behavior "
+        "and communication patterns suggest they are worried about but have "
+        "not said. Ground each concern in concrete interactions."
+    ),
+    '--commitments': (
+        "List the open commitments between Brian and this person, in both "
+        "directions: what has Brian committed to them that is still "
+        "outstanding, and what have they committed to Brian? For each: what "
+        "was promised, roughly when, and its current status. Only include "
+        "items that are not clearly resolved."
+    ),
+}
+
+_REACT_TO_TEMPLATE = (
+    "How is this person likely to react to the following: {scenario}? Ground "
+    "the prediction in their communication style, past reactions, and current "
+    "concerns. Cover: their likely initial reaction, the underlying worries "
+    "it may trigger, and how Brian should frame it to land well."
+)
+
+_MEETING_BRIEF_PROMPT = (
+    "Brian is about to meet this person. In under 150 words give him: "
+    "(1) their current concerns, stated and unstated; (2) open commitments "
+    "in either direction; (3) one concrete suggestion for how to approach "
+    "this conversation given their communication style. Be specific and "
+    "skip anything you have no evidence for."
+)
+
+
+def _resolve_query_question(args):
+    """Turn `query` CLI args (everything after the email) into the dialectic
+    question. Presets: --concerns, --commitments, --react-to "<scenario>".
+    Returns None on malformed input (missing --react-to scenario)."""
+    if not args:
+        return None
+    head = args[0]
+    if head == '--react-to':
+        if len(args) < 2 or not args[1].strip():
+            return None
+        return _REACT_TO_TEMPLATE.format(scenario=args[1].strip())
+    if head in _QUERY_PRESETS:
+        return _QUERY_PRESETS[head]
+    return head
+
+
+def peer_brief(email):
+    """Short pre-meeting theory-of-mind brief (H2), used by the dossier cron.
+    Returns None when Honcho is unconfigured, unreachable, or has no
+    representation — never raises, so briefing callers degrade gracefully."""
+    if not _honcho_enabled():
+        return None
+    try:
+        email = email.strip().lower()
+        client = _get_honcho_client()
+        peer = client.peer(_peer_id(email), metadata={'email': email})
+        resp = peer.chat(_MEETING_BRIEF_PROMPT)
+        text = (resp or '').strip()
+        return text or None
+    except Exception as e:
+        print(f"peer_brief({email}) failed: {e}", file=sys.stderr)
+        return None
+
 
 def _require_honcho():
     if not _honcho_enabled():
@@ -660,10 +731,15 @@ def main():
         cmd_read(sys.argv[2])
 
     elif cmd == 'query':
-        if len(sys.argv) < 4:
-            print('Usage: peer_card_tool.py query <email> "<question>"', file=sys.stderr)
+        question = _resolve_query_question(sys.argv[3:]) if len(sys.argv) >= 4 else None
+        if not question:
+            print('Usage: peer_card_tool.py query <email> "<question>"\n'
+                  '       peer_card_tool.py query <email> --concerns\n'
+                  '       peer_card_tool.py query <email> --commitments\n'
+                  '       peer_card_tool.py query <email> --react-to "<scenario>"',
+                  file=sys.stderr)
             sys.exit(1)
-        cmd_query(sys.argv[2], sys.argv[3])
+        cmd_query(sys.argv[2], question)
 
     elif cmd == 'ingest':
         if len(sys.argv) < 3:

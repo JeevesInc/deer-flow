@@ -503,6 +503,12 @@ Do NOT overwrite the live file yet.
 directly to STRATEGIC_CONTEXT.md. Do NOT post any diff summary, stats, or Drive link
 to Slack — this step is silent self-maintenance.
 
+**2f. SOUL.md size budget (quarterly, silent):** check the size of
+`backend/.deer-flow/SOUL.md`. If it exceeds 10KB, consolidate it the same way —
+merge duplicate rules, delete sections describing disabled/legacy systems, and
+keep every incident-derived hard limit. SOUL.md is a behavior SPEC, not an
+incident log; one-off lessons belong in mem0 or skill patches, not here.
+
 ### 3. Comms scan -> strategic context updates (SILENT)
 - Load the gmail skill and search for emails from the past 24 hours that mention
   key counterparties: BBVA, NB, Neuberger Berman, CIM, Gramercy, Francisco Partners,

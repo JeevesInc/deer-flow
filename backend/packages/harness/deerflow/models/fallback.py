@@ -19,6 +19,21 @@ Design notes
   by ``_generate`` / ``_agenerate``, which loop over the chain themselves.
 * Any attribute not defined here (``model``, ``model_name``, ``model_id`` ...)
   is delegated to the primary model via ``__getattr__``.
+
+Fallback semantics (P2-9)
+-------------------------
+Only *transient* failures and *model-404* step down the chain:
+404 not_found (decommissioned model id), 429 rate-limit, >=500 (incl. 529
+overloaded), and connection/timeout errors. Caller bugs (400 bad request,
+422) and auth problems (401/403 — the same key is used down-chain, so a
+fallback cannot help) surface immediately: replaying a 400 at the fallback
+tier used to re-run our own bugs at Opus prices while masking them.
+
+Retry-before-fallback ordering: the Anthropic SDK already retries 429/5xx/
+connection errors against the SAME model with backoff (``max_retries``,
+default 2) before the exception ever reaches this wrapper. So by the time we
+see a transient error the primary has been retried; stepping down is the
+correct next move, not another primary retry.
 """
 
 from __future__ import annotations
@@ -34,8 +49,32 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
+
+
+def _default_fallback_exceptions() -> tuple[type[BaseException], ...]:
+    """Transient + model-404 exception classes that justify a step-down.
+
+    Anthropic SDK mapping: NotFoundError=404, RateLimitError=429,
+    InternalServerError=>500 (incl. 529 overloaded), APIConnectionError
+    covers timeouts (APITimeoutError subclasses it). Deliberately excluded:
+    BadRequestError(400), UnprocessableEntityError(422) — our bug, surface
+    it; AuthenticationError(401)/PermissionDeniedError(403) — same key
+    down-chain, fallback can't help.
+    """
+    try:
+        import anthropic
+
+        return (
+            anthropic.NotFoundError,
+            anthropic.RateLimitError,
+            anthropic.InternalServerError,
+            anthropic.APIConnectionError,
+        )
+    except ImportError:  # pragma: no cover - non-anthropic deployments
+        return (ConnectionError, TimeoutError)
 
 
 class FallbackChatModel(BaseChatModel):
@@ -43,9 +82,12 @@ class FallbackChatModel(BaseChatModel):
 
     primary: BaseChatModel
     fallbacks: list[BaseChatModel]
-    # Exception types that should trigger a step-down. Defaults to (Exception,)
-    # which mirrors LangChain's own Runnable.with_fallbacks default behaviour.
-    exceptions_to_handle: tuple[type[BaseException], ...] = (Exception,)
+    # Exception types that trigger a step-down. Default: transient + 404 only
+    # (see module docstring) — NOT (Exception,), which replayed caller bugs
+    # at fallback-tier prices and masked them.
+    exceptions_to_handle: tuple[type[BaseException], ...] = Field(
+        default_factory=_default_fallback_exceptions
+    )
 
     model_config = {"arbitrary_types_allowed": True}
 

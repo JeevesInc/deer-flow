@@ -522,15 +522,19 @@ incident log; one-off lessons belong in mem0 or skill patches, not here.
 
 ### 3b. Review Gemini meeting notes from the past 24 hours (SILENT, same purpose)
 Gemini for Google Meet auto-saves meeting summaries and action items to Google Drive
-as Docs, and also emails them from meet-recordings-noreply@google.com.
+as Docs, and also emails them from gemini-notes@google.com.
 
 Search Gmail for Gemini-generated note emails first (most reliable):
 ```
-from:meet-recordings-noreply@google.com after:{lookback_date} subject:"Notes from"
+from:gemini-notes@google.com after:{lookback_date}
 ```
-where lookback_date = yesterday's date in YYYY/MM/DD format.
+where lookback_date = yesterday's date in YYYY/MM/DD format. That sender ONLY
+sends meeting notes (subject: Notes: “Meeting name” Jun 30, 2026). Do NOT
+search from:meet-recordings-noreply@google.com or subject:"Notes from your
+meeting" — dead sender/format, returns nothing (verified 2026-07-02).
 
-Also try the Gmail search: `subject:"Notes from your meeting" newer_than:1d`
+Fallback if the email is missing: search Drive for docs named
+"... - Notes by Gemini" modified in the window (the dossier gather does this).
 
 For each set of meeting notes:
 - Read the full content (follow the Drive link in the email body or use gmail_tool read)

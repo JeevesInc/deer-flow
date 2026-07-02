@@ -30,13 +30,14 @@ Env vars:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 _SKILL_DIR = Path(__file__).resolve().parent
@@ -303,7 +304,11 @@ def _gather_interactions(email: str, days: int) -> list[dict]:
         channel = sm.get('channel', '')
         # The slack gather queries `from:<peer>`, so the sender is the peer.
         out.append({
-            'key': f"slack:{date}:{abs(hash(text)) % (10 ** 12)}",
+            # md5, NOT hash(): Python string hashing is randomized per process
+            # (PYTHONHASHSEED), so hash(text) gave the same message a different
+            # key every gateway restart — the dedup never matched and every
+            # restart re-ingested the window, inflating ONA weights (H-BUG-1).
+            'key': f"slack:{date}:{hashlib.md5(text.encode('utf-8')).hexdigest()[:12]}",
             'date': date,
             'source': 'slack',
             'context': channel,
@@ -373,6 +378,10 @@ def _update_ona_graph(interactions: list[dict]) -> int:
                     }
                     index[k] = edge
                 edge['weight'] += 1
+                if date and len(date) >= 7:
+                    monthly = edge.setdefault('monthly', {})
+                    mk = date[:7]  # YYYY-MM bucket
+                    monthly[mk] = int(monthly.get(mk, 0)) + 1
                 if date:
                     if not edge['first_interaction'] or date < edge['first_interaction']:
                         edge['first_interaction'] = date
@@ -384,7 +393,25 @@ def _update_ona_graph(interactions: list[dict]) -> int:
                     edge['sample_contexts'].append(ctx)
                 touched += 1
 
-    graph['edges'] = sorted(index.values(), key=lambda e: -e['weight'])
+    # Recency (H-BUG-2): lifetime `weight` only ever grows, so a counterparty
+    # last spoken to a year ago outranks an active one. Keep 12 months of
+    # per-month buckets (bounded) and expose weight_90d for warm ranking.
+    # Edges predating the buckets get a 1/0 seed from last_interaction so
+    # recently-active legacy edges don't read as stone cold.
+    now = datetime.now()
+    cutoff_12m = (now - timedelta(days=365)).strftime('%Y-%m')
+    cutoff_90d = (now - timedelta(days=90)).strftime('%Y-%m')
+    cutoff_90d_date = (now - timedelta(days=90)).strftime('%Y-%m-%d')
+    for edge in index.values():
+        monthly = edge.get('monthly') or {}
+        if monthly:
+            edge['monthly'] = {k: v for k, v in monthly.items() if k >= cutoff_12m}
+            edge['weight_90d'] = sum(v for k, v in edge['monthly'].items() if k >= cutoff_90d)
+        else:
+            edge['weight_90d'] = 1 if (edge.get('last_interaction') or '') >= cutoff_90d_date else 0
+
+    graph['edges'] = sorted(index.values(),
+                            key=lambda e: (-e.get('weight_90d', 0), -e['weight']))
     graph['updated_at'] = datetime.now().isoformat()
     _atomic_json_write(_ona_graph_path(), graph)
     return touched

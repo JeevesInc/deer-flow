@@ -49,10 +49,11 @@ EOD_HOUR = int(os.environ.get('EOD_REVIEW_HOUR', '17'))   # 5 PM
 CHECK_INTERVAL_SECS = 3600  # Check every hour, skip if not EOD time
 
 BRIAN_EMAIL    = 'brian.mauck@tryjeeves.com'
-# Resolve from env at module load. The bot's own user_id is U09PQTZ5DHC —
-# do NOT confuse the two; using the bot's ID here would surface DMs the bot
-# received (Anish/Chin/Kacper etc.) as if they were addressed to Brian.
-BRIAN_SLACK_ID = os.environ.get('SLACK_OWNER_USER_ID', '').strip() or 'U05B5HGNCN9'
+# Canonical resolution incl. the bot-id-as-owner misconfig guard (P3-5).
+# Using the bot's ID here would surface DMs the bot received (Anish/Chin/
+# Kacper etc.) as if they were addressed to Brian.
+from identity import owner_slack_id  # noqa: E402  (_shared already on sys.path)
+BRIAN_SLACK_ID = owner_slack_id()
 
 # ------------------------------------------------------------------ #
 # State                                                                #

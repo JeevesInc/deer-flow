@@ -13,9 +13,6 @@ import os
 
 log = logging.getLogger("shared.slack")
 
-# Brian's real user id — the bot's own id is U09PQTZ5DHC; never confuse them.
-_OWNER_FALLBACK = "U05B5HGNCN9"
-
 
 def get_client(token: str | None = None):
     """A slack_sdk WebClient from SLACK_BOT_TOKEN (or an explicit token)."""
@@ -28,7 +25,10 @@ def get_client(token: str | None = None):
 
 
 def owner_user_id() -> str:
-    return (os.environ.get("SLACK_OWNER_USER_ID") or "").strip() or _OWNER_FALLBACK
+    # Canonical resolution (incl. the bot-id-as-owner misconfig guard) lives
+    # in identity.py — the single source of truth for these ids (P3-5).
+    from identity import owner_slack_id
+    return owner_slack_id()
 
 
 def dm_owner(text: str, *, blocks=None) -> bool:

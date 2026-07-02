@@ -76,7 +76,11 @@ LANGGRAPH_URL = os.environ.get('LANGGRAPH_URL', 'http://localhost:2024')
 ASSISTANT_ID = 'lead_agent'
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
-SLACK_OWNER_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U09PQTZ5DHC')
+# Owner id via the canonical identity module (P3-5). The old inline default
+# here was U09PQTZ5DHC — the BOT's own id — the documented recurring bug.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'skills' / 'custom' / '_shared'))
+from identity import owner_slack_id  # noqa: E402
+SLACK_OWNER_USER_ID = owner_slack_id()
 # Approval queue: when set, actionable-email proposals post to this channel
 # (e.g. #analyst-queue) instead of DMing the owner. Falls back to the owner DM
 # when unset, so the pipeline is unchanged until the channel is configured.

@@ -67,7 +67,12 @@ OUTCOMES_LOG_PATH = _BACKEND / '.deer-flow' / 'proposal_outcomes.jsonl'
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
-SLACK_OWNER_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U05B5HGNCN9')
+# Canonical resolution incl. the bot-id-as-owner misconfig guard (P3-5).
+try:
+    from identity import owner_slack_id
+    SLACK_OWNER_USER_ID = owner_slack_id()
+except ImportError:
+    SLACK_OWNER_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U05B5HGNCN9')
 
 LABELER_MODEL = 'claude-haiku-4-5-20251001'
 SYNTHESIZER_MODEL = 'claude-sonnet-5'  # was ...-20251001 (404 not_found) — synthesis silently failed until 2026-06-30

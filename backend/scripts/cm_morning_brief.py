@@ -24,7 +24,10 @@ CICO_FILE    = BACKEND_DIR / ".deer-flow" / "_cico_state.json"
 # parents[2] from backend/scripts/ == the deer-flow root; skills/ lives directly
 # under it (the old path had a spurious extra "deer-flow" segment → didn't exist).
 SLACK_TOOL   = Path(__file__).resolve().parents[2] / "skills" / "custom" / "slack-search" / "slack_tool.py"
-BRIAN_ID     = os.environ.get("SLACK_OWNER_USER_ID", "U05B5HGNCN9")
+# Canonical owner-id resolution incl. the bot-id-as-owner guard (P3-5).
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "custom" / "_shared"))
+from identity import owner_slack_id  # noqa: E402
+BRIAN_ID     = owner_slack_id()
 
 
 # ── Formatters ────────────────────────────────────────────────────────────────

@@ -56,10 +56,11 @@ LOOKBACK_DAYS  = int(os.environ.get('WEEKLY_REVIEW_LOOKBACK_DAYS', '7'))
 CHECK_INTERVAL_SECS = 3600  # Check hourly, act only at the target weekday+hour
 
 BRIAN_EMAIL    = 'brian.mauck@tryjeeves.com'
-# The bot's own user_id is U09PQTZ5DHC — do NOT use it here. Using the bot's ID
-# would surface DMs the BOT received (Kacper/Chin/Pablo/etc.) as if they were
-# addressed to Brian. Brian's real Slack ID is U05B5HGNCN9.
-BRIAN_SLACK_ID = os.environ.get('SLACK_OWNER_USER_ID', '').strip() or 'U05B5HGNCN9'
+# Canonical resolution incl. the bot-id-as-owner misconfig guard (P3-5).
+# Using the bot's ID here would surface DMs the BOT received (Kacper/Chin/
+# Pablo/etc.) as if they were addressed to Brian.
+from identity import owner_slack_id  # noqa: E402  (_shared already on sys.path)
+BRIAN_SLACK_ID = owner_slack_id()
 
 
 def _state_path() -> Path:

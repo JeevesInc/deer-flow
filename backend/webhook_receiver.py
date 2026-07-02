@@ -106,6 +106,27 @@ log = logging.getLogger('webhook')
 
 app = FastAPI(title='DeerFlow Webhook Receiver')
 
+# Strong refs for fire-and-forget tasks — asyncio only keeps a weak ref, so an
+# unreferenced task can be garbage-collected mid-flight (P3-6 / Chan MED).
+_bg_tasks: set = set()
+
+
+def _spawn_bg(coro) -> None:
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+
+
+@app.on_event('startup')
+async def _on_startup() -> None:
+    # At-least-once tail (P3-6): catch up on anything that arrived while the
+    # receiver was down (a restart mid-push used to lose the notification —
+    # Pub/Sub got its 200 before processing), then keep a periodic sweep
+    # running for missed pushes + failed-handling retries.
+    threading.Thread(target=_gmail_sweep_loop, daemon=True,
+                     name='gmail-sweep').start()
+    _spawn_bg(asyncio.to_thread(_process_gmail_notification, None))
+
 # Serializes Gmail state reads/writes across concurrent Pub/Sub pushes.
 # `_process_gmail_notification` runs in `asyncio.to_thread` so two near-
 # simultaneous pushes (message-arrived + IMPORTANT-label-added) end up
@@ -707,93 +728,223 @@ async def gmail_webhook(request: Request, x_goog_channel_token: str = Header(def
     # stays free for /health probes. Pub/Sub only needs a 200 within ~10s and
     # doesn't care about the processed count. Holding the loop here was the
     # root cause of the /health flap that the supervisor kept restarting.
-    asyncio.create_task(asyncio.to_thread(_process_gmail_notification, history_id))
+    _spawn_bg(asyncio.to_thread(_process_gmail_notification, history_id))
     return JSONResponse({'status': 'accepted'})
 
 
 def _process_gmail_notification(history_id: str | None) -> None:
+    """At-least-once processing (P3-6): a message is marked seen ONLY after
+    its handler succeeds; failures go to a bounded pending-retry queue that
+    the sweep loop drains. history_id=None means catch-up (boot / sweep)."""
     try:
         new_messages = _fetch_new_gmail_messages(history_id)
         for msg in new_messages or []:
+            msg_id = (msg.get('meta') or {}).get('id') or (msg.get('full') or {}).get('id') or ''
             try:
                 _handle_gmail_message(msg)
+                if msg_id:
+                    _mark_gmail_seen(msg_id)
             except Exception:
-                log.exception('Gmail message handler failed')
+                log.exception('Gmail message handler failed for %s — queued for retry', msg_id)
+                if msg_id:
+                    _add_gmail_pending_retry(msg_id)
     except Exception:
         log.exception('Gmail notification processing failed')
 
 
+def _get_gmail_service():
+    # Add the shared dir for google_auth
+    _shared = Path(__file__).resolve().parent.parent / 'skills' / 'custom' / '_shared'
+    if _shared.exists() and str(_shared) not in sys.path:
+        sys.path.insert(0, str(_shared))
+    from google_auth import get_credentials
+    from googleapiclient.discovery import build
+    creds = get_credentials(required=False)
+    if not creds:
+        return None
+    return build('gmail', 'v1', credentials=creds)
+
+
+def _list_new_message_ids(service, start_history_id: str) -> tuple[list[str], str | None]:
+    """All INBOX messageAdded ids since start_history_id, following
+    nextPageToken (the old single-page call silently truncated bursts).
+    Returns (ids, latest_history_id_from_response). Raises on API error."""
+    ids: list[str] = []
+    latest_hid = None
+    page_token = None
+    while True:
+        kwargs = dict(userId='me', startHistoryId=start_history_id,
+                      historyTypes=['messageAdded'], labelId='INBOX')
+        if page_token:
+            kwargs['pageToken'] = page_token
+        resp = service.users().history().list(**kwargs).execute()
+        latest_hid = resp.get('historyId') or latest_hid
+        for record in resp.get('history', []):
+            for added in record.get('messagesAdded', []):
+                mid = added.get('message', {}).get('id')
+                if mid and mid not in ids:
+                    ids.append(mid)
+        page_token = resp.get('nextPageToken')
+        if not page_token:
+            return ids, latest_hid
+
+
+def _fetch_gmail_message(service, msg_id: str) -> dict:
+    meta = service.users().messages().get(
+        userId='me', id=msg_id, format='metadata',
+        metadataHeaders=['From', 'Subject', 'Date', 'To'],
+    ).execute()
+    full = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+    return {'meta': meta, 'full': full}
+
+
 def _fetch_new_gmail_messages(history_id: str | None) -> list[dict]:
-    """Fetch new messages from Gmail using history API.
+    """Fetch new messages via the Gmail history API.
 
     Serialized by `_gmail_state_lock` so two concurrent Pub/Sub pushes
     (e.g. message-arrived + Gmail's IMPORTANT label-added, which fire
     ~1s apart) don't both read the same `last_history_id` and double-
     classify the same message.
+
+    At-least-once invariants (P3-6):
+      - `last_history_id` advances ONLY when the history listing succeeded
+        (a transient failure used to silently skip the gap forever). The one
+        exception is HTTP 404 = startHistoryId too old, where the only
+        option is to accept the gap loudly and re-anchor.
+      - A per-message fetch failure queues that id for the retry sweep
+        instead of dropping it.
+      - Callers mark ids seen only after successful handling.
     """
     with _gmail_state_lock:
         try:
-            # Add parent dir to path for google_auth
-            _shared = Path(__file__).resolve().parent / 'skills' / 'custom' / '_shared'
-            if _shared.exists() and str(_shared) not in sys.path:
-                sys.path.insert(0, str(_shared))
-
-            from google_auth import get_credentials
-            from googleapiclient.discovery import build
-
-            creds = get_credentials(required=False)
-            if not creds:
+            service = _get_gmail_service()
+            if not service:
                 log.error('Gmail: no credentials')
                 return []
 
-            service = build('gmail', 'v1', credentials=creds)
-
-            # Load last known historyId from state
             state = _load_gmail_state()
             last_history_id = state.get('last_history_id')
 
+            if not last_history_id:
+                # First push ever: anchor and start from here.
+                if history_id:
+                    state['last_history_id'] = history_id
+                    _save_gmail_state(state)
+                return []
+
+            try:
+                msg_ids, latest_hid = _list_new_message_ids(service, last_history_id)
+            except Exception as e:
+                if '404' in str(e):
+                    # startHistoryId older than Gmail's retention — the gap is
+                    # unrecoverable; re-anchor loudly instead of wedging forever.
+                    log.error('Gmail history 404 (start id too old) — re-anchoring to %s; '
+                              'messages in the gap were NOT classified: %s', history_id, e)
+                    if history_id:
+                        state['last_history_id'] = history_id
+                        _save_gmail_state(state)
+                else:
+                    log.warning('Gmail history listing failed — NOT advancing '
+                                'last_history_id; next push/sweep catches up: %s', e)
+                return []
+
             new_messages = []
-
-            if last_history_id and history_id:
-                # Use history API to get only new messages since last check
+            seen = set(state.get('seen_ids', []))
+            pending = {p.get('id') for p in state.get('pending_retry', [])}
+            for msg_id in msg_ids:
+                if msg_id in seen:
+                    log.info('Gmail: skipping already-seen msg %s', msg_id)
+                    continue
+                if msg_id in pending:
+                    continue  # the sweep owns it
                 try:
-                    history_resp = service.users().history().list(
-                        userId='me',
-                        startHistoryId=last_history_id,
-                        historyTypes=['messageAdded'],
-                        labelId='INBOX',
-                    ).execute()
-
-                    for record in history_resp.get('history', []):
-                        for added in record.get('messagesAdded', []):
-                            msg_id = added['message']['id']
-                            if msg_id in state.get('seen_ids', []):
-                                log.info('Gmail: skipping already-seen msg %s', msg_id)
-                                continue
-                            try:
-                                msg = service.users().messages().get(
-                                    userId='me', id=msg_id, format='metadata',
-                                    metadataHeaders=['From', 'Subject', 'Date', 'To'],
-                                ).execute()
-                                full = service.users().messages().get(
-                                    userId='me', id=msg_id, format='full',
-                                ).execute()
-                                new_messages.append({'meta': msg, 'full': full})
-                                state.setdefault('seen_ids', []).append(msg_id)
-                            except Exception as e:
-                                log.error('Failed to fetch message %s: %s', msg_id, e)
+                    new_messages.append(_fetch_gmail_message(service, msg_id))
                 except Exception as e:
-                    log.warning('History API failed (%s), falling back to recent search', e)
+                    log.error('Failed to fetch message %s — queued for retry: %s', msg_id, e)
+                    state.setdefault('pending_retry', []).append(
+                        {'id': msg_id, 'attempts': 0,
+                         'first_seen': datetime.now(timezone.utc).isoformat()})
 
-            # Update state
-            if history_id:
-                state['last_history_id'] = history_id
+            # Listing succeeded — safe to advance past this window (failed
+            # individual messages live on in pending_retry).
+            state['last_history_id'] = latest_hid or history_id or last_history_id
             _save_gmail_state(state)
             return new_messages
 
         except Exception as e:
             log.error('_fetch_new_gmail_messages failed: %s', e)
             return []
+
+
+def _mark_gmail_seen(msg_id: str) -> None:
+    with _gmail_state_lock:
+        state = _load_gmail_state()
+        if msg_id not in state.get('seen_ids', []):
+            state.setdefault('seen_ids', []).append(msg_id)
+        state['pending_retry'] = [p for p in state.get('pending_retry', [])
+                                  if p.get('id') != msg_id]
+        _save_gmail_state(state)
+
+
+def _add_gmail_pending_retry(msg_id: str) -> None:
+    with _gmail_state_lock:
+        state = _load_gmail_state()
+        if msg_id in state.get('seen_ids', []):
+            return
+        pending = state.setdefault('pending_retry', [])
+        for p in pending:
+            if p.get('id') == msg_id:
+                p['attempts'] = int(p.get('attempts', 0)) + 1
+                break
+        else:
+            pending.append({'id': msg_id, 'attempts': 1,
+                            'first_seen': datetime.now(timezone.utc).isoformat()})
+        _save_gmail_state(state)
+
+
+GMAIL_MAX_RETRY_ATTEMPTS = 5
+GMAIL_SWEEP_INTERVAL_SECONDS = int(os.environ.get('GMAIL_SWEEP_INTERVAL', '600'))
+
+
+def _sweep_gmail_pending() -> None:
+    """Retry messages whose handling failed earlier (at-least-once tail)."""
+    with _gmail_state_lock:
+        state = _load_gmail_state()
+        pending = list(state.get('pending_retry', []))
+    if not pending:
+        return
+    service = _get_gmail_service()
+    if not service:
+        return
+    for entry in pending:
+        msg_id = entry.get('id')
+        if not msg_id:
+            continue
+        if int(entry.get('attempts', 0)) >= GMAIL_MAX_RETRY_ATTEMPTS:
+            log.error('Gmail msg %s dropped after %s failed attempts (first seen %s) — '
+                      'check it manually in the inbox', msg_id, entry.get('attempts'),
+                      entry.get('first_seen'))
+            _mark_gmail_seen(msg_id)  # stop retrying; loud log above is the alert
+            continue
+        try:
+            msg = _fetch_gmail_message(service, msg_id)
+            _handle_gmail_message(msg)
+            _mark_gmail_seen(msg_id)
+            log.info('Gmail retry sweep: %s handled successfully', msg_id)
+        except Exception as e:
+            log.warning('Gmail retry sweep: %s failed again: %s', msg_id, e)
+            _add_gmail_pending_retry(msg_id)
+
+
+def _gmail_sweep_loop() -> None:
+    """Daemon: periodic catch-up (missed pushes) + pending-retry drain."""
+    while True:
+        time.sleep(GMAIL_SWEEP_INTERVAL_SECONDS)
+        try:
+            _process_gmail_notification(None)  # catch-up from last_history_id
+            _sweep_gmail_pending()
+        except Exception:
+            log.exception('Gmail sweep iteration failed')
 
 
 def _handle_gmail_message(msg: dict) -> None:
@@ -910,13 +1061,15 @@ def _load_gmail_state() -> dict:
             return json.loads(p.read_text())
         except Exception:
             pass
-    return {'last_history_id': None, 'seen_ids': []}
+    return {'last_history_id': None, 'seen_ids': [], 'pending_retry': []}
 
 
 def _save_gmail_state(state: dict) -> None:
-    # Keep seen_ids bounded
+    # Keep seen_ids and the retry queue bounded
     if len(state.get('seen_ids', [])) > 1000:
         state['seen_ids'] = state['seen_ids'][-1000:]
+    if len(state.get('pending_retry', [])) > 50:
+        state['pending_retry'] = state['pending_retry'][-50:]
     _gmail_state_path().write_text(json.dumps(state, indent=2))
 
 
@@ -960,7 +1113,7 @@ async def slack_webhook(request: Request, x_slack_signature: str = Header(defaul
     # slow (3s budget), and the handler chain calls into mem0/Qdrant + the
     # classifier LLM — synchronous work that would otherwise stall /health.
     if event_type in ('message', 'app_mention'):
-        asyncio.create_task(asyncio.to_thread(_handle_slack_event, event, body))
+        _spawn_bg(asyncio.to_thread(_handle_slack_event, event, body))
 
     return JSONResponse({'status': 'ok'})
 

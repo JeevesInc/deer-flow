@@ -135,7 +135,9 @@ def _call_claude_vision(image_paths):
         messages=[{'role': 'user', 'content': content}]
     )
 
-    raw = resp.content[0].text.strip()
+    # Sonnet 5 (adaptive thinking) can return a ThinkingBlock as content[0];
+    # resp.content[0].text raises on it. Always iterate for the text block.
+    raw = ''.join(b.text for b in resp.content if getattr(b, 'type', '') == 'text').strip()
     if raw.startswith('```'):
         raw = raw.split('```')[1]
         if raw.startswith('json'):
@@ -153,12 +155,21 @@ def _call_claude_vision(image_paths):
     return result
 
 
+# Extraction gate: the CICO email consistently carries ~15+ account rows. If
+# vision extracts fewer than this, the extraction (not the email) is suspect —
+# fail instead of feeding a partial set into a lender-facing borrowing base.
+MIN_EXPECTED_ACCOUNTS = int(os.environ.get('CICO_MIN_ACCOUNTS', '12'))
+
+
 def fetch_balances(verbose=False):
     """
     Fetch balances from the most recent CICO email.
 
     Returns dict: {account_identifier: float_balance}
     Also includes '__email_date__' and '__email_subject__' keys.
+
+    Raises RuntimeError when fewer than MIN_EXPECTED_ACCOUNTS rows were
+    extracted (Skills-H2: partial extractions used to flow through silently).
     """
     service = _get_gmail_service()
 
@@ -184,6 +195,14 @@ def fetch_balances(verbose=False):
         balances = _call_claude_vision(paths)
         if verbose:
             print('  Extracted {} account entries'.format(len(balances)))
+        if len(balances) < MIN_EXPECTED_ACCOUNTS:
+            raise RuntimeError(
+                'CICO extraction gate: only {} account rows extracted (expected >= {}). '
+                'Refusing to build bank balances from a partial extraction. '
+                'Email: {} ({}). Override with CICO_MIN_ACCOUNTS if the report '
+                'legitimately shrank.'.format(
+                    len(balances), MIN_EXPECTED_ACCOUNTS,
+                    email['subject'], email['date']))
 
     balances['__email_date__'] = email['date']
     balances['__email_subject__'] = email['subject']
@@ -238,7 +257,51 @@ _ROWS = [
 ]
 
 
-def build_bank_accts_df(balances):
+def match_bank_accounts(balances):
+    """Match bank_accts rows to extracted CICO balances.
+
+    Returns (records, manifest) where manifest lists every row that could NOT
+    be matched (plus the extracted keys nothing consumed). Fuzzy prefix
+    matching only applies when exactly ONE extracted key matches — an
+    ambiguous prefix used to silently pick the first hit (Skills-H2 mis-join).
+    """
+    data = {k: v for k, v in balances.items() if not k.startswith('__')}
+    records, unmatched, used = [], [], set()
+    for country, acct, currency in _ROWS:
+        cico_key = BANK_ACCTS_TO_CICO.get((country, acct))
+        bal = None
+        if cico_key:
+            if cico_key in data:
+                bal = data[cico_key]
+                used.add(cico_key)
+            else:
+                candidates = [k for k in data
+                              if k.startswith(cico_key) or cico_key.startswith(k)]
+                if len(candidates) == 1:
+                    bal = data[candidates[0]]
+                    used.add(candidates[0])
+                elif len(candidates) > 1:
+                    unmatched.append({'country': country, 'acct': acct,
+                                      'cico_key': cico_key,
+                                      'reason': 'ambiguous: ' + ', '.join(sorted(candidates))})
+        if bal is None and not any(u['acct'] == acct and u['country'] == country
+                                   for u in unmatched):
+            unmatched.append({'country': country, 'acct': acct,
+                              'cico_key': cico_key, 'reason': 'not extracted'})
+        records.append({'country': country, 'acct': acct, 'currency': currency,
+                        'bal': 0.0 if bal is None else bal})
+    manifest = {
+        'unmatched': unmatched,
+        'unconsumed_keys': sorted(set(data) - used),
+    }
+    return records, manifest
+
+
+def build_bank_accts_df(balances, strict=True):
+    """Build the bank_accts tab. strict=True (default) raises when any mapped
+    account failed to match instead of zero-filling it into a lender-facing
+    borrowing base (Skills-H2). The unmatched manifest is always printed.
+    """
     try:
         import pandas as pd
     except ImportError:
@@ -246,19 +309,22 @@ def build_bank_accts_df(balances):
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'pandas'])
         import pandas as pd
 
-    records = []
-    for country, acct, currency in _ROWS:
-        cico_key = BANK_ACCTS_TO_CICO.get((country, acct))
-        bal = 0.0
-        if cico_key:
-            if cico_key in balances:
-                bal = balances[cico_key]
-            else:
-                for k, v in balances.items():
-                    if k.startswith(cico_key) or cico_key.startswith(k):
-                        bal = v
-                        break
-        records.append({'country': country, 'acct': acct, 'currency': currency, 'bal': bal})
+    records, manifest = match_bank_accounts(balances)
+    if manifest['unmatched']:
+        lines = ['  {country}/{acct} (CICO key {cico_key}): {reason}'.format(**u)
+                 for u in manifest['unmatched']]
+        print('CICO unmatched-account manifest:\n' + '\n'.join(lines), file=sys.stderr)
+        if manifest['unconsumed_keys']:
+            print('CICO extracted-but-unused keys: '
+                  + ', '.join(manifest['unconsumed_keys']), file=sys.stderr)
+        if strict:
+            raise RuntimeError(
+                'CICO matching gate: {} bank_accts row(s) had no extracted balance '
+                '({}). Refusing to zero-fill into the borrowing base — fix the '
+                'mapping or pass strict=False deliberately.'.format(
+                    len(manifest['unmatched']),
+                    ', '.join('{}/{}'.format(u['country'], u['acct'])
+                              for u in manifest['unmatched'])))
 
     return pd.DataFrame(records)
 

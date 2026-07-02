@@ -24,6 +24,40 @@ class MemoryMiddlewareState(AgentState):
     pass
 
 
+# Ops-noise exclusion (Mem-H2): cron-dispatched runs (dreams, EOD review,
+# report pipelines, ...) used to flow through memory capture like user
+# conversations, storing near-identical daily run trivia as permanent facts —
+# the #1 retrieval-pollution source ("User ran both borrowing bases on May
+# 25/26/27..."). Threads whose FIRST message opens with a known cron header,
+# or contains the explicit sentinel, are skipped entirely.
+MEMORY_OPT_OUT_SENTINEL = "<memory:off>"
+_OPS_PROMPT_HEADERS = (
+    "DREAM SESSION #",
+    "END OF DAY REVIEW #",
+    "WEEKLY OPEN ITEMS REVIEW #",
+    "LATENT-LEARNING REVIEW #",
+)
+
+
+def _message_text(msg: Any) -> str:
+    content = getattr(msg, "content", "")
+    if isinstance(content, list):
+        content = " ".join(
+            p.get("text", "") for p in content if isinstance(p, dict))
+    return str(content)
+
+
+def _is_ops_thread(user_messages: list[Any]) -> bool:
+    """True when this thread is autonomous ops work, not a user conversation."""
+    if not user_messages:
+        return False
+    first = _message_text(user_messages[0])
+    head = first.lstrip()[:100]
+    if any(head.startswith(h) for h in _OPS_PROMPT_HEADERS):
+        return True
+    return MEMORY_OPT_OUT_SENTINEL in first
+
+
 def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
     """Filter messages to keep only user inputs and final assistant responses.
 
@@ -162,8 +196,69 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         if not user_messages or not assistant_messages:
             return None
 
+        if _is_ops_thread(user_messages):
+            logger.info("Ops-dispatched thread — skipping memory capture (Mem-H2)")
+            return None
+
         # Queue for mem0 storage (debounced) — replaces old fact extraction
         queue = get_memory_queue()
         queue.add(thread_id=thread_id, messages=filtered_messages, agent_name=self._agent_name)
 
+        self._capture_sll(user_messages, assistant_messages)
+
         return None
+
+    @staticmethod
+    def _capture_sll(user_messages: list[Any], assistant_messages: list[Any]) -> None:
+        """Fire-and-forget SLL scoring for this turn (P2-1 / §4.1).
+
+        Replaces the SOUL.md "run sll_score.py at the start and end of every
+        turn" mandate the agent verifiably did not follow. Runs the existing
+        scorer as a detached subprocess: first applies pending sentiment using
+        the user's current message (their reaction to the PREVIOUS turn), then
+        scores this turn. Lessons land in the SLL JSONL and are synced into
+        the mem0 `lessons` namespace by the daily maintenance pass, where
+        Mem0InjectionMiddleware retrieves them. Kill switch:
+        SLL_CAPTURE_DISABLE=1.
+        """
+        import os
+
+        if os.environ.get("SLL_CAPTURE_DISABLE", "").strip() == "1":
+            return
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return
+
+        task = _message_text(user_messages[-1]).strip()[:1500]
+        response = _message_text(assistant_messages[-1]).strip()[:1500]
+        if not task or not response:
+            return
+
+        try:
+            import subprocess
+            import sys
+            import threading
+
+            from deerflow.config.paths import get_paths
+
+            # base_dir = backend/.deer-flow → repo root is two levels up.
+            script = (get_paths().base_dir.parent.parent
+                      / "skills" / "custom" / "sll" / "sll_score.py")
+            if not script.exists():
+                return
+
+            def _run() -> None:
+                try:
+                    subprocess.run(
+                        [sys.executable, str(script), "--apply-sentiment",
+                         "--user-reply", task],
+                        capture_output=True, timeout=120)
+                    subprocess.run(
+                        [sys.executable, str(script), "--task", task,
+                         "--response", response],
+                        capture_output=True, timeout=120)
+                except Exception as exc:  # noqa: BLE001 - background best-effort
+                    logger.debug("SLL capture failed: %s", exc)
+
+            threading.Thread(target=_run, name="sll-capture", daemon=True).start()
+        except Exception as exc:
+            logger.debug("SLL capture not started: %s", exc)

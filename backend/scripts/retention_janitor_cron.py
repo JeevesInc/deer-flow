@@ -148,6 +148,26 @@ def vacuum_checkpoints() -> bool:
     return True
 
 
+def sync_sll_lessons() -> bool:
+    """Push newly captured SLL lessons into the mem0 `lessons` namespace.
+
+    Idempotent (keyed by sll_id) and best-effort — lessons wait in the JSONL
+    until the next pass if Qdrant is down (P2-1 / §4.1).
+    """
+    import subprocess
+    try:
+        r = subprocess.run(
+            [sys.executable, str(_BACKEND / "scripts" / "sll_sync.py")],
+            capture_output=True, text=True, timeout=600,
+        )
+        if r.returncode != 0:
+            log.warning("sll_sync failed (rc=%d): %s", r.returncode, (r.stderr or "")[-300:])
+        return r.returncode == 0
+    except Exception as e:
+        log.warning("sll_sync failed: %s", e)
+        return False
+
+
 def run_once(now: datetime | None = None) -> dict:
     now = now or datetime.now()
     state = load_json_state(STATE_PATH, {})
@@ -158,7 +178,8 @@ def run_once(now: datetime | None = None) -> dict:
     rotated = rotate_dispatch_audit()
     summary.update(intel_deleted=intel_n, intel_bytes=intel_b,
                    scratch_deleted=scratch_n, scratch_bytes=scratch_b,
-                   audit_rotated=rotated)
+                   audit_rotated=rotated,
+                   sll_synced=sync_sll_lessons())
 
     month = now.strftime("%Y-%m")
     if state.get("last_vacuum_month") != month:

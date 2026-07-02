@@ -195,6 +195,11 @@ def _run_agent_task(task_message: str) -> str | None:
         subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'httpx'])
         import httpx
 
+    # Scheduler-driven runs are routine ops (same report every day) — opt out
+    # of long-term memory capture so they stop polluting retrieval with
+    # near-identical daily run trivia (Mem-H2; marker read by MemoryMiddleware).
+    task_message = "<memory:off>\n" + task_message
+
     POLL_INTERVAL = 30
     TERMINAL      = {"success", "error", "failed", "interrupted", "timeout"}
     http_timeout  = httpx.Timeout(connect=10, read=60, write=30, pool=10)
@@ -557,7 +562,7 @@ def run_mx_bb():
                 month_folder_id = m_id.group(1)
                 break
         if not month_folder_id:
-            raise RuntimeError(f"Could not find the {yyyymm}/ folder under Debt/CIM in Drive")
+            month_folder_id = _ensure_month_folder(yyyymm)
         log.info(f"  Upload target: {yyyymm}/ ({month_folder_id})")
 
         # -- 5. Upload (--new is REQUIRED so the dated master isn't overwritten) -
@@ -683,7 +688,7 @@ def run_weekly_bb():
                 break
 
         if not month_folder_id:
-            raise RuntimeError(f"Could not find the {yyyymm}/ folder under Debt/CIM in Drive")
+            month_folder_id = _ensure_month_folder(yyyymm)
 
         log.info(f"  Upload target: {yyyymm}/ ({month_folder_id})")
 
@@ -930,3 +935,38 @@ if __name__ == '__main__':
             print('No distribution email from Axel found for today.')
     else:
         run_loop()
+
+
+# ---------------------------------------------------------------------------
+# Month-folder auto-create (added 2026-07-02 -- fixes recurring month-rollover
+# failure: "Could not find the {yyyymm}/ folder under Debt/CIM in Drive".
+# Nobody pre-creates next month's Debt/CIM/Reporting/{yyyymm}/ folder, so the
+# US BB and MX BB crons died every 1st of the month. This creates it instead.
+# ---------------------------------------------------------------------------
+_CIM_REPORTING_PARENT_ID = '1oDi6HjzArnX_jPQbI9UfEs4R5DC9TTrA'
+
+
+def _ensure_month_folder(yyyymm):
+    """Return the Drive folder ID for Debt/CIM/Reporting/{yyyymm}/, creating it if missing."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+    from env_loader import load_env
+    load_env()
+    from google_auth import get_credentials
+    from googleapiclient.discovery import build
+
+    service = build('drive', 'v3', credentials=get_credentials())
+    q = ("'" + _CIM_REPORTING_PARENT_ID + "' in parents and name = '" + yyyymm +
+         "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false")
+    existing = service.files().list(q=q, fields='files(id,name)').execute().get('files', [])
+    if existing:
+        return existing[0]['id']
+
+    meta = {
+        'name': yyyymm,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [_CIM_REPORTING_PARENT_ID],
+    }
+    folder = service.files().create(body=meta, fields='id,name').execute()
+    log.warning("Created missing Drive folder Debt/CIM/Reporting/" + yyyymm + "/ (" + folder['id'] + ")")
+    _post_slack(":file_folder: Auto-created missing `" + yyyymm + "/` folder under Debt/CIM/Reporting (month rollover).")
+    return folder['id']

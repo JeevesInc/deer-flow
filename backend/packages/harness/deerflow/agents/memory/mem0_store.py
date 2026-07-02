@@ -9,7 +9,6 @@ injected.  Facts are stored and retrieved through mem0.
 import logging
 import os
 import threading
-from pathlib import Path
 from typing import Any
 
 # Windows SSL fix: inject system trust store so HuggingFace downloads work
@@ -36,19 +35,15 @@ MEM0_COLLECTION = "deerflow_memories"
 STRATEGIC_CONTEXT_USER_ID = "strategic-context"
 
 
-def _get_mem0_data_dir() -> str:
-    """Get the directory for mem0's local data (Qdrant + SQLite)."""
-    from deerflow.config.paths import get_paths
-
-    return str(get_paths().base_dir / "mem0_data")
-
-
 def get_mem0() -> Any:
     """Get or create the global mem0 Memory instance.
 
-    Uses Anthropic for the LLM (fact extraction/dedup) and
-    sentence-transformers for local embeddings.  Vector store is
-    on-disk Qdrant (no server needed).
+    Uses Anthropic for the LLM (fact extraction/dedup), local
+    sentence-transformers embeddings, and the shared Qdrant SERVER as the
+    vector store. The old embedded store (.deer-flow/mem0_data) was deleted
+    2026-07-02 (P2-1, Brian-approved) — its facts were migrated to the
+    server on 2026-07-01 and it must not be resurrected (single-writer
+    lock, see project_mem0_lock_contention).
     """
     global _mem0_instance
     if _mem0_instance is not None:
@@ -65,9 +60,6 @@ def get_mem0() -> Any:
             raise RuntimeError(
                 "ANTHROPIC_API_KEY not set — required for mem0 LLM provider"
             )
-
-        data_dir = _get_mem0_data_dir()
-        Path(data_dir).mkdir(parents=True, exist_ok=True)
 
         # Vector store: connect to a Qdrant SERVER (not embedded/on-disk).
         # Embedded Qdrant takes an exclusive filesystem lock on mem0_data that

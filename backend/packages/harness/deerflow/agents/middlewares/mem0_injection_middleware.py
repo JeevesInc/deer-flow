@@ -28,9 +28,10 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
 
     state_schema = AgentState
 
-    def __init__(self, top_k: int = 10):
+    def __init__(self, top_k: int = 10, lessons_top_k: int = 4):
         super().__init__()
         self._top_k = top_k
+        self._lessons_top_k = lessons_top_k
         # Per-run memoization: this middleware is rebuilt by the graph factory
         # every run, so a plain instance cache never leaks across threads/runs.
         # Within one run the query (latest human message) is constant across all
@@ -63,11 +64,9 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
         try:
             from deerflow.agents.memory.mem0_store import search_memories
 
-            memories = search_memories(query, top_k=self._top_k)
-            if not memories:
-                return None
+            memories = search_memories(query, top_k=self._top_k) or []
 
-            if min_score > 0:
+            if memories and min_score > 0:
                 kept = [m for m in memories
                         if float(m.get("score", 0.0) or 0.0) >= min_score]
                 if len(kept) < len(memories):
@@ -75,8 +74,6 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                         "mem0 injection gate: kept %d/%d memories (min_score=%.2f)",
                         len(kept), len(memories), min_score)
                 memories = kept
-            if not memories:
-                return None
 
             lines = []
             for mem in memories:
@@ -85,20 +82,90 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                 if text:
                     lines.append(f"- {text}")
 
-            if not lines:
+            lessons_block = self._build_lessons_block(query, min_score)
+            if not lines and not lessons_block:
                 return None
 
-            return (
-                "<recalled_memories>\n"
-                "The following are long-term memories relevant to the user's "
-                "current message. Use them to personalize your response, but "
-                "verify any specific numbers or claims before repeating them:\n"
-                + "\n".join(lines)
-                + "\n</recalled_memories>"
-            )
+            parts = []
+            if lines:
+                parts.append(
+                    "<recalled_memories>\n"
+                    "The following are long-term memories relevant to the user's "
+                    "current message. Use them to personalize your response, but "
+                    "verify any specific numbers or claims before repeating them:\n"
+                    + "\n".join(lines)
+                    + "\n</recalled_memories>"
+                )
+            if lessons_block:
+                parts.append(lessons_block)
+            return "\n\n".join(parts)
         except Exception as e:
             logger.warning("mem0 injection failed: %s", e)
             return None
+
+    def _build_lessons_block(self, query: str, min_score: float) -> str | None:
+        """Search the mem0 `lessons` namespace and format matches (P2-1 §4.1).
+
+        This replaces the old SOUL.md mandate to run the SLL inject script by
+        hand every turn (verifiably unfollowed): lessons captured by sll_score
+        are synced into mem0 and retrieved here, score-gated like facts.
+        """
+        try:
+            from deerflow.agents.memory.mem0_store import search_memories
+
+            lessons = search_memories(query, top_k=self._lessons_top_k, user_id="lessons")
+            if min_score > 0:
+                lessons = [m for m in lessons
+                           if float(m.get("score", 0.0) or 0.0) >= min_score]
+            lines = []
+            for mem in lessons:
+                text = (mem.get("memory", "") or "").strip()
+                if text:
+                    lines.append(f"- {text}")
+            if not lines:
+                return None
+            self._log_lesson_injection(lessons, query)
+            return (
+                "<learned_lessons>\n"
+                "Hard-won lessons from your own past work, relevant to this "
+                "task. Treat [!] AVOID entries as prohibitions and [+] DO "
+                "entries as required patterns:\n"
+                + "\n".join(lines)
+                + "\n</learned_lessons>"
+            )
+        except Exception as e:
+            logger.debug("lessons injection skipped: %s", e)
+            return None
+
+    @staticmethod
+    def _log_lesson_injection(lessons: list[dict], query: str) -> None:
+        """Append injected-lesson events for the efficacy metric (best-effort).
+
+        Dreams/the SLL dashboard can correlate injections with outcomes —
+        without this, lesson usage is invisible and efficacy unprovable (§8).
+        """
+        try:
+            import json
+            import os
+            import time as _time
+
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                return  # keep test runs out of the live efficacy data
+
+            from deerflow.config.paths import get_paths
+
+            path = get_paths().base_dir / "sll" / "injection_log.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            entry = {
+                "ts": _time.time(),
+                "query": query[:150],
+                "lesson_ids": [m.get("id", "") for m in lessons],
+                "scores": [round(float(m.get("score", 0.0) or 0.0), 3) for m in lessons],
+            }
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass
 
     def _inject(self, request: ModelRequest) -> ModelRequest:
         """Build injected request if mem0 is enabled and has relevant memories."""

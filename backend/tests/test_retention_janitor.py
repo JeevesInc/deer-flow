@@ -18,6 +18,8 @@ def janitor(tmp_path, monkeypatch):
     spec.loader.exec_module(mod)
     monkeypatch.setattr(mod, "DEER", tmp_path)
     monkeypatch.setattr(mod, "STATE_PATH", tmp_path / "_retention_janitor_state.json")
+    # Don't run the real SLL→mem0 sync subprocess in tests.
+    monkeypatch.setattr(mod, "sync_sll_lessons", lambda: True)
     return mod
 
 

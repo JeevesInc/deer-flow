@@ -17,6 +17,7 @@ allowed-tools:
   - `deerflow_user` — conversational facts (the agent's main memory)
   - `strategic-context` — STRATEGIC_CONTEXT.md sections (auto-injected per turn)
   - `proposal-patterns` — webhook classifier learnings
+  - `lessons` — SLL lessons (synced from `.deer-flow/sll/lessons.jsonl` by `backend/scripts/sll_sync.py`; injected per turn as `<learned_lessons>`)
 - **Embedder:** `sentence-transformers/all-MiniLM-L6-v2` (local, 384-dim). **LLM** for fact extraction: Sonnet 5.
 - **Injection:** `Mem0InjectionMiddleware` searches per turn with the user's message and injects results **score-gated** by `memory.mem0_min_injection_score` (default 0.22).
 - Config lives in `backend/packages/harness/deerflow/agents/memory/mem0_store.py` (env: `MEM0_QDRANT_HOST`/`MEM0_QDRANT_PORT`). Changing it needs a LangGraph restart.

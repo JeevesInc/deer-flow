@@ -1,11 +1,18 @@
 """Shared helpers for the SLL skill — paths, JSONL I/O, Anthropic.
 
-Storage rationale: SLL scripts run as bash subprocesses fired by the agent.
-The LangGraph worker already holds the on-disk Qdrant lock used by mem0,
-so a subprocess cannot share that store. We therefore keep lessons in a
-plain JSONL file and use a Haiku call for retrieval ranking. Lesson counts
-stay small enough (steady state ~100-200) that fitting them all into one
-prompt is fine.
+Storage architecture (since the P2-1 fold-in, 2026-07-02):
+- lessons.jsonl is the WRITE path — sll_score.py runs as a subprocess and
+  append-to-JSONL is atomic and dependency-free.
+- The mem0 `lessons` namespace (shared Qdrant server) is the RETRIEVAL
+  path — backend/scripts/sll_sync.py pushes JSONL lessons there
+  (idempotent by id, daily via the retention-janitor pass), and
+  Mem0InjectionMiddleware vector-searches it per turn.
+- Capture is triggered automatically by MemoryMiddleware after each
+  substantive turn (no more SOUL.md bash mandate). sll_inject.py remains
+  only as a manual/debug retrieval tool.
+
+(The original rationale — the embedded Qdrant single-writer lock — died
+with the 2026-07-01 migration to the Qdrant server.)
 """
 
 import json

@@ -61,6 +61,38 @@ def _is_stale(item):
     except Exception:
         return False
 
+def _split_stale(items):
+    fresh, stale = [], []
+    for i in items:
+        (stale if _is_stale(i) else fresh).append(i)
+    return fresh, stale
+
+def _report_stale_drops(stale, where):
+    """Expiring queued work must be loud (GW-F8) — it used to vanish silently."""
+    if not stale:
+        return
+    for i in stale:
+        log.warning("Dropping stale queued %s (queued %s, >%dh old) [%s]",
+                    i.get("category"), i.get("queued_at"), MAX_ITEM_AGE_HOURS, where)
+    token = os.environ.get("SLACK_BOT_TOKEN")
+    owner = os.environ.get("SLACK_OWNER_USER_ID")
+    if not token or not owner:
+        return
+    try:
+        from slack_sdk import WebClient
+        client = WebClient(token=token)
+        ch = client.conversations_open(users=[owner])["channel"]["id"]
+        lines = "\n".join(
+            f"- {i.get('category', 'general')} (queued {i.get('queued_at', '?')})" for i in stale
+        )
+        client.chat_postMessage(
+            channel=ch,
+            text=(f":warning: *Dispatch queue dropped {len(stale)} expired item(s)* "
+                  f"(older than {MAX_ITEM_AGE_HOURS}h, never dispatched):\n{lines}"),
+        )
+    except Exception as e:
+        log.warning("stale-drop alert failed: %s", e)
+
 def enqueue_or_dispatch(prompt, *, notification, category="general",
                         source_id=None, source_metadata=None):
     """Try dispatch immediately; queue on capacity rejection. Returns True if dispatched now."""
@@ -76,13 +108,14 @@ def _enqueue(prompt, *, notification, category="general", source_id=None, source
     item = {"queued_at": _now_iso(), "prompt": prompt, "notification": notification,
             "category": category, "source_id": source_id, "source_metadata": source_metadata or {}}
     with _queue_lock:
-        items = [i for i in _read_queue() if not _is_stale(i)]
+        items, stale = _split_stale(_read_queue())
         items.append(item)
         if len(items) > MAX_QUEUE_DEPTH:
             log.warning("Queue overflow: dropping %d oldest items", len(items) - MAX_QUEUE_DEPTH)
             items = items[-MAX_QUEUE_DEPTH:]
         _write_queue(items)
         log.info("Enqueued %s (depth: %d)", category, len(items))
+    _report_stale_drops(stale, "enqueue")
     _ensure_drain_thread()
 
 def _drain_once():
@@ -90,15 +123,21 @@ def _drain_once():
     if active_run_count() >= MAX_CONCURRENT_RUNS:
         return 0
     with _queue_lock:
-        items = [i for i in _read_queue() if not _is_stale(i)]
-        if not items:
-            _write_queue([])
-            return 0
-        item = items.pop(0)
+        items, stale = _split_stale(_read_queue())
+        item = items.pop(0) if items else None
         _write_queue(items)
-    ok = dispatch(item["prompt"], notification=item["notification"],
-                  category=item.get("category","general"),
-                  source_id=item.get("source_id"), source_metadata=item.get("source_metadata"))
+    _report_stale_drops(stale, "drain")
+    if item is None:
+        return 0
+    try:
+        ok = dispatch(item["prompt"], notification=item["notification"],
+                      category=item.get("category","general"),
+                      source_id=item.get("source_id"), source_metadata=item.get("source_metadata"))
+    except Exception as e:
+        # The item is already popped — requeue on error (e.g. LangGraph not up
+        # yet during a boot drain) instead of losing it.
+        log.warning("drain dispatch error (%s) — requeueing %s", e, item.get("category"))
+        ok = False
     if not ok:
         with _queue_lock:
             current = _read_queue()
@@ -121,6 +160,25 @@ def _ensure_drain_thread():
         return
     _drain_thread = threading.Thread(target=_drain_loop, name="dispatch-queue-drain", daemon=True)
     _drain_thread.start()
+
+def ensure_drain_on_boot():
+    """Start the drain thread at process boot if persisted items are pending (GW-F8).
+
+    The drain thread historically only started on a new _enqueue() in the same
+    process, so items queued before a restart stranded until they hit the 12h
+    expiry and vanished. Call once at gateway startup.
+    """
+    try:
+        with _queue_lock:
+            fresh, stale = _split_stale(_read_queue())
+            if stale:
+                _write_queue(fresh)
+        _report_stale_drops(stale, "boot")
+        if fresh:
+            log.info("Boot: %d pending dispatch-queue item(s) — starting drain thread", len(fresh))
+            _ensure_drain_thread()
+    except Exception as e:
+        log.warning("ensure_drain_on_boot failed: %s", e)
 
 def queue_depth():
     with _queue_lock:

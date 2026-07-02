@@ -65,21 +65,12 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    # Callers stamp last_run explicitly — a rejected or failed dispatch must
+    # not look like a completed run (GW-F3 class).
     p = _state_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    state['last_run'] = datetime.now().isoformat()
     with open(p, 'w') as f:
         json.dump(state, f, indent=2)
-
-
-def _already_ran_today(state: dict) -> bool:
-    last = state.get('last_run')
-    if not last:
-        return False
-    try:
-        return datetime.fromisoformat(last).date() == datetime.now().date()
-    except Exception:
-        return False
 
 
 def _build_prompt(run_number: int) -> str:
@@ -108,9 +99,12 @@ def run_review() -> None:
     )
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
-        from dispatch_queue import enqueue_or_dispatch
+        # Plain dispatch, NOT enqueue_or_dispatch: run_loop retries every tick
+        # while last_run is unstamped, and a persisted-queue copy can't stamp
+        # our state — it would re-run a review the queue already dispatched.
+        from autonomous_dispatch import dispatch
 
-        dispatched = enqueue_or_dispatch(
+        dispatched = dispatch(
             prompt,
             notification=notification,
             category="Latent Learning",
@@ -119,12 +113,13 @@ def run_review() -> None:
         )
         if dispatched:
             state['run_count'] = run_number
+            state['last_run'] = datetime.now().isoformat()
             save_state(state)
             log.info("Latent-learning review dispatched (run #%d).", run_number)
         else:
-            # Capacity rejection: queued by enqueue_or_dispatch, retried next cycle.
-            # Do NOT mark today as done, so it can re-fire within the hour window.
-            log.warning("Latent-learning review queued (agent at capacity).")
+            # Capacity rejection: do NOT stamp last_run, so the loop re-fires
+            # on the next tick.
+            log.warning("Latent-learning review rejected (agent at capacity). Will retry next cycle.")
     except Exception as e:
         log.error("Latent-learning dispatch failed: %s", e)
         traceback.print_exc()
@@ -135,19 +130,21 @@ def run_loop() -> None:
         log.info("Latent-learning cron disabled via LATENT_LEARN_DISABLE=1. Idling.")
         while True:
             time.sleep(CHECK_INTERVAL_SECS)
+    from cron_schedule import weekly_run_due
+
     wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][LEARN_WEEKDAY]
     log.info("Latent-learning cron started. Triggers %s at %02d:00 local.", wd, LEARN_HOUR)
     while True:
         now = datetime.now()
-        if now.weekday() == LEARN_WEEKDAY and now.hour == LEARN_HOUR:
-            if not _already_ran_today(load_state()):
-                try:
-                    run_review()
-                except Exception as e:
-                    log.error("Latent-learning loop error: %s", e)
-                    traceback.print_exc()
-            else:
-                log.info("Already ran latent-learning today, skipping.")
+        # Due whenever the last run predates the most recent scheduled time —
+        # a Sunday missed to downtime catches up on the next tick instead of
+        # silently skipping the whole week (GW-F10).
+        if weekly_run_due(load_state().get('last_run'), now, LEARN_WEEKDAY, LEARN_HOUR):
+            try:
+                run_review()
+            except Exception as e:
+                log.error("Latent-learning loop error: %s", e)
+                traceback.print_exc()
         time.sleep(CHECK_INTERVAL_SECS)
 
 

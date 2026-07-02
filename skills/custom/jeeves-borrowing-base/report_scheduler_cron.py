@@ -885,16 +885,22 @@ def run_loop():
                         eml = _find_axel_distribution_email(today_str)
                         if eml:
                             log.info(f"Found Axel distribution email: {eml['subject']}")
-                            # Mark running synchronously (direct fn, not threaded)
+                            # Mark running synchronously (direct fn, not threaded).
+                            # finally-stamp like _launch_background does: without
+                            # it, an exception here leaves '{today}_running' stuck
+                            # and silently blocks retries until the next restart's
+                            # reconcile pass (GW-F9).
                             with _state_lock:
                                 state = load_state()
                                 state[sofom_key] = f"{today_str}_running"
                                 save_state(state)
-                            run_sofom_distribution(eml['message_id'], eml['subject'])
-                            with _state_lock:
-                                state = load_state()
-                                state[sofom_key] = today_str
-                                save_state(state)
+                            try:
+                                run_sofom_distribution(eml['message_id'], eml['subject'])
+                            finally:
+                                with _state_lock:
+                                    state = load_state()
+                                    state[sofom_key] = today_str
+                                    save_state(state)
                         else:
                             log.info('No Axel distribution email yet — retrying next hour.')
                 else:

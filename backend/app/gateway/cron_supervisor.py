@@ -224,6 +224,19 @@ def start_crons() -> None:
     # Pub/Sub silently stops and inbound-email proposals die (33-day outage
     # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.
     _load_and_start("gmail-watch-renew", backend_dir / "scripts" / "gmail_watch_renew_cron.py")
+    # GW-F8: the dispatch queue's drain thread only starts when something new
+    # is enqueued in THIS process — items persisted before a restart stranded
+    # until the 12h expiry deleted them silently. Kick the drain at boot.
+    try:
+        import sys
+        shared = str(skills_dir / "_shared")
+        if shared not in sys.path:
+            sys.path.insert(0, shared)
+        import dispatch_queue
+        dispatch_queue.ensure_drain_on_boot()
+    except Exception:
+        logger.exception("[CronSupervisor] dispatch-queue boot drain failed")
+
     # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
     # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
     # top level executed the full dashboard render + 3 synchronous Redshift

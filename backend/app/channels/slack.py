@@ -16,8 +16,10 @@ from typing import Any
 
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
+from app.channels.approval_queue import ApprovalQueue
 from app.channels.base import Channel
 from app.channels.message_bus import InboundMessageType, MessageBus, OutboundMessage, ResolvedAttachment
+from app.channels import slack_content
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +61,14 @@ class SlackChannel(Channel):
         # Entries are TTL-pruned after 10 minutes to prevent leaks.
         self._progress_message_ts: dict[str, tuple[str, float]] = {}
         self._PROGRESS_TTL = 600  # seconds
-        # Approval queue: dedup reactions so an added/removed/re-added emoji on a
-        # proposal card only fires the action once. Key: "<msg_ts>:<approve|reject>".
-        # In-memory only — the durable guard is the proposal_outcomes.jsonl check
-        # in _handle_reaction_event, so bounding/clearing this set is safe.
-        self._handled_reactions: set[str] = set()
+        # Approval queue (P3-2: logic lives in approval_queue.py; the channel
+        # injects the Slack write + message-bus dispatch callbacks).
+        self._approval_queue = ApprovalQueue(
+            owner_user_id=self._owner_user_id,
+            log_dir=Path(__file__).resolve().parents[2] / ".deer-flow",
+            post_thread=self._post_thread,
+            dispatch_approval=self._dispatch_approved_action,
+        )
         # Bot-to-bot loop breaker (Chan-H2): rolling window of bot-triggered
         # message times. Two bots replying to each other are otherwise unbounded
         # (bot authors bypass the user allowlist).
@@ -573,148 +578,10 @@ class SlackChannel(Channel):
 
     # -- Approval queue (reaction-driven) ----------------------------------
 
-    def _queue_channel(self) -> str:
-        return os.environ.get("ANALYST_QUEUE_CHANNEL_ID", "")
-
-    def _proposal_log_path(self) -> Path:
-        # slack.py lives at backend/app/channels/slack.py → backend/.deer-flow/...
-        return Path(__file__).resolve().parents[2] / ".deer-flow" / "proposal_log.jsonl"
+    # -- Approval queue (logic in approval_queue.py; P3-2) --------------------
 
     def _handle_reaction_event(self, event: dict) -> None:
-        """Drive the approval queue from the owner's emoji reactions.
-
-        :+1:/:white_check_mark: on a proposal card → execute the proposed action.
-        :-1:/:x: → reject and log. Only the owner's reactions in the configured
-        queue channel are honored; everything else is ignored. Inert unless
-        ANALYST_QUEUE_CHANNEL_ID is set and the bot has reactions:read +
-        the reaction_added event subscription.
-        """
-        queue_channel = self._queue_channel()
-        if not queue_channel:
-            return
-        if not self._owner_user_id:
-            # Fail CLOSED: with no owner configured, honoring reactions would
-            # let ANY workspace user approve agent actions (Chan-M4).
-            logger.warning("[Queue] SLACK_OWNER_USER_ID unset — ignoring reaction (fail closed)")
-            return
-        if event.get("user", "") != self._owner_user_id:
-            return
-        item = event.get("item", {})
-        if item.get("type") != "message":
-            return
-        channel_id = item.get("channel", "")
-        msg_ts = item.get("ts", "")
-        if channel_id != queue_channel or not msg_ts:
-            return
-
-        # Normalize skin-tone variants like "+1::skin-tone-3".
-        reaction = (event.get("reaction") or "").split("::", 1)[0].lower()
-        approve = reaction in ("+1", "thumbsup", "white_check_mark", "heavy_check_mark")
-        reject = reaction in ("-1", "thumbsdown", "x", "no_entry")
-        if not (approve or reject):
-            return
-
-        dedup_key = f"{msg_ts}:{'approve' if approve else 'reject'}"
-        if dedup_key in self._handled_reactions:
-            return
-
-        proposal = self._lookup_proposal(channel_id, msg_ts)
-        if not proposal:
-            logger.info("[Queue] reaction %s on %s/%s — no matching proposal in log", reaction, channel_id, msg_ts)
-            return
-
-        # Durable executed-outcome dedup: the in-memory set dies with the
-        # process, so a gateway restart + re-added reaction would re-execute an
-        # already-approved action. proposal_outcomes.jsonl is the durable record.
-        if self._has_reaction_outcome(proposal.get("slack_ts") or msg_ts):
-            logger.info("[Queue] %s already has a recorded reaction outcome — skipping", msg_ts)
-            self._handled_reactions.add(dedup_key)
-            return
-
-        self._handled_reactions.add(dedup_key)
-        if len(self._handled_reactions) > 2000:
-            # Bounded memory — safe to drop because the durable check above
-            # prevents re-execution.
-            self._handled_reactions.clear()
-            self._handled_reactions.add(dedup_key)
-        if approve:
-            self._approve_proposal(proposal, channel_id, msg_ts)
-        else:
-            self._reject_proposal(proposal, channel_id, msg_ts)
-
-    def _lookup_proposal(self, channel_id: str, msg_ts: str) -> dict | None:
-        """Find the proposal_log record for a queue card by (channel, ts)."""
-        path = self._proposal_log_path()
-        if not path.exists():
-            return None
-        try:
-            match = None
-            with path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except Exception:
-                        continue
-                    if rec.get("slack_ts") == msg_ts and rec.get("slack_channel") == channel_id:
-                        match = rec  # last write wins
-            return match
-        except Exception as exc:
-            logger.warning("[Queue] failed reading proposal log: %s", exc)
-            return None
-
-    def _has_reaction_outcome(self, proposal_ts: str) -> bool:
-        """True when proposal_outcomes.jsonl already records a reaction outcome
-        for this proposal — the durable half of the approval dedup."""
-        if not proposal_ts:
-            return False
-        path = self._proposal_log_path().parent / "proposal_outcomes.jsonl"
-        if not path.exists():
-            return False
-        try:
-            with path.open("r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if (rec.get("proposal_slack_ts") == proposal_ts
-                            and rec.get("source") == "reaction"):
-                        return True
-        except Exception as exc:
-            logger.warning("[Queue] failed reading outcomes log: %s", exc)
-        return False
-
-    def _record_outcome(self, proposal: dict, outcome: str) -> None:
-        """Append a reaction-sourced outcome to proposal_outcomes.jsonl.
-
-        Keyed by proposal_slack_ts so the nightly proposal_learner skips
-        re-labeling it from the thread and the signal is retained for synthesis.
-        """
-        try:
-            from datetime import datetime, timezone
-            path = self._proposal_log_path().parent / "proposal_outcomes.jsonl"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            entry = {
-                "proposal_slack_ts": proposal.get("slack_ts"),
-                "labeled_at": datetime.now(timezone.utc).isoformat(),
-                "outcome": outcome,            # 'approved' | 'rejected'
-                "source": "reaction",
-                "brian_reply": "",
-                "brian_reply_ts": "",
-                "agent_response": "",
-                "lag_seconds": 0,
-                "label_reasoning": f"Owner reaction in approval queue ({outcome}).",
-            }
-            with path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry) + "\n")
-        except Exception as exc:
-            logger.warning("[Queue] failed recording outcome: %s", exc)
+        self._approval_queue.handle_reaction_event(event)
 
     def _post_thread(self, channel_id: str, thread_ts: str, text: str) -> None:
         if not self._web_client:
@@ -724,33 +591,9 @@ class SlackChannel(Channel):
         except Exception as exc:
             logger.warning("[Queue] thread post failed: %s", exc)
 
-    def _approve_proposal(self, proposal: dict, channel_id: str, msg_ts: str) -> None:
-        action = (proposal.get("proposed_action") or "").strip()
-        logger.info("[Queue] APPROVED ts=%s category=%s", msg_ts, proposal.get("category", ""))
-        self._record_outcome(proposal, "approved")
-        self._post_thread(channel_id, msg_ts, ":arrow_forward: *Approved* — executing…")
-
-        lines = [
-            "APPROVED ACTION from the analyst approval queue. Carry this out now:",
-            "",
-            action or "(no concrete action was named — infer the right next step from the context below)",
-            "",
-            "Context (the inbound email that triggered this):",
-            f"- From: {proposal.get('sender_display', '')} <{proposal.get('sender_email', '')}>",
-            f"- Subject: {proposal.get('subject', '')}",
-            f"- Summary: {proposal.get('summary', '')}",
-        ]
-        gid = proposal.get("gmail_msg_id")
-        if gid:
-            lines.append(f"- gmail_msg_id: {gid} (read the full email thread with the Gmail tool before acting)")
-        lines.append("")
-        lines.append(
-            "If this requires sending an external email, create a Gmail DRAFT and post it in this "
-            "thread for a final check rather than sending it outright. For reversible/internal steps "
-            "(pull data, build a file, internal forward, calendar hold), just do them and report back here."
-        )
-        text = "\n".join(lines)
-
+    def _dispatch_approved_action(self, proposal: dict, channel_id: str,
+                                  msg_ts: str, text: str) -> None:
+        """Publish an approved proposal to the message bus as an inbound task."""
         inbound = self._make_inbound(
             chat_id=channel_id,
             user_id=self._owner_user_id or "",
@@ -767,280 +610,36 @@ class SlackChannel(Channel):
         else:
             logger.warning("[Queue] event loop not running; cannot dispatch approval for ts=%s", msg_ts)
 
-    def _reject_proposal(self, proposal: dict, channel_id: str, msg_ts: str) -> None:
-        logger.info("[Queue] REJECTED ts=%s category=%s", msg_ts, proposal.get("category", ""))
-        self._record_outcome(proposal, "rejected")
-        self._post_thread(channel_id, msg_ts, ":no_entry_sign: *Rejected* — no action taken. Logged for learning.")
+    # -- Content extraction (logic in slack_content.py; P3-2). Thin delegates
+    # so the many call sites below stay unchanged. ----------------------------
 
     @staticmethod
     def _clean_slack_text(text: str) -> str:
-        """Convert Slack mrkdwn text to plain text suitable for the agent.
-
-        Slack wraps URLs as ``<URL>`` or ``<URL|label>``, user mentions as
-        ``<@U1234>``, and channel references as ``<#C1234|channel-name>``.
-
-        This method:
-        - Unwraps URLs: ``<https://example.com>`` → ``https://example.com``
-        - Unwraps labeled URLs: ``<https://example.com|Example>`` → ``https://example.com``
-        - Preserves user mentions: ``<@U1234>`` stays as-is
-        - Simplifies channel refs: ``<#C1234|general>`` → ``#general``
-        """
-        def _replace(m: re.Match) -> str:
-            inner = m.group(1)
-            # User mention: <@U1234> — keep as-is
-            if inner.startswith("@"):
-                return m.group(0)
-            # Channel reference: <#C1234|channel-name>
-            if inner.startswith("#"):
-                parts = inner.split("|", 1)
-                return f"#{parts[1]}" if len(parts) == 2 else inner
-            # URL: <https://...|label> or <https://...>
-            parts = inner.split("|", 1)
-            return parts[0]
-
-        return re.sub(r"<([^>]+)>", _replace, text)
+        return slack_content.clean_slack_text(text)
 
     @staticmethod
     def _extract_attachment_urls(event: dict) -> list[str]:
-        """Pull URLs from Slack attachments and blocks that may not appear in text.
-
-        Excludes Slack-hosted file URLs (files.slack.com) because those require
-        bot-token authentication and are handled separately by _download_event_files
-        which inlines text content or notes binary files.
-        """
-        urls: list[str] = []
-        # Attachments (link unfurls, bot-posted rich content)
-        for att in event.get("attachments", []):
-            for key in ("original_url", "from_url", "title_link", "app_unfurl_url"):
-                url = att.get(key)
-                if url and url not in urls:
-                    urls.append(url)
-        # Shared files — only include external/public URLs, not Slack-hosted ones
-        # (Slack file URLs need bot token auth and are already handled by download+inline)
-        for f in event.get("files", []):
-            # permalink_public is the only publicly accessible file URL
-            url = f.get("permalink_public")
-            if url and url not in urls:
-                urls.append(url)
-        return urls
-
-    def _fetch_slack_message(self, channel_id: str, message_ts: str) -> str | None:
-        """Fetch a Slack message's text content using the Web API.
-
-        Uses conversations.history (or conversations.replies for threaded
-        messages) to retrieve the actual message text.  Returns None on error.
-        """
-        if not self._web_client:
-            return None
-        try:
-            # Try conversations.history with inclusive=true to get the exact message
-            resp = self._web_client.conversations_history(
-                channel=channel_id,
-                latest=message_ts,
-                inclusive=True,
-                limit=1,
-            )
-            msgs = resp.get("messages", [])
-            if msgs:
-                return msgs[0].get("text", "")
-        except Exception as exc:
-            logger.debug("[Slack] conversations.history failed for %s/%s: %s", channel_id, message_ts, exc)
-            # Try conversations.replies as fallback (message might be in a thread)
-            try:
-                resp = self._web_client.conversations_replies(
-                    channel=channel_id,
-                    ts=message_ts,
-                    limit=1,
-                )
-                msgs = resp.get("messages", [])
-                if msgs:
-                    return msgs[0].get("text", "")
-            except Exception as exc2:
-                logger.debug("[Slack] conversations.replies also failed: %s", exc2)
-        return None
-
-    # Regex: https://WORKSPACE.slack.com/archives/CHANNEL_ID/pTIMESTAMP
-    _SLACK_ARCHIVE_RE = re.compile(
-        r"https?://[a-zA-Z0-9\-]+\.slack\.com/archives/([A-Z0-9]+)/p(\d+)"
-    )
-
-    def _resolve_single_slack_url(self, url: str) -> str | None:
-        """If *url* is a Slack archive link, fetch the message and return
-        a text block like ``[Slack message from #channel]: ...``.
-        Returns None if it's not a Slack URL or fetch fails.
-        """
-        m = self._SLACK_ARCHIVE_RE.search(url)
-        if not m:
-            return None
-        channel_id = m.group(1)
-        # Slack archive timestamps: p1234567890123456 -> 1234567890.123456
-        raw_ts = m.group(2)
-        message_ts = raw_ts[:10] + "." + raw_ts[10:] if len(raw_ts) > 10 else raw_ts
-        msg_text = self._fetch_slack_message(channel_id, message_ts)
-        if msg_text:
-            cleaned = self._clean_slack_text(msg_text)
-            logger.info("[Slack] Resolved archive URL -> %d chars from channel %s", len(cleaned), channel_id)
-            return f"[Slack message from channel {channel_id}]:\n{cleaned}"
-        return None
-
-    def _fetch_root_message_text(self, channel_id: str, thread_ts: str) -> str | None:
-        """Fetch the root message of a Slack thread, including any forwarded/attached content.
-
-        This is used to give the agent context when a user replies in a thread
-        whose root message was posted by the bot (e.g. email notifications).
-        Extracts text from the message body, rich blocks (section, header), and
-        attachments/forwarded content.
-        """
-        if not self._web_client:
-            return None
-        try:
-            resp = self._web_client.conversations_history(
-                channel=channel_id,
-                latest=thread_ts,
-                inclusive=True,
-                limit=1,
-            )
-            msgs = resp.get("messages", [])
-            if not msgs:
-                return None
-            root = msgs[0]
-            parts = []
-
-            # Primary text field
-            body = self._clean_slack_text(root.get("text", "")).strip()
-            if body:
-                parts.append(body)
-
-            # Extract text from rich blocks (header, section, context, rich_text)
-            for block in root.get("blocks", []):
-                btype = block.get("type", "")
-                if btype in ("section", "header", "context"):
-                    bt = block.get("text", {})
-                    if isinstance(bt, dict):
-                        block_text = self._clean_slack_text(bt.get("text", "")).strip()
-                        if block_text and block_text not in body:
-                            parts.append(block_text)
-                    # Also check fields (section blocks can have multiple fields)
-                    for field in block.get("fields", []):
-                        if isinstance(field, dict):
-                            ft = self._clean_slack_text(field.get("text", "")).strip()
-                            if ft:
-                                parts.append(ft)
-                elif btype == "rich_text":
-                    # rich_text blocks have elements with nested text
-                    for elem in block.get("elements", []):
-                        for sub in elem.get("elements", []):
-                            if sub.get("type") == "text":
-                                parts.append(sub.get("text", "").strip())
-
-            # Forwarded content from attachments
-            forwarded = self._extract_forwarded_text(root)
-            if forwarded:
-                parts.append(f"Forwarded message:\n{forwarded}")
-
-            # Quoted blocks (modern Slack forwarding)
-            quoted = self._extract_quoted_blocks_text(root)
-            if quoted:
-                parts.append(f"Forwarded message:\n{quoted}")
-
-            text = "\n\n".join(p for p in parts if p)
-            return text if text else None
-        except Exception as exc:
-            logger.warning("[Slack] Failed to fetch root message for thread_ts=%s: %s", thread_ts, exc)
-            return None
-
-    def _resolve_slack_archive_urls(self, text: str) -> str:
-        """Find Slack archive URLs in *text* and append the resolved message content."""
-        urls = self._SLACK_ARCHIVE_RE.findall(text)
-        if not urls:
-            return text
-        resolved_parts = []
-        for channel_id, raw_ts in urls:
-            message_ts = raw_ts[:10] + "." + raw_ts[10:] if len(raw_ts) > 10 else raw_ts
-            msg_text = self._fetch_slack_message(channel_id, message_ts)
-            if msg_text:
-                cleaned = self._clean_slack_text(msg_text)
-                resolved_parts.append(f"[Slack message from channel {channel_id}]:\n{cleaned}")
-        if resolved_parts:
-            text = text + "\n\n" + "\n\n".join(resolved_parts)
-        return text
+        return slack_content.extract_attachment_urls(event)
 
     @staticmethod
     def _extract_quoted_blocks_text(event: dict) -> str:
-        """Extract text from rich_text_quote elements in Slack blocks.
-
-        When a user forwards/shares a Slack message, the quoted content
-        often appears in top-level ``blocks`` as ``rich_text_quote`` elements
-        rather than in ``attachments``.  This is common in newer Slack clients.
-        We only extract ``rich_text_quote`` elements here — ``rich_text_section``
-        elements duplicate what is already in ``event["text"]``.
-        """
-        parts: list[str] = []
-        for block in event.get("blocks", []):
-            if block.get("type") != "rich_text":
-                continue
-            for element in block.get("elements", []):
-                if element.get("type") != "rich_text_quote":
-                    continue
-                text_parts: list[str] = []
-                for child in element.get("elements", []):
-                    child_type = child.get("type", "")
-                    if child_type == "text":
-                        text_parts.append(child.get("text", ""))
-                    elif child_type == "link":
-                        text_parts.append(child.get("text", "") or child.get("url", ""))
-                    elif child_type == "user":
-                        text_parts.append(f"<@{child.get('user_id', '')}>")
-                    elif child_type == "channel":
-                        text_parts.append(f"<#{child.get('channel_id', '')}>")
-                chunk = "".join(text_parts).strip()
-                if chunk:
-                    parts.append(chunk)
-        return "\n\n".join(parts)
+        return slack_content.extract_quoted_blocks_text(event)
 
     @staticmethod
     def _extract_forwarded_text(event: dict) -> str:
-        """Extract text content from forwarded messages, emails, and rich attachments.
+        return slack_content.extract_forwarded_text(event)
 
-        When a user forwards a Slack message or email, the content appears in
-        the ``attachments`` array with fields like ``text``, ``fallback``,
-        ``pretext``, ``title``, and ``author_name``.  The parent message's
-        ``text`` field is often empty, so without this extraction the forwarded
-        content is silently lost.
-        """
-        parts: list[str] = []
-        for att in event.get("attachments", []):
-            # Skip link-unfurl attachments that only have a URL preview
-            # (those are handled by _extract_attachment_urls)
-            if att.get("is_app_unfurl") or att.get("service_name"):
-                att_text = att.get("text", "").strip()
-                if att_text:
-                    parts.append(att_text)
-                continue
+    def _fetch_slack_message(self, channel_id: str, message_ts: str) -> str | None:
+        return slack_content.fetch_slack_message(self._web_client, channel_id, message_ts)
 
-            lines: list[str] = []
-            author = att.get("author_name") or att.get("author_subname", "")
-            if author:
-                lines.append(f"[From {author}]")
-            # Title (common in email forwards: subject line)
-            title = att.get("title", "").strip()
-            if title:
-                lines.append(f"Subject: {title}")
-            pretext = att.get("pretext", "").strip()
-            if pretext:
-                lines.append(pretext)
-            att_text = att.get("text", "").strip()
-            if not att_text:
-                att_text = att.get("fallback", "").strip()
-            if att_text:
-                lines.append(att_text)
-            # Footer (email signatures, timestamps)
-            footer = att.get("footer", "").strip()
-            if footer:
-                lines.append(f"— {footer}")
-            if lines:
-                parts.append("\n".join(lines))
-        return "\n\n".join(parts)
+    def _resolve_single_slack_url(self, url: str) -> str | None:
+        return slack_content.resolve_single_slack_url(self._web_client, url)
+
+    def _resolve_slack_archive_urls(self, text: str) -> str:
+        return slack_content.resolve_slack_archive_urls(self._web_client, text)
+
+    def _fetch_root_message_text(self, channel_id: str, thread_ts: str) -> str | None:
+        return slack_content.fetch_root_message_text(self._web_client, channel_id, thread_ts)
 
     def _download_slack_file(self, file_info: dict) -> str | None:
         """Download a Slack-hosted file using the bot token.

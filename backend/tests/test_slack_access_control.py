@@ -88,44 +88,42 @@ class TestApprovalQueueHardening:
     def test_fails_closed_without_owner_id(self, monkeypatch):
         self._queue_channel_env(monkeypatch)
         ch = _channel(owner_user_id="")
-        ch._owner_user_id = ""
-        ch._lookup_proposal = MagicMock()
+        ch._approval_queue._owner_user_id = ""
+        ch._approval_queue._lookup_proposal = MagicMock()
         ch._handle_reaction_event(self._reaction())
-        assert not ch._lookup_proposal.called  # nobody can approve
+        assert not ch._approval_queue._lookup_proposal.called  # nobody can approve
 
     def test_non_owner_reaction_ignored(self, monkeypatch):
         self._queue_channel_env(monkeypatch)
         ch = _channel(owner_user_id="UOWNER")
-        ch._lookup_proposal = MagicMock()
+        ch._approval_queue._lookup_proposal = MagicMock()
         ch._handle_reaction_event(self._reaction(user="USOMEONE"))
-        assert not ch._lookup_proposal.called
+        assert not ch._approval_queue._lookup_proposal.called
 
     def test_durable_outcome_dedup_survives_restart(self, monkeypatch, tmp_path):
         """A recorded reaction outcome must block re-execution even with a
         fresh in-memory dedup set (i.e. after a gateway restart)."""
         self._queue_channel_env(monkeypatch)
         ch = _channel(owner_user_id="UOWNER")
-        monkeypatch.setattr(ch, "_proposal_log_path",
-                            lambda: tmp_path / "proposal_log.jsonl")
+        ch._approval_queue._log_dir = tmp_path
         (tmp_path / "proposal_outcomes.jsonl").write_text(
             json.dumps({"proposal_slack_ts": "100.1", "source": "reaction",
                         "outcome": "approved"}) + "\n", encoding="utf-8")
-        ch._lookup_proposal = MagicMock(return_value={"slack_ts": "100.1"})
-        ch._approve_proposal = MagicMock()
+        ch._approval_queue._lookup_proposal = MagicMock(return_value={"slack_ts": "100.1"})
+        ch._approval_queue._approve_proposal = MagicMock()
 
         ch._handle_reaction_event(self._reaction(ts="100.1"))
 
-        assert not ch._approve_proposal.called
+        assert not ch._approval_queue._approve_proposal.called
 
     def test_fresh_approval_executes_once(self, monkeypatch, tmp_path):
         self._queue_channel_env(monkeypatch)
         ch = _channel(owner_user_id="UOWNER")
-        monkeypatch.setattr(ch, "_proposal_log_path",
-                            lambda: tmp_path / "proposal_log.jsonl")
-        ch._lookup_proposal = MagicMock(return_value={"slack_ts": "200.1"})
-        ch._approve_proposal = MagicMock()
+        ch._approval_queue._log_dir = tmp_path
+        ch._approval_queue._lookup_proposal = MagicMock(return_value={"slack_ts": "200.1"})
+        ch._approval_queue._approve_proposal = MagicMock()
 
         ch._handle_reaction_event(self._reaction(ts="200.1"))
         ch._handle_reaction_event(self._reaction(ts="200.1"))  # re-added emoji
 
-        assert ch._approve_proposal.call_count == 1
+        assert ch._approval_queue._approve_proposal.call_count == 1

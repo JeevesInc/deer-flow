@@ -61,7 +61,15 @@ class SlackChannel(Channel):
         self._PROGRESS_TTL = 600  # seconds
         # Approval queue: dedup reactions so an added/removed/re-added emoji on a
         # proposal card only fires the action once. Key: "<msg_ts>:<approve|reject>".
+        # In-memory only — the durable guard is the proposal_outcomes.jsonl check
+        # in _handle_reaction_event, so bounding/clearing this set is safe.
         self._handled_reactions: set[str] = set()
+        # Bot-to-bot loop breaker (Chan-H2): rolling window of bot-triggered
+        # message times. Two bots replying to each other are otherwise unbounded
+        # (bot authors bypass the user allowlist).
+        self._bot_trigger_times: list[float] = []
+        self._BOT_TRIGGER_MAX = int(os.environ.get("SLACK_BOT_TRIGGER_MAX", "5"))
+        self._BOT_TRIGGER_WINDOW_SEC = int(os.environ.get("SLACK_BOT_TRIGGER_WINDOW_SEC", "600"))
         # Assistant threads: track threads opened via the Slack assistant panel
         # so we can use assistant-specific UX (setStatus, suggested prompts, titles).
         # Persisted to disk so they survive gateway restarts.
@@ -584,7 +592,12 @@ class SlackChannel(Channel):
         queue_channel = self._queue_channel()
         if not queue_channel:
             return
-        if self._owner_user_id and event.get("user", "") != self._owner_user_id:
+        if not self._owner_user_id:
+            # Fail CLOSED: with no owner configured, honoring reactions would
+            # let ANY workspace user approve agent actions (Chan-M4).
+            logger.warning("[Queue] SLACK_OWNER_USER_ID unset — ignoring reaction (fail closed)")
+            return
+        if event.get("user", "") != self._owner_user_id:
             return
         item = event.get("item", {})
         if item.get("type") != "message":
@@ -610,7 +623,20 @@ class SlackChannel(Channel):
             logger.info("[Queue] reaction %s on %s/%s — no matching proposal in log", reaction, channel_id, msg_ts)
             return
 
+        # Durable executed-outcome dedup: the in-memory set dies with the
+        # process, so a gateway restart + re-added reaction would re-execute an
+        # already-approved action. proposal_outcomes.jsonl is the durable record.
+        if self._has_reaction_outcome(proposal.get("slack_ts") or msg_ts):
+            logger.info("[Queue] %s already has a recorded reaction outcome — skipping", msg_ts)
+            self._handled_reactions.add(dedup_key)
+            return
+
         self._handled_reactions.add(dedup_key)
+        if len(self._handled_reactions) > 2000:
+            # Bounded memory — safe to drop because the durable check above
+            # prevents re-execution.
+            self._handled_reactions.clear()
+            self._handled_reactions.add(dedup_key)
         if approve:
             self._approve_proposal(proposal, channel_id, msg_ts)
         else:
@@ -638,6 +664,31 @@ class SlackChannel(Channel):
         except Exception as exc:
             logger.warning("[Queue] failed reading proposal log: %s", exc)
             return None
+
+    def _has_reaction_outcome(self, proposal_ts: str) -> bool:
+        """True when proposal_outcomes.jsonl already records a reaction outcome
+        for this proposal — the durable half of the approval dedup."""
+        if not proposal_ts:
+            return False
+        path = self._proposal_log_path().parent / "proposal_outcomes.jsonl"
+        if not path.exists():
+            return False
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if (rec.get("proposal_slack_ts") == proposal_ts
+                            and rec.get("source") == "reaction"):
+                        return True
+        except Exception as exc:
+            logger.warning("[Queue] failed reading outcomes log: %s", exc)
+        return False
 
     def _record_outcome(self, proposal: dict, outcome: str) -> None:
         """Append a reaction-sourced outcome to proposal_outcomes.jsonl.
@@ -1110,6 +1161,29 @@ class SlackChannel(Channel):
             if self._own_user_id and msg_user == self._own_user_id:
                 return
             # Unknown bot but not us — allow through (could be Gmail, Calendar, etc.)
+        if msg_bot_id:
+            # Bot-to-bot loop breaker (Chan-H2): bot authors bypass the user
+            # allowlist below, so two bots replying to each other are unbounded.
+            # In channels, another bot must explicitly @mention us; and however
+            # triggered, bot-authored runs are capped per rolling window.
+            in_dm = event.get("channel_type", "") == "im"
+            mentioned = bool(self._own_user_id) and f"<@{self._own_user_id}>" in (event.get("text") or "")
+            if not in_dm and not mentioned:
+                logger.debug("Ignoring bot channel message without @mention (bot_id=%s)", msg_bot_id)
+                return
+            now_mono = time.monotonic()
+            self._bot_trigger_times = [
+                t for t in self._bot_trigger_times
+                if now_mono - t < self._BOT_TRIGGER_WINDOW_SEC
+            ]
+            if len(self._bot_trigger_times) >= self._BOT_TRIGGER_MAX:
+                logger.warning(
+                    "Bot-to-bot rate limit: %d bot-triggered messages inside %ds — dropping (bot_id=%s). "
+                    "A sustained stream here usually means a bot reply loop.",
+                    self._BOT_TRIGGER_MAX, self._BOT_TRIGGER_WINDOW_SEC, msg_bot_id,
+                )
+                return
+            self._bot_trigger_times.append(now_mono)
         # Ignore non-message subtypes (edits, joins, etc.) but allow bot_message subtype
         subtype = event.get("subtype", "")
         if subtype in self._IGNORED_SUBTYPES:

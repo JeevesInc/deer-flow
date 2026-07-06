@@ -323,7 +323,7 @@ RPP accounts are LOC balances financed into GWC loans. Key facts:
 - `days_past_due` = days since that installment was due
 - `delinquent_dt` = date the current installment became overdue
 - ~99 RPP loans (as of May 2026), one row per installment
-- Do NOT use `dms_mysql_jeeves_raw.instalments` or `company_statements` for RPP — gwc_tape is the source of truth
+- `gwc_tape` is the source of truth for RPP **population** (which loans exist, charge_off_flag, latest snapshot) — always filter `charge_off_flag = false` to exclude charged-off RPPs (tracked separately in the charged-off report). For the **payment schedule** (per-installment due dates, status, paid flag), JOIN `dms_mysql_jeeves_raw.instalments` on `i.loanid = g.loan_id` — gwc_tape's own `dt`/`principal_amount_due_usd` rows do not reliably capture per-installment paid status. Corrected 2026-07-06 per Brian (this line previously said the opposite — 'do not use instalments for RPP' — which was wrong).
 
 Use these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
 

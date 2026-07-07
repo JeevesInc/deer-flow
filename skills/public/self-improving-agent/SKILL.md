@@ -46,6 +46,19 @@ python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py patch jee
   --old "old guidance text" \
   --new "corrected guidance text"
 
+# List all files inside a skill (to find code you can edit)
+python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py files jeeves-dossier
+
+# Read any file inside a skill, not just SKILL.md
+python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py read jeeves-dossier \
+  --file dossier_cron.py
+
+# Patch skill CODE (any file inside the skill dir, e.g. a cron or helper script)
+python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py patch jeeves-dossier \
+  --file dossier_cron.py \
+  --old "exact code to replace" \
+  --new "replacement code"
+
 # Append to a skill section
 python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py append jeeves-redshift \
   --section "## Critical Rules" \
@@ -62,6 +75,23 @@ python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py patterns 
 # Search past episodes
 python /mnt/skills/public/self-improving-agent/scripts/skill_manage.py search "date lag"
 ```
+
+### Code Self-Editing Rules (`patch --file`)
+
+You CAN edit skill code (crons, helper scripts), not just SKILL.md guidance. Guardrails built into the tool:
+
+- `--old` must match **exactly once** in the target file — include enough surrounding context to make it unique.
+- `.py` and `.json` results are **syntax-validated before writing**; a patch that would break the file is rejected and nothing is written.
+- The original file is backed up to `self-improving-agent/memory/code-backups/<skill>/` before every code patch.
+- The target must live inside that skill's own directory — no absolute paths, no `..`.
+
+Discipline you must follow (the tool cannot check these):
+
+1. **Read the whole file first** (`read <skill> --file <path>`) — understand control flow before patching.
+2. **Never pass code through shell string mangling** — build `--old`/`--new` carefully; prefer writing the arguments via a Python heredoc if they contain quotes or backslashes.
+3. **After patching a cron**, verify it imports cleanly: `python -c "import ast; ast.parse(open(f).read())"` is already done for you, but a runtime smoke test (e.g. `python <file> --help` or importing the module) is on you.
+4. **Log an episode** describing what you changed and why (the tool logs a basic one automatically; add detail with `log` if the change was significant).
+5. If a patched cron misbehaves, restore from the newest backup in `memory/code-backups/<skill>/`.
 
 ## Session Search (Past Conversations)
 

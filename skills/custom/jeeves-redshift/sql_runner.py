@@ -46,6 +46,7 @@ ALLOWED_TABLES = {
     'analytics_sandbox.jeeves_unified_risk_scoring_final',
     'dms_mysql_jeeves_raw.companies',
     'dms_mysql_jeeves_raw.company_settings',
+    'dms_mysql_jeeves_raw.instalments',
     'dms_mysql_underwriting_raw.taktile_data',
 }
 

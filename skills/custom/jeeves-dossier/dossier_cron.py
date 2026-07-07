@@ -531,8 +531,7 @@ def process_event(event, state):
                 log.error(f"Gather failed for {email}: {e}")
                 gather_results[email] = None
 
-    dossiers = {}
-    for email in emails:
+    def synthesize_one(email):
         gathered = gather_results.get(email)
         existing = read_existing_dossier(email)
 
@@ -541,11 +540,23 @@ def process_event(event, state):
             updated = synthesize_dossier(email, gathered, existing, honcho_read)
             if updated:
                 save_dossier(email, updated)
-                dossiers[email] = updated
-            elif existing:
-                dossiers[email] = existing
-        elif existing:
-            dossiers[email] = existing
+                return updated
+        return existing
+
+    # Synthesis parallelized like the gather step above — sequential Claude
+    # calls (each with up to 3 retries) made a 19-attendee meeting's briefing
+    # land 46 minutes after the meeting started (2026-07-06 incident).
+    dossiers = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(synthesize_one, email): email for email in emails}
+        for future in as_completed(futures):
+            email = futures[future]
+            try:
+                result = future.result()
+                if result:
+                    dossiers[email] = result
+            except Exception as e:
+                log.error(f"Synthesis failed for {email}: {e}")
 
     if dossiers:
         # H2/H5: Honcho theory-of-mind brief + ONA warm mutuals per attendee.

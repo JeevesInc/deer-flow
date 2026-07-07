@@ -6,16 +6,23 @@ modeled after Hermes Agent's skill_manage tool.
 
 Usage:
     python skill_manage.py list
-    python skill_manage.py read <skill-name>
+    python skill_manage.py read <skill-name> [--file scripts/foo.py]
+    python skill_manage.py files <skill-name>
     python skill_manage.py create <skill-name> --description "..." --content "..."
-    python skill_manage.py patch <skill-name> --old "old text" --new "new text"
+    python skill_manage.py patch <skill-name> --old "old text" --new "new text" [--file scripts/foo.py]
     python skill_manage.py append <skill-name> --section "## Section" --content "new content"
     python skill_manage.py log <skill-name> --episode '{"situation": "...", "lesson": "..."}'
     python skill_manage.py patterns [--skill <skill-name>]
     python skill_manage.py search <query>
+
+`--file` targets any file inside the skill's own directory (code self-editing).
+Code patches are guarded: the old text must be unique in the file, .py/.json
+results are syntax-validated (rolled back on failure), and a backup of the
+original is written under self-improving-agent/memory/code-backups/.
 """
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -63,12 +70,34 @@ def cmd_list(args):
 
 
 def cmd_read(args):
-    """Read a skill's SKILL.md content."""
+    """Read a skill's SKILL.md, or any file in the skill dir via --file."""
+    if getattr(args, "file", None):
+        target = _resolve_skill_file(args.skill_name, args.file)
+        print(target.read_text(encoding="utf-8"))
+        return
     skill_file = _find_skill(args.skill_name)
     if not skill_file:
         print(f"ERROR: Skill '{args.skill_name}' not found", file=sys.stderr)
         sys.exit(1)
     print(skill_file.read_text(encoding="utf-8"))
+
+
+def cmd_files(args):
+    """List all editable files inside a skill's directory."""
+    skill_dir = _find_skill_dir(args.skill_name)
+    if not skill_dir:
+        print(f"ERROR: Skill '{args.skill_name}' not found", file=sys.stderr)
+        sys.exit(1)
+    count = 0
+    for path in sorted(skill_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(skill_dir)
+        if "__pycache__" in rel.parts:
+            continue
+        print(rel.as_posix())
+        count += 1
+    print(f"\n{count} files in {args.skill_name}")
 
 
 def cmd_create(args):
@@ -128,7 +157,16 @@ def _sanitize_patch_text(text: str) -> str:
 
 
 def cmd_patch(args):
-    """Patch a skill file using old_string/new_string replacement."""
+    """Patch a skill file using old_string/new_string replacement.
+
+    Default target is the skill's SKILL.md. With --file, any file inside the
+    skill's directory can be patched (code self-editing), with extra guards:
+    unique-match requirement, syntax validation with rollback, and a backup.
+    """
+    if getattr(args, "file", None):
+        _patch_skill_code_file(args)
+        return
+
     skill_file = _find_skill(args.skill_name)
     if not skill_file:
         print(f"ERROR: Skill '{args.skill_name}' not found", file=sys.stderr)
@@ -153,6 +191,77 @@ def cmd_patch(args):
         solution=f"Replaced: {args.old[:80]}... -> {args.new[:80]}...",
         lesson="Skill guidance updated based on experience",
     )
+
+
+def _patch_skill_code_file(args):
+    """Patch an arbitrary file inside a skill directory, with code guards."""
+    target = _resolve_skill_file(args.skill_name, args.file)
+    rel = args.file
+
+    content = target.read_text(encoding="utf-8")
+    occurrences = content.count(args.old)
+    if occurrences == 0:
+        print(f"ERROR: old_string not found in {args.skill_name}/{rel}", file=sys.stderr)
+        print(f"  Looking for: {args.old[:80]}...", file=sys.stderr)
+        sys.exit(1)
+    if occurrences > 1:
+        print(
+            f"ERROR: old_string matches {occurrences} times in {args.skill_name}/{rel}. "
+            "Include more surrounding context so the match is unique.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Markdown gets the fake-newline sanitizer; code does NOT — the regex
+    # would corrupt legitimate '\n' string literals in Python source.
+    new_text = _sanitize_patch_text(args.new) if target.suffix.lower() in (".md", ".markdown") else args.new
+    new_content = content.replace(args.old, new_text, 1)
+
+    error = _validate_file_syntax(target, new_content)
+    if error:
+        print(f"ERROR: patch would break {args.skill_name}/{rel} — NOT applied.", file=sys.stderr)
+        print(f"  {error}", file=sys.stderr)
+        sys.exit(1)
+
+    backup = _backup_skill_file(args.skill_name, target)
+    target.write_text(new_content, encoding="utf-8")
+    print(f"Patched {args.skill_name}/{rel}")
+    print(f"  Replaced: {args.old[:60]}...")
+    print(f"  With:     {new_text[:60]}...")
+    print(f"  Backup:   {backup}")
+
+    _log_episode(
+        skill=args.skill_name,
+        situation=f"Patched skill code file {args.skill_name}/{rel}",
+        solution=f"Replaced: {args.old[:80]}... -> {new_text[:80]}...",
+        lesson="Skill code updated based on experience",
+    )
+
+
+def _validate_file_syntax(target: Path, content: str) -> str | None:
+    """Validate new content for known file types. Returns an error message or None."""
+    suffix = target.suffix.lower()
+    if suffix == ".py":
+        try:
+            ast.parse(content, filename=str(target))
+        except SyntaxError as e:
+            return f"Python syntax error at line {e.lineno}: {e.msg}"
+    elif suffix == ".json":
+        try:
+            json.loads(content)
+        except json.JSONDecodeError as e:
+            return f"Invalid JSON: {e}"
+    return None
+
+
+def _backup_skill_file(skill_name: str, target: Path) -> Path:
+    """Copy the current file into memory/code-backups/<skill>/ before patching."""
+    backup_dir = get_memory_root() / "code-backups" / skill_name
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = backup_dir / f"{stamp}-{target.name}"
+    backup.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
+    return backup
 
 
 def cmd_append(args):
@@ -280,6 +389,40 @@ def _find_skill(name: str) -> Path | None:
     return None
 
 
+def _find_skill_dir(name: str) -> Path | None:
+    """Find a skill's directory by name across custom and public categories."""
+    skill_file = _find_skill(name)
+    return skill_file.parent if skill_file else None
+
+
+def _resolve_skill_file(skill_name: str, rel_path: str) -> Path:
+    """Resolve --file to a real file confined to the skill's own directory.
+
+    Exits with an error (never returns) on: unknown skill, absolute paths,
+    traversal outside the skill dir, or a missing file.
+    """
+    skill_dir = _find_skill_dir(skill_name)
+    if not skill_dir:
+        print(f"ERROR: Skill '{skill_name}' not found", file=sys.stderr)
+        sys.exit(1)
+
+    if Path(rel_path).is_absolute() or rel_path.startswith(("/", "\\")):
+        print(f"ERROR: --file must be relative to the skill directory, got: {rel_path}", file=sys.stderr)
+        sys.exit(1)
+
+    target = (skill_dir / rel_path).resolve()
+    skill_root = skill_dir.resolve()
+    if skill_root != target and skill_root not in target.parents:
+        print(f"ERROR: --file escapes the skill directory: {rel_path}", file=sys.stderr)
+        sys.exit(1)
+
+    if not target.is_file():
+        print(f"ERROR: File not found: {skill_name}/{rel_path}", file=sys.stderr)
+        sys.exit(1)
+
+    return target
+
+
 def _extract_description(skill_file: Path) -> str:
     """Extract the description from SKILL.md frontmatter."""
     content = skill_file.read_text(encoding="utf-8")
@@ -400,8 +543,13 @@ def main():
     subparsers.add_parser("list", help="List all skills")
 
     # read
-    p_read = subparsers.add_parser("read", help="Read a skill's SKILL.md")
+    p_read = subparsers.add_parser("read", help="Read a skill's SKILL.md (or any skill file via --file)")
     p_read.add_argument("skill_name")
+    p_read.add_argument("--file", help="Relative path to a file inside the skill dir (e.g. scripts/foo.py)")
+
+    # files
+    p_files = subparsers.add_parser("files", help="List all files inside a skill's directory")
+    p_files.add_argument("skill_name")
 
     # create
     p_create = subparsers.add_parser("create", help="Create a new skill")
@@ -411,10 +559,11 @@ def main():
     p_create.add_argument("--category", default="custom", choices=["public", "custom"])
 
     # patch
-    p_patch = subparsers.add_parser("patch", help="Patch a skill file")
+    p_patch = subparsers.add_parser("patch", help="Patch a skill file (SKILL.md by default, any skill file via --file)")
     p_patch.add_argument("skill_name")
     p_patch.add_argument("--old", required=True, help="Text to find")
     p_patch.add_argument("--new", required=True, help="Text to replace with")
+    p_patch.add_argument("--file", help="Relative path to a file inside the skill dir (e.g. dossier_cron.py); must match --old exactly once")
 
     # append
     p_append = subparsers.add_parser("append", help="Append to a skill section")
@@ -443,6 +592,7 @@ def main():
     commands = {
         "list": cmd_list,
         "read": cmd_read,
+        "files": cmd_files,
         "create": cmd_create,
         "patch": cmd_patch,
         "append": cmd_append,

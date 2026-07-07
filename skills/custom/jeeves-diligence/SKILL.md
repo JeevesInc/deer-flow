@@ -65,6 +65,12 @@ allowed-tools:
    with formulas: upload converted to a native Google Sheet so formulas evaluate.
 8. **Deliver complete work once.** Think from "what does correct finished work look
    like?" before starting. Back-and-forth is unacceptable.
+9. **Never mark a diligence item pending/incomplete without checking if it was
+   already finished in a prior session.** Before writing "pending" or "still needed"
+   in any draft or tracker row, search Slack/Drive/Gmail for confirmation of the
+   specific action (e.g. the exact deck slide-trim, the exact file update) -- the
+   task may have already been completed off-thread. (NB ODD deck-trim item was
+   drafted as PENDING when it had already been done, 2026-07-01/02.)
 
 ---
 

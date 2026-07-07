@@ -211,9 +211,11 @@ def fset(ws, label, col_offset, value, max_rows=None):
     return False
 
 # --- Exhibit A ---
+# NOTE: Begin Date (L4) and End Date (L5) are LIVE FORMULAS (=MIN(tape!A:A) / =MAX(tape!A:A)).
+# Do NOT overwrite them - they recalc automatically once the tape tab below is refreshed.
+# (Bug history: overwrote these w/ hardcoded dates in Jun 2026 run AND Jul 2026 run - fix must
+# stay in this canonical file, not just a workspace copy, or it recurs every month.)
 ws_a = wb['Exhibit A']
-fset(ws_a, 'Begin Date', 10, dt.datetime(BOP_DATE.year, BOP_DATE.month, BOP_DATE.day))
-fset(ws_a, 'End Date',   10, dt.datetime(EOP_DATE.year, EOP_DATE.month, EOP_DATE.day))
 fset(ws_a, 'Spot Exchange Rate', 10, '[FILL IN]')
 
 rf_items = [
@@ -242,68 +244,21 @@ for row in ws_a.iter_rows(max_row=30):
             ws_a.cell(cell.row, cell.column + 10).value = float(abs(bop_neg) if neg_hits == 0 else abs(eop_neg))
             neg_hits += 1
 
+# K31 (account count) is the only genuine manual input in this section - L31/L33/L35
+# (Total/Ineligible/Eligible Receivables $) are SUMIFS formulas over the tape tab, left untouched.
 fset(ws_a, 'Total Receivables', 9, total_recv_count)
-fset(ws_a, 'Total Receivables', 10, total_recv_mxn)
-fset(ws_a, 'Ineligible Receivables', 10, ineligible_mxn)
-fset(ws_a, 'Total Eligible', 10, eligible_mxn)
 
-for row in ws_a.iter_rows():
-    for cell in row:
-        v = cell.value
-        if not (v and isinstance(v, str)):
-            continue
-        c, r = cell.column, cell.row
-        if '(a)' in v and 'credit limit' in v.lower():
-            for off, val in enumerate([conc_a_actual, conc_a_pct, 0.30, conc_a_limit_mxn, conc_a_excess], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(b)' in v and '7.50%' in v:
-            for off, val in enumerate([0.0, 0.0, 0.075, eligible_mxn*0.075, 0.0], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(b)' in v and '5.00%' in v:
-            for off, val in enumerate([conc_b_actual, conc_b_pct, 0.05, conc_b_limit_mxn, conc_b_excess], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(c)' in v and '15%' in v:
-            for off, val in enumerate([0.0, 0.0, 0.15, eligible_mxn*0.15, 0.0], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(c)' in v and '10.00%' in v:
-            for off, val in enumerate([conc_c_actual, conc_c_pct, 0.10, conc_c_limit_mxn, conc_c_excess], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(d)' in v and 'Score of D' in v:
-            for off, val in enumerate([conc_d_actual, conc_d_pct, 0.05, conc_d_limit_mxn, conc_d_excess], 6):
-                ws_a.cell(r, c+off).value = float(val)
-        elif '(e)' in v and 'Start-Up' in v:
-            for off, val in enumerate([conc_e_actual, conc_e_pct, 0.20, conc_e_limit_mxn, conc_e_excess], 6):
-                ws_a.cell(r, c+off).value = float(val)
+# Concentration tests (a)-(i), Exhibit A H40:L50, are ALL formulas: H links to 'Exhibit B'!D90:D100
+# (which are themselves SUMIFS/array formulas over the tape tab), I/K/L derive from H and L35.
+# Do NOT write into this block - it recalculates automatically once tape/lista are refreshed below.
 
 # --- Exhibit B ---
+# NOTE: Begin/End Date (D5/D6), Spot Rate (D7), Average daily balance (G10),
+# Borrower Interest/Fee Collections (G12/G13), Total non-principal (G14), and ALL DQ bucket
+# rows (G18:H23 area, keyed off tape!I:I via SUMIFS) are LIVE FORMULAS over the tape tab.
+# Do NOT overwrite - they recalc automatically once tape is refreshed below.
+# G36 (Available Amounts for distribution) is the one genuine manual/static input in this sheet.
 ws_b = wb['Exhibit B']
-fset(ws_b, 'Begin Date', 2, dt.datetime(BOP_DATE.year, BOP_DATE.month, BOP_DATE.day))
-fset(ws_b, 'End Date',   2, dt.datetime(EOP_DATE.year, EOP_DATE.month, EOP_DATE.day))
-fset(ws_b, 'Spot Exchange Rate', 2, '[FILL IN]')
-fset(ws_b, 'Average daily balance', 5, avg_daily_bal_mxn)
-fset(ws_b, 'Borrower Interest Collections', 5, int_collections_mxn)
-fset(ws_b, 'Borrower Other Fee Collections', 5, fee_collections_mxn)
-fset(ws_b, 'Total non-principal', 5, total_nonprincipal_mxn)
-
-dq_map = {
-    'Current':    (dq_current, dq_current/dq_total if dq_total else 0),
-    '1-30 DPD':   (dq_1_30,   dq_1_30/dq_total if dq_total else 0),
-    '31-60 DPD':  (dq_31_60,  dq_31_60/dq_total if dq_total else 0),
-    '61-90 DPD':  (dq_61_90,  dq_61_90/dq_total if dq_total else 0),
-    '91-120 DPD': (dq_91_120, dq_91_120/dq_total if dq_total else 0),
-    '120+':       (dq_120plus,dq_120plus/dq_total if dq_total else 0),
-}
-for row in ws_b.iter_rows():
-    for cell in row:
-        v = str(cell.value).strip() if cell.value else ''
-        if v in dq_map:
-            bal, pct = dq_map[v]
-            ws_b.cell(cell.row, cell.column + 5).value = float(bal)
-            ws_b.cell(cell.row, cell.column + 6).value = float(pct)
-        elif v == 'Total' and cell.row > 10:
-            ws_b.cell(cell.row, cell.column + 5).value = float(dq_total)
-            ws_b.cell(cell.row, cell.column + 6).value = 1.0
-
 fset(ws_b, 'Available Amounts for distribution', 5, '[FILL IN - Monex/CxC collection account]')
 
 # --- tape tab: BOP + EOP ---

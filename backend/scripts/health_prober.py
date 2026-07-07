@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -35,6 +36,14 @@ _SHARED = _BACKEND.parent / "skills" / "custom" / "_shared"
 for p in (str(_BACKEND), str(_SHARED)):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+# As a Windows service there is no shell profile to populate the environment —
+# notify.dm_owner needs SLACK_BOT_TOKEN/SLACK_OWNER_USER_ID from backend/.env.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_BACKEND / ".env")
+except ImportError:
+    pass
 
 logging.basicConfig(level=logging.INFO,
                     format="[prober %(asctime)s] %(levelname)s %(message)s",
@@ -131,10 +140,29 @@ def ensure_docker_monitoring() -> None:
         log.warning("docker check failed: %s", e)
 
 
+def find_uv() -> str | None:
+    """Resolve uv.exe — a service account's PATH does not include the
+    per-user Python Scripts directory where uv lives."""
+    found = shutil.which("uv")
+    if found:
+        return found
+    candidates = [_BACKEND / ".venv" / "Scripts" / "uv.exe"]
+    for scripts_dir in Path(r"C:\Users").glob(r"*\AppData\Local\Programs\Python\Python3*\Scripts"):
+        candidates.append(scripts_dir / "uv.exe")
+    for cand in candidates:
+        if cand.exists():
+            return str(cand)
+    return None
+
+
 def check_venv_integrity() -> None:
     """One-shot at startup: catch interrupted-sync package wipes (P3-7)."""
+    uv = find_uv()
+    if uv is None:
+        log.warning("venv check skipped: uv.exe not found")
+        return
     try:
-        res = subprocess.run(["uv", "pip", "check"], cwd=str(_BACKEND),
+        res = subprocess.run([uv, "pip", "check"], cwd=str(_BACKEND),
                              capture_output=True, text=True, timeout=60)
         if res.returncode != 0:
             log.error("uv pip check failed:\n%s", res.stdout[-1500:])

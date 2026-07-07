@@ -141,3 +141,27 @@ def test_default_checks_cover_all_services(hp):
                         "deerflow-ngrok", "deerflow-dashboard"}
     deep = [c for c in hp.default_checks() if c.name == "gateway-deep"][0]
     assert deep.fail_threshold == 8  # the ~4-min busy-grace from the old supervisor
+
+
+def test_find_uv_prefers_path_lookup(hp, monkeypatch):
+    monkeypatch.setattr(hp.shutil, "which", lambda _: r"C:\somewhere\uv.exe")
+    assert hp.find_uv() == r"C:\somewhere\uv.exe"
+
+
+def test_find_uv_falls_back_to_known_locations(hp, monkeypatch, tmp_path):
+    # Service accounts have no per-user Scripts dir on PATH (the 7/2 + 7/7
+    # "venv check skipped: WinError 2" failures) - find_uv must fall back.
+    monkeypatch.setattr(hp.shutil, "which", lambda _: None)
+    fake = tmp_path / ".venv" / "Scripts" / "uv.exe"
+    fake.parent.mkdir(parents=True)
+    fake.write_bytes(b"")
+    monkeypatch.setattr(hp, "_BACKEND", tmp_path)
+    assert hp.find_uv() == str(fake)
+
+
+def test_dotenv_loaded_for_service_context(hp):
+    # The module must attempt to load backend/.env at import time so
+    # notify.dm_owner has SLACK_BOT_TOKEN when running as a service.
+    import inspect
+    src = inspect.getsource(hp)
+    assert "load_dotenv" in src

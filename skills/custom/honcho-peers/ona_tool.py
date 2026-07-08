@@ -399,7 +399,7 @@ def cmd_query(question: str):
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
-            print(resp.content[0].text)
+            print("".join(b.text for b in resp.content if getattr(b, "type", "") == "text"))
             return
         except Exception as e:
             print(f"[Anthropic error: {e}]", file=sys.stderr)

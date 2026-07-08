@@ -86,7 +86,7 @@ Output only the summary text, nothing else."""
             max_tokens=300,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.content[0].text.strip()
+        return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
     except Exception as e:
         print(f"[memory_derive] Haiku call failed: {e}", file=sys.stderr)
         return None

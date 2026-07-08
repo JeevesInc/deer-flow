@@ -90,7 +90,8 @@ def rank_with_haiku(task: str, lessons: list[dict], top_k: int) -> list[int]:
             max_tokens=200,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = resp.content[0].text.strip()
+        from llm import text_from_response  # _shared (storage puts it on sys.path)
+        raw = text_from_response(resp).strip()
     except Exception as e:
         log.warning("ranker call failed: %s", e)
         return list(range(min(top_k, len(lessons))))

@@ -430,7 +430,7 @@ Answer with exactly one word: YES or NO."""
             max_tokens=5,
             messages=[{'role': 'user', 'content': prompt}],
         )
-        answer = response.content[0].text.strip().upper()
+        answer = "".join(b.text for b in response.content if getattr(b, "type", "") == "text").strip().upper()
         log.info("LLM importance check for '%s': %s", alert.get('subject', '')[:60], answer)
         return answer.startswith('YES')
     except Exception as e:

@@ -112,7 +112,8 @@ def call_llm(client: Any, model: str, prompt: str, max_tokens: int = 200) -> str
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
-        return resp.content[0].text.strip()
+        from llm import text_from_response  # _shared (storage puts it on sys.path)
+        return text_from_response(resp).strip()
     except Exception as e:
         log.warning("LLM call failed: %s", e)
         return None

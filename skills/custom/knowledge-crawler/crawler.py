@@ -309,7 +309,8 @@ For each domain that appears to be a financial counterparty, investment firm, or
 Only include entities that look like financial counterparties or deal-related contacts. Output ONLY the JSON, no other text. If none qualify, output `{{}}`."""}],
         )
 
-        text = response.content[0].text.strip()
+        from llm import text_from_response  # _shared (sys.path at top) — ThinkingBlock-safe
+        text = text_from_response(response).strip()
         # Extract JSON from possible markdown code block
         if "```" in text:
             text = text.split("```")[1]
@@ -688,7 +689,8 @@ If the raw data doesn't contain meaningful new intelligence, just say "No signif
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
-        return response.content[0].text
+        from llm import text_from_response  # _shared (sys.path at top) — ThinkingBlock-safe
+        return text_from_response(response)
     except Exception as e:
         log.error(f"Synthesis failed: {e}")
         return ""

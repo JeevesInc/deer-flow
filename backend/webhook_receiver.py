@@ -80,6 +80,7 @@ SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
 # here was U09PQTZ5DHC — the BOT's own id — the documented recurring bug.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'skills' / 'custom' / '_shared'))
 from identity import owner_slack_id  # noqa: E402
+from llm import text_from_response  # noqa: E402 — ThinkingBlock-safe text extraction
 SLACK_OWNER_USER_ID = owner_slack_id()
 # Approval queue: when set, actionable-email proposals post to this channel
 # (e.g. #analyst-queue) instead of DMing the owner. Falls back to the owner DM
@@ -276,7 +277,7 @@ Be decisive. Outbound legal work from Jeeves' counsel → actionable=false. Inbo
             max_tokens=512,
             messages=[{'role': 'user', 'content': prompt}],
         )
-        text = response.content[0].text.strip()
+        text = text_from_response(response).strip()
         # Strip markdown code fences if present
         if text.startswith('```'):
             text = text.split('```')[1]
@@ -405,7 +406,7 @@ Respond with ONLY the draft reply text, or exactly NONE."""
             max_tokens=700,
             messages=[{'role': 'user', 'content': prompt}],
         )
-        text = resp.content[0].text.strip()
+        text = text_from_response(resp).strip()
         if not text or text.upper().startswith('NONE') or len(text) < 5:
             return ''
         return text

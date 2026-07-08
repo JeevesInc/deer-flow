@@ -282,7 +282,8 @@ def synthesize_dossier(email, gathered_data, existing_dossier, honcho_read=None)
                 system=SYNTHESIS_PROMPT,
                 messages=[{"role": "user", "content": user_msg}],
             )
-            text = response.content[0].text
+            from llm import text_from_response  # _shared (sys.path at top) — ThinkingBlock-safe
+            text = text_from_response(response)
             if response.stop_reason == "max_tokens":
                 log.warning(f"Synthesis hit max_tokens for {email} (attempt {attempt}) — JSON may be truncated")
 

@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from deerflow.sandbox.local.list_dir import list_dir
@@ -174,6 +175,10 @@ class LocalSandbox(Sandbox):
         Setting TERM=dumb and MSYS=disable_pcon avoids this.
         """
         env = os.environ.copy()
+        # Windows services get only the machine PATH — prepend our own
+        # interpreter's directory so bare `python` resolves to the venv
+        # python in agent bash commands (it did under start.sh's git-bash).
+        env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
         env["TERM"] = "dumb"
         env["MSYS"] = "disable_pcon"
         # Prevent MSYS2 path mangling (e.g. /mnt/ → C:\msys\mnt\)

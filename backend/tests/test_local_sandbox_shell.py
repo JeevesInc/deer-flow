@@ -60,3 +60,10 @@ def test_which_sh_still_wins_when_git_absent(windows, monkeypatch):
     monkeypatch.setattr(local_sandbox.shutil, "which", lambda name: r"D:\tools\sh.exe" if name == "sh" else None)
 
     assert LocalSandbox._get_shell() == r"D:\tools\sh.exe"
+
+
+def test_subprocess_env_makes_python_resolvable(monkeypatch):
+    # Service PATH lacks the venv - bare `python` in agent bash commands
+    # failed with exit 127 until the interpreter dir was prepended.
+    env = LocalSandbox._get_subprocess_env()
+    assert env["PATH"].split(os.pathsep)[0] == os.path.dirname(local_sandbox.sys.executable)

@@ -146,10 +146,22 @@ class LocalSandbox(Sandbox):
         for shell in ("/bin/zsh", "/bin/bash", "/bin/sh"):
             if os.path.isfile(shell) and os.access(shell, os.X_OK):
                 return shell
+        # Windows services don't inherit git-bash's PATH (the machine PATH has
+        # Git\cmd but not Git\usr\bin), so resolve Git Bash by explicit path.
+        # Never fall back to shutil.which("bash") on Windows - on a stock PATH
+        # that finds C:\WINDOWS\system32\bash.exe, which is WSL.
+        if os.name == "nt":
+            program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+            for candidate in (
+                os.path.join(program_files, "Git", "bin", "bash.exe"),
+                os.path.join(program_files, "Git", "usr", "bin", "sh.exe"),
+            ):
+                if os.path.isfile(candidate):
+                    return candidate
         shell_from_path = shutil.which("sh")
         if shell_from_path is not None:
             return shell_from_path
-        raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, and `sh` on PATH.")
+        raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, Git Bash (Windows), and `sh` on PATH.")
 
     @staticmethod
     def _get_subprocess_env() -> dict[str, str]:

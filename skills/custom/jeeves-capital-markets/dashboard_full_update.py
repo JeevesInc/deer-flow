@@ -189,7 +189,7 @@ def pull_redshift_data():
         COUNTRY_NAMES = {484: 'Mexico', 170: 'Colombia', 76: 'Brazil',
                          840: 'United States', 124: 'Canada', 32: 'Argentina'}
         cur.execute(f"""
-        SELECT country_id, COUNT(DISTINCT company_id), SUM(balance_usd)
+        SELECT country_code, COUNT(DISTINCT company_id), SUM(balance_usd)
         FROM capital_markets_dm.loc_tape
         WHERE dt = '{max_dt}' AND balance_usd > 0
         GROUP BY 1 ORDER BY 3 DESC
@@ -212,7 +212,7 @@ def pull_redshift_data():
         # Product mix
         cur.execute(f"""
         SELECT SUM(balance_usd) as total,
-               SUM(CASE WHEN jeeves_pay_balance_usd > 0 THEN balance_usd ELSE 0 END) as jp
+               SUM(CASE WHEN jp_balance_usd > 0 THEN balance_usd ELSE 0 END) as jp
         FROM capital_markets_dm.loc_tape
         WHERE dt = '{max_dt}' AND balance_usd > 0
         """)
@@ -699,6 +699,18 @@ def main():
     states = load_state_files()
     print(f"  Loaded {len(states)} state files")
 
+    # ── Sanity gates: BB workbooks written by merge_template.py (openpyxl)
+    # store formulas without cached values, so the text conversion yields
+    # empty cells and the parse returns zeros. Injecting/persisting those
+    # zeros poisons the dashboard AND _bb_metrics_state.json (which feeds
+    # _cap_markets_state.json → morning brief + Grafana). Keep prior data.
+    if us_bb and not (us_bb.get('eligible') or 0) > 1_000_000:
+        print("  US BB parse yielded no values (formula-only workbook) — keeping prior US BB data")
+        us_bb = {}
+    if mx_bb and not (mx_bb.get('total_receivables') or 0) > 1_000_000:
+        print("  SOFOM BB parse yielded no values (formula-only workbook) — keeping prior MX BB data")
+        mx_bb = {}
+
     # ── Inject sections
     print("Injecting real data into dashboard HTML...")
 
@@ -743,24 +755,28 @@ def main():
 
     # ── Write BB metrics state for Grafana Prometheus scrape ────────────────────
     try:
+        bb_state_path = Path('C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/_bb_metrics_state.json')
+        try:
+            prior_metrics = json.loads(bb_state_path.read_text(encoding='utf-8'))
+        except Exception:
+            prior_metrics = {}
         bb_metrics = {
             'us_bridge': {
                 'total_drawn':   us_bb.get('total_drawn', 0),
                 'availability':  us_bb.get('availability', 0),
                 'eligible':      us_bb.get('eligible', 0),
                 'borrowing_base': us_bb.get('borrowing_base', 0),
-            } if us_bb else {},
+            } if us_bb else prior_metrics.get('us_bridge', {}),
             'mx_sofom': {
                 'collection_cash_mxn': mx_bb.get('collection_cash_mxn', 0),
                 'total_receivables':   mx_bb.get('total_receivables', 0),
-            } if mx_bb else {},
+            } if mx_bb else prior_metrics.get('mx_sofom', {}),
             'portfolio': {
                 'dq30_pct': rs['dpd']['dq30_pct'] if rs else None,
                 'total':    rs['dpd']['total']     if rs else None,
                 'accounts': rs['dpd']['accounts']  if rs else None,
             },
         }
-        bb_state_path = Path('C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/_bb_metrics_state.json')
         bb_state_path.write_text(json.dumps(bb_metrics, indent=2), encoding='utf-8')
         print(f"BB metrics state written: {bb_state_path}")
         # Run cap markets metrics writer to build full _cap_markets_state.json

@@ -318,6 +318,11 @@ def _build_path_env_exports(thread_data: ThreadDataState | None) -> str:
     # Force UTF-8 for all Python subprocesses — Windows defaults to cp1252,
     # which crashes any script printing ✅/—/emoji (recurring failure mode).
     parts = ['export PYTHONIOENCODING="utf-8"', 'export PYTHONUTF8="1"']
+    # The LangGraph service runs as LocalSystem (session 0): git has no
+    # terminal and Git Credential Manager has no UI or per-user credential
+    # store, so any git op needing auth hangs forever (stuck-run cancels,
+    # zombie git.exe pile-up). Fail fast with an auth error instead.
+    parts += ['export GIT_TERMINAL_PROMPT="0"', 'export GCM_INTERACTIVE="never"']
     for key, env_var in [("workspace_path", "WORKSPACE_PATH"), ("outputs_path", "OUTPUTS_PATH"), ("uploads_path", "UPLOADS_PATH")]:
         path = thread_data.get(key)
         if path:

@@ -312,7 +312,7 @@ def cmd_create(team_key, title, desc=None, priority=None, assignee_email=None):
     print(f"  URL:    {issue['url']}")
 
 
-def cmd_update(identifier, status=None, priority=None, assignee_email=None, title=None):
+def cmd_update(identifier, status=None, priority=None, assignee_email=None, title=None, team_key_new=None):
     # Get current issue to find team key for status resolution
     data = _gql("""
         query($id: String!) {
@@ -330,6 +330,10 @@ def cmd_update(identifier, status=None, priority=None, assignee_email=None, titl
     issue_id = issue["id"]
     team_key = (issue.get("team") or {}).get("key")
 
+    # If moving to a new team, resolve status against the NEW team's states
+    if team_key_new:
+        team_key = team_key_new
+
     inp = {}
     if title:
         inp["title"] = title
@@ -337,6 +341,8 @@ def cmd_update(identifier, status=None, priority=None, assignee_email=None, titl
         inp["priority"] = int(priority)
     if assignee_email:
         inp["assigneeId"] = _resolve_user_id(assignee_email)
+    if team_key_new:
+        inp["teamId"] = _resolve_team_id(team_key_new)
     if status:
         inp["stateId"] = _resolve_state_id(team_key, status)
 
@@ -345,7 +351,7 @@ def cmd_update(identifier, status=None, priority=None, assignee_email=None, titl
         sys.exit(1)
 
     data = _gql("""
-        mutation($id: ID!, $input: IssueUpdateInput!) {
+        mutation($id: String!, $input: IssueUpdateInput!) {
             issueUpdate(id: $id, input: $input) {
                 success
                 issue {
@@ -370,6 +376,37 @@ def cmd_update(identifier, status=None, priority=None, assignee_email=None, titl
     print(f"  Priority: {pri}")
     print(f"  Assignee: {(updated.get('assignee') or {}).get('name', 'Unassigned')}")
     print(f"  URL:      {updated['url']}")
+
+
+def cmd_comment(identifier, body):
+    data = _gql("""
+        query($id: String!) {
+            issue(id: $id) { id identifier }
+        }
+    """, {"id": identifier})
+    issue = data.get("issue")
+    if not issue:
+        print(f"ERROR: Issue not found: {identifier}", file=sys.stderr)
+        sys.exit(1)
+
+    data = _gql("""
+        mutation($input: CommentCreateInput!) {
+            commentCreate(input: $input) {
+                success
+                comment { id body url }
+            }
+        }
+    """, {"input": {"issueId": issue["id"], "body": body}})
+
+    result = data.get("commentCreate", {})
+    if not result.get("success"):
+        print("ERROR: Comment creation failed.", file=sys.stderr)
+        sys.exit(1)
+
+    comment = result.get("comment") or {}
+    comment_url = comment.get("url", "")
+    print(f"Comment posted on {identifier}")
+    print(f"  URL: {comment_url}")
 
 
 def cmd_projects(team_key=None):
@@ -472,21 +509,28 @@ def main():
 
     elif cmd == "update":
         if not rest:
-            print("Usage: python linear_tool.py update <ISSUE-ID> [--status ...] [--priority 0-4] [--assignee email] [--title ...]", file=sys.stderr)
+            print("Usage: python linear_tool.py update <ISSUE-ID> [--status ...] [--priority 0-4] [--assignee email] [--title ...] [--team TEAM_KEY]", file=sys.stderr)
             sys.exit(1)
         identifier = rest[0]
-        _, flags = _parse_flags(rest[1:], "--status", "--priority", "--assignee", "--title")
+        _, flags = _parse_flags(rest[1:], "--status", "--priority", "--assignee", "--title", "--team")
         cmd_update(
             identifier,
             status=flags["--status"],
             priority=flags["--priority"],
             assignee_email=flags["--assignee"],
             title=flags["--title"],
+            team_key_new=flags["--team"],
         )
 
     elif cmd == "projects":
         _, flags = _parse_flags(rest, "--team")
         cmd_projects(team_key=flags["--team"])
+
+    elif cmd == "comment":
+        if len(rest) < 2:
+            print("Usage: python linear_tool.py comment <ISSUE-ID> \"comment text\"", file=sys.stderr)
+            sys.exit(1)
+        cmd_comment(rest[0], rest[1])
 
     else:
         print(f"Unknown command: {cmd}", file=sys.stderr)

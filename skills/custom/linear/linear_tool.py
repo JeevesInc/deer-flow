@@ -20,6 +20,17 @@ import json
 import os
 import sys
 
+# Load LINEAR_API_KEY from the backend .env when not already in the ambient
+# environment. Direct CLI invocations from a bash tool call do NOT inherit the
+# gateway process env, so without this every ad-hoc `linear_tool.py` run died
+# with "Missing LINEAR_API_KEY" (hit again 2026-07-24 on DEV-6553).
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "_shared"))
+try:
+    from env_loader import load_env
+    load_env()
+except Exception:
+    pass
+
 
 GRAPHQL_URL = "https://api.linear.app/graphql"
 

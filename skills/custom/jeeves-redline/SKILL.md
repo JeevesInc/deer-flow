@@ -196,3 +196,32 @@ python /mnt/skills/custom/jeeves-redline/redline_tool.py comment "<file>" "<comm
 - State which version is "base" vs "revised" in comparisons
 - For large contracts, summarize the key changes found
 - When using `suggest`, list every edit you made so the user can verify before sending to the counterparty
+
+### Answering "what does the doc say about X?" — decompose before you answer "absent"
+
+Brian's questions name a concept the way a *counterparty* said it, not the way
+the document defines it. Searching his phrase verbatim, finding nothing, and
+replying "it's absent" is a wrong answer that costs two extra correction turns
+(2026-07-26: "What's in the NB LSA about the **BBVA parent guarantee**?" →
+"absent" → Brian: "is parent guarantee mentioned in the docs **without BBVA
+explicitly stated**?" — he had to perform the decomposition himself).
+
+Before reporting a concept absent from a document, search **all** of these:
+1. **The full phrase** as Brian said it.
+2. **Each component separately** — entity ("BBVA") and concept
+   ("parent guarantee") are usually decoupled in the drafting; the party is
+   named in a schedule/definition while the obligation sits in a covenant.
+3. **Near-synonyms and the defined-term vocabulary** a credit agreement
+   actually uses: guarantee/guaranty/guarantor, parent/Holdings/Ultimate
+   Parent, corporate guarantee, credit support, keepwell, support agreement,
+   Additional Guarantor, Permitted Guarantee.
+4. **Capitalized defined terms** — grep the definitions section for the noun
+   alone; a concept present as a defined term but unused in Brian's phrasing
+   still counts as present.
+
+Then state the result precisely: which documents/versions you searched, which
+terms you searched, and whether the concept is absent **as a term**, absent
+**as a concept**, or present under different wording. If the phrase traces to
+a counterparty email rather than the drafts, say so explicitly and name the
+source turn — an ask that exists only in a negotiation thread and not in the
+operative draft is a materially different answer than "absent."

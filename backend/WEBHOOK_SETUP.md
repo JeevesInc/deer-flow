@@ -186,3 +186,22 @@ Once webhooks are live and working, stop the email monitor cron:
 
 - ~500 emails/month × ~$0.0003/call (Haiku) = **~$0.15/month** for classification
 - Only actionable emails (~10-20%) trigger DeerFlow runs
+
+---
+
+## Proposal quality pipeline (2026-07-08)
+
+- **Classifier model:** `claude-sonnet-5` (was Haiku) — the classification writes the
+  proposed action, priority, and feeds the draft; quality-sensitive per the Sonnet
+  standardization.
+- **Action contract:** `proposed_action` must be something **the agent** can execute
+  (draft a reply, pull data, prep a brief). If every next step requires Brian
+  personally, it stays empty and the card is a heads-up. Calendar/Zoom invites are
+  non-actionable.
+- **Learned patterns over HTTP:** `_get_proposal_patterns()` calls the Gateway
+  (`GET /api/memory/mem0?user_id=proposal-patterns`) instead of importing mem0 —
+  embedded Qdrant is single-process and the Gateway holds the lock. Chronic lookup
+  failure (10+ consecutive) escalates to a Slack alert instead of warning forever.
+- **Thread dedup:** one top-level card per Gmail thread; follow-ups within 48h nest
+  under the original card (state: `.deer-flow/proposal_threads.json`).
+- Tests: `tests/test_proposal_quality_fixes.py`.

@@ -14,6 +14,8 @@ allowed-tools:
 
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
+CRITICAL: dms_mysql_jeeves_raw country_lookup, currency_lookup, and state_lookup do NOT exist as tables -- recurring guess, rejected by the allowlist every time (recurred 2026-07-21 during AIG reconciliation, 4 days after first documented 2026-07-17). For currency code lookups use master_dimensions.currency_lookup_dim (join cur.numeric_code equals rms_transactions.local_currency). For state names use dms_mysql_jeeves_raw.states (id -> statename), confirmed 2026-08-04 and now on the allowlist -- join states.id = company_addresses.stateid, sibling of the already-known .cities. There is no country table: map ISO 3166-1 numeric companies.countrycode with an inline CTE (see sql/aig_invoice_data.sql in cfo-org-kb for the canonical 20-code version).
+
 ## Workflow: Always Check the KB First
 
 **Before writing any SQL from scratch**, pull and search `JeevesInc/cfo-org-kb`:
@@ -61,6 +63,16 @@ python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the t
 ```
 
 (Do NOT use `--save`/`sql_repo.py` — queries worth keeping go to `cfo-org-kb` on GitHub, per the workflow above.)
+
+**HARD RULE — inline SQL is only for true one-liners: no division, no regex, no comments.**
+The bash guard scans the WHOLE command string and rejects any token that begins with a slash, so
+an inline query containing `amount / 1e6`, `x / NULLIF(y, 0)`, a `--` comment, or a sed-style
+expression is rejected before it ever reaches Redshift. This burned turns three separate times on
+2026-08-03 alone. Default path for anything longer than one SELECT: `write_file` the SQL into
+`$WORKSPACE_PATH` and run it with `--file`. Never retry variants of an inline command the guard
+rejected — move it to a file on the FIRST failure. Same rule for any Python you would otherwise
+pass with `-c`.
+
 
 ### Enforced guards (errors, not warnings)
 
@@ -114,8 +126,9 @@ python /mnt/skills/custom/jeeves-redshift/sql_repo.py delete "old_query_name"
 | Table | Description |
 |-------|-------------|
 | `analytics_sandbox.jurs_test` | JURS loss rate scores. |
-| `capital_markets_dm.rms_transactions` | RMS transaction-level collections data (~9.2M rows). |
+| `capital_markets_dm.rms_transactions` | RMS transaction-level collections data (~9.2M rows). Has `local_currency` (numeric ISO code) + `local_currency_amount` -- customer's actual paid currency/amount; prefer over `usd_currency_amount` when the ask is "customer currency" / "local currency". |
 | `capital_markets_dm.intraday_collections` | Intraday collection events. |
+| `master_dimensions.currency_lookup_dim` | Numeric -> alpha currency code lookup (`numeric_code`, `alpha_code`). Join `cur.numeric_code = rms_transactions.local_currency`. Confirmed 2026-07-17 (Kroll payment tracing rebuild). Do NOT guess `dms_mysql_jeeves_raw.country_lookup`/`currency_lookup`/`state_lookup` -- those tables do not exist.
 
 ---
 
@@ -288,6 +301,8 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Filter by market:** Use `country_code` — 840=US, 484=MX, 170=CO, 124=CA, 76=BR
 - **Latest snapshot:** `WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)`
 - **Active portfolio:** `WHERE charge_off_flag = false AND is_in_repayment = false` on loc_tape (ALWAYS include both filters)
+**A guardrail warning on a query whose output leaves Jeeves must be RESOLVED, never passed through (2026-08-07).** sql_runner.py prints warnings but still returns rows. On 2026-08-06 the 24-month Mastercard charge-off cut ran without `is_in_repayment`, warned, and shipped to Alex at **$4,637,646 all-in** when the house convention (below) gives **$3,859,397 ex-repayment-plan** -- a $778,249 / 16.8% gap on an externally delivered number. If a warning fires on a figure headed for a lender, counterparty or board, either fix the query or state the basis explicitly in the deliverable.
+
 **CRITICAL: is_in_repayment = false must be applied to ALL loc_tape queries without exception** — repayment plan accounts are tracked separately in the mods/GWC rollforward and must never be mixed into standard portfolio, DQ, charge-off, or loss calculations. This applies even when querying charged-off accounts (e.g. recoveries, charge-off amounts).
 - **DPD buckets:** current (0), 1-30, 31-60, 61-90, 90+
 - **Date filtering on loc_tape/gwc_tape:** Always use `dt` column with BETWEEN, never DATE_TRUNC

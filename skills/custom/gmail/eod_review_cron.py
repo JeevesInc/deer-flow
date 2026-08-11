@@ -199,6 +199,11 @@ def _build_eod_prompt(review_number: int) -> str:
         "  - CIM 5th Amendment: new correspondence or deadlines?\n"
         "  - NB: any follow-ups overdue?\n"
         "  - CBIZ audit: new requests from Vincent McAndress or finops team?\n\n"
+        "Before flagging ANY item as still-pending, re-verify directly against Gmail Sent mail\n"
+        "and Slack (same standard as Steps 1/2/3b) -- do NOT rely on STRATEGIC_CONTEXT.md's\n"
+        "framing alone. STRATEGIC_CONTEXT.md can be stale; a stale summary caused EOD #26\n"
+        "(2026-07-03) to wrongly carry an already-answered NB ODD item as pending. Search\n"
+        "Sent mail / Slack replies for each candidate item before including it.\n\n"
         "Flag any where Brian's last outbound was >3 business days ago with no reply.\n\n"
         "## Step 5: Post EOD briefing to Slack\n\n"
         "Post to Brian's Slack DM using this format:\n\n"
@@ -216,7 +221,11 @@ def _build_eod_prompt(review_number: int) -> str:
         "## Step 6: Save to Google Drive\n\n"
         "Save the open items briefing as a Google Doc.\n"
         "File name: EOD Review - " + today_short + ".md\n"
-        "Upload and include the Drive link in the Slack message.\n\n"
+        "Upload using upload_to_drive.py with the --new flag (NOT default dedupe) -- the\n"
+        "default dedupe strips dates and collapses each day's EOD Review into one Drive\n"
+        "file's revision history instead of a separate file per day (flagged 2026-07-04,\n"
+        "unresolved through 2026-07-15). --new preserves each day's file separately.\n"
+        "Include the Drive link in the Slack message.\n\n"
         "---\n\n"
         "ACCURACY RULES -- mandatory:\n"
         "- Only flag items you actually found and fully read. Never infer from snippets alone.\n"
@@ -249,6 +258,25 @@ def _run_proposal_learner() -> None:
         traceback.print_exc()
 
 
+def _run_action_learner() -> None:
+    """Learn triage/voice/substance patterns from what Brian did today on his
+    own -- sent mail, threads he ignored, Slack sends -- into mem0 under
+    user_id brian-behavior. Also runs the weekly consolidation gate.
+
+    Failures here are logged and swallowed -- the rest of EOD must still run.
+    """
+    try:
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from action_learner import run_daily as _action_run
+        summary = _action_run()
+        log.info("Action learner finished: %s", summary)
+    except Exception as e:
+        log.error("Action learner failed (non-fatal): %s", e)
+        traceback.print_exc()
+
+
 def run_eod_review() -> None:
     log.info("Starting EOD review...")
 
@@ -256,6 +284,7 @@ def run_eod_review() -> None:
     # before drafting today's review. Runs synchronously; cheap (a few LLM
     # calls). If it fails it does not block the EOD agent dispatch.
     _run_proposal_learner()
+    _run_action_learner()
 
     state = load_state()
 

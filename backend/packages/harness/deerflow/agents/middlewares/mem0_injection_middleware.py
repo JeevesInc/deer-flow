@@ -28,10 +28,12 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
 
     state_schema = AgentState
 
-    def __init__(self, top_k: int = 10, lessons_top_k: int = 4):
+    def __init__(self, top_k: int = 10, lessons_top_k: int = 4,
+                 behavior_top_k: int = 5):
         super().__init__()
         self._top_k = top_k
         self._lessons_top_k = lessons_top_k
+        self._behavior_top_k = behavior_top_k
         # Per-run memoization: this middleware is rebuilt by the graph factory
         # every run, so a plain instance cache never leaks across threads/runs.
         # Within one run the query (latest human message) is constant across all
@@ -83,7 +85,8 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                     lines.append(f"- {text}")
 
             lessons_block = self._build_lessons_block(query, min_score)
-            if not lines and not lessons_block:
+            behavior_block = self._build_behavior_block(query, min_score)
+            if not lines and not lessons_block and not behavior_block:
                 return None
 
             parts = []
@@ -98,6 +101,8 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                 )
             if lessons_block:
                 parts.append(lessons_block)
+            if behavior_block:
+                parts.append(behavior_block)
             return "\n\n".join(parts)
         except Exception as e:
             logger.warning("mem0 injection failed: %s", e)
@@ -135,6 +140,45 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
             )
         except Exception as e:
             logger.debug("lessons injection skipped: %s", e)
+            return None
+
+    def _build_behavior_block(self, query: str, min_score: float) -> str | None:
+        """Search the mem0 `brian-behavior` namespace (action_learner.py).
+
+        These are observed patterns in how Brian himself triages and writes,
+        synthesized from his own sent mail, the threads he left unanswered, and
+        his Slack sends. Injected so drafting and triage imitate his actual
+        behavior instead of a generic assistant register.
+        """
+        try:
+            from deerflow.agents.memory.mem0_store import search_memories
+
+            patterns = search_memories(query, top_k=self._behavior_top_k,
+                                       user_id="brian-behavior")
+            if min_score > 0:
+                patterns = [m for m in patterns
+                            if float(m.get("score", 0.0) or 0.0) >= min_score]
+            lines = []
+            for mem in patterns:
+                text = (mem.get("memory", "") or "").strip()
+                if text:
+                    lines.append(f"- {text}")
+            if not lines:
+                return None
+            return (
+                "<observed_owner_behavior>\n"
+                "Patterns in how Brian himself triages and writes, learned from "
+                "his own sent mail, the threads he ignored, and his Slack sends. "
+                "[TRIAGE] = what earns a response and how fast; [VOICE] = how to "
+                "write it; [SUBSTANCE] = what he holds, concedes, or delegates. "
+                "Match these when drafting on his behalf or deciding what "
+                "deserves action — they describe HIS behavior, not facts to "
+                "repeat:\n"
+                + "\n".join(lines)
+                + "\n</observed_owner_behavior>"
+            )
+        except Exception as e:
+            logger.debug("behavior injection skipped: %s", e)
             return None
 
     @staticmethod

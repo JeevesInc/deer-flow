@@ -74,8 +74,8 @@ try:
 except ImportError:
     SLACK_OWNER_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U05B5HGNCN9')
 
-LABELER_MODEL = 'claude-haiku-4-5-20251001'
-SYNTHESIZER_MODEL = 'claude-sonnet-5'  # was ...-20251001 (404 not_found) — synthesis silently failed until 2026-06-30
+LABELER_MODEL = 'claude-opus-5'  # Opus 5 everywhere (2026-07-24)
+SYNTHESIZER_MODEL = 'claude-opus-5'  # Opus 5 everywhere (2026-07-24)
 
 MIN_PROPOSAL_AGE_HOURS = 24          # only label proposals at least this old
 MAX_PATTERNS_PER_DAY = 5             # synthesizer cap

@@ -52,6 +52,8 @@ python /mnt/skills/custom/linear/linear_tool.py create --team ENG --title "Fix t
 ```
 Priority: `0`=No priority, `1`=Urgent, `2`=High, `3`=Medium, `4`=Low
 
+**Do NOT create a ticket for a bug Brian is actively debugging with you in the same real-time session** -- just fix it. Ticketing is for work that will outlive this session (eng/other-team follow-up after you hand off, or Brian explicitly says "track this"). Opening a ticket mid-fix reads as process theater to Brian and he will tell you to delete it (2026-07-21 incident). Note also: `linear_tool.py` has no delete/archive command -- if a ticket is created by mistake, the only fix is `update <id> --status <cancelled-state-name>` (check exact name via `statuses --team <KEY>` first), not delete.
+
 ### Update an issue
 ```bash
 python /mnt/skills/custom/linear/linear_tool.py update ENG-42 --status "In Progress"
@@ -65,6 +67,30 @@ All flags are optional — only what you pass gets updated.
 python /mnt/skills/custom/linear/linear_tool.py projects
 python /mnt/skills/custom/linear/linear_tool.py projects --team ENG
 ```
+
+## Autonomous Mention Handling (live as of 2026-07-08)
+
+`linear_mention_cron.py` runs inside the gateway (cron_supervisor, 5 min poll). Per
+Brian's explicit standing instruction (2026-07-08): when he is @mentioned in a Linear
+comment, read the ticket and act -- no per-item approval needed.
+
+- It distinguishes a real @mention (Gmail subject 'X mentioned you in a comment on
+  TICKET') from routine watch-list noise ('X commented on TICKET') -- only the
+  former dispatches. Do not widen this to plain 'commented on' notifications.
+- State file: backend/.deer-flow/_linear_mention_state.json (handled Gmail msg IDs).
+- Never paste a secret, password, or AWS-Secrets-Manager-style path (a leading-slash
+  token such as a production credential path) into a Linear comment or any tool
+  argument verbatim -- it trips the unsafe-path filter (which fires on ANY bash arg
+  containing a leading-slash token, even inside quoted comment text or a JSON
+  string) and it is a real security concern regardless. Rephrase around it instead
+  of retrying the same string.
+- After acting, send Brian a one-line Slack DM with what was posted plus a ticket
+  link (FYI, not an approval request).
+- Before claiming an infra/credentials check happened a certain way (e.g. 'ran via
+  the shared runner'), verify the actual execution context first -- don't state a
+  default/assumed runner or path. If the ask is to test whether new credentials
+  work, confirm a direct connection was made with them, not that a routine job
+  merely ran.
 
 ## Rules
 

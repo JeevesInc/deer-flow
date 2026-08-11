@@ -1,6 +1,6 @@
 ---
 name: knowledge-crawler
-description: Builds and maintains strategic and tactical knowledge by crawling Drive folders, Gmail threads, and Slack conversations with key counterparties. Use when Brian asks to "update the knowledge base", "crawl my email", "refresh strategic context", or "what do you know about [counterparty]". Also runs automatically via cron.
+description: Builds and maintains strategic and tactical knowledge by crawling Drive folders, Gmail threads, Slack conversations, and tracked git repos, synthesizing them into an evergreen, grep-able local wiki (.deer-flow/wiki/) plus mem0 facts and a thin STRATEGIC_CONTEXT.md pointer. Use when Brian asks to "update the knowledge base", "crawl my email", "refresh strategic context", "search the wiki", or "what do you know about [counterparty]". Also runs automatically via cron.
 allowed-tools:
   - bash
   - read_file
@@ -59,3 +59,75 @@ Runs automatically via gateway cron:
 ### Slack (counterparty mentions)
 - Last 7 days of Slack messages mentioning counterparties
 - Extracts: internal discussions, decisions, context Brian shared with team
+
+## The Wiki Layer (grep-able, evergreen, no size limit)
+
+Inspired by LangChain's OpenWiki Brains. Solves what STRATEGIC_CONTEXT.md and
+mem0 can't:
+
+| | STRATEGIC_CONTEXT.md | mem0 | Wiki (`.deer-flow/wiki/`) |
+|---|---|---|---|
+| Injected every turn? | Yes (context-budget limited, must stay terse) | No (searched per-turn) | No (pulled on demand) |
+| Retrieval | Always-on read | Semantic/vector (probabilistic) | Grep (exact-match, deterministic) |
+| Size limit | Effectively yes | No, but recall is fuzzy | No |
+| Structure | One flat file | Unstructured facts | One evergreen page per counterparty/deal/repo/topic |
+
+**Directory layout:**
+```
+.deer-flow/wiki/
+  index.md                    <- auto-generated table of contents
+  counterparties/<slug>.md    <- one evergreen page per counterparty/lender
+  deals/<slug>.md             <- one evergreen page per active facility/deal
+  repos/<slug>.md             <- synthesized summary of a tracked git repo
+  topics/<slug>.md            <- cross-cutting topics
+```
+
+Each page is **merged, not appended** — Claude rewrites the living body on
+every update (superseding stale facts, adding new ones), with a dated
+`## Update Log` tail so history isn't lost. This keeps pages current instead
+of turning into ever-growing logs.
+
+### Search the wiki
+
+```bash
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/wiki_search.py "obligor concentration"
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/wiki_search.py "term sheet" --category counterparties
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/wiki_search.py --show counterparties/neuberger_berman
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/wiki_search.py --rebuild-index
+```
+
+Use this whenever a question needs exact-match recall (a name, a number, a
+specific ask) rather than the vague-but-fast STRATEGIC_CONTEXT.md summary —
+e.g. "what did Varun ask for" or "what's Jay Berger's email."
+
+**HARD RULE — never reach into the wiki directory from bash.** Do NOT `ls`,
+`cat`, `grep -r`, or glob the wiki folder by filesystem path (neither the
+`.deer-flow/wiki/` host path nor its WSL-style mount equivalent). The bash
+path guard rejects any token starting with a forward slash outside
+`/mnt/user-data` and `/mnt/skills`, so every such attempt burns a turn and
+returns "Unsafe absolute paths" — this happened 2026-07-26 while answering
+"is parent guarantee mentioned in the docs," when a single
+`wiki_search.py "parent guarantee"` would have returned the answer verbatim
+(it did, on the next dream pass: neuberger_berman.md line 20, NB issues-list
+item 6).
+
+`wiki_search.py` resolves the wiki root internally and needs **no path
+argument at all**. Search it with the query alone; use
+`--show <category>/<slug>` to read a whole page. If a search returns 0 hits,
+retry with a shorter or decomposed term before concluding the fact is absent.
+
+### Git repo connector
+
+Ingests tracked repos (seeded with `cfo-org-kb`) into `wiki/repos/<repo>.md` —
+recent commits + structure, synthesized into a living summary. Does **not**
+run `git pull` itself (that can hang on a credential prompt on this host) —
+pull manually first if you want the latest commits reflected:
+
+```bash
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb && git pull
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/repo_connector.py --force
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/knowledge-crawler/repo_connector.py --add "repo-name:relative/path:description"
+```
+
+`crawler.py --source repos` also triggers this (and runs it by default in the
+full crawl, gated to once per 24h like Drive).

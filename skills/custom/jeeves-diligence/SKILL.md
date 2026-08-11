@@ -71,6 +71,32 @@ allowed-tools:
    specific action (e.g. the exact deck slide-trim, the exact file update) -- the
    task may have already been completed off-thread. (NB ODD deck-trim item was
    drafted as PENDING when it had already been done, 2026-07-01/02.)
+10. **A tracker/Notes-column description of a document is NOT the document.** If a
+    tracker cell says e.g. "BTG account, 45 months", that is someone's summary, not
+    a verified fact -- open the actual underlying file before repeating the figure
+    in any external-facing draft. Cost a correction on 2026-07-08 (Kroll FinOps ask:
+    stated a loan term copied verbatim from the tracker Notes column, hadn't opened
+    the source file). If asked how a figure was obtained, answer with the literal
+    source (tracker note vs. opened document), not the figure's plausibility.
+
+11. **A screenshot or page-render of a workbook is NOT the workbook. Never build a
+    reconciliation, a count, or any external-facing figure off vision extraction when
+    a native file exists or could be requested.** Before extracting a table from
+    images, SEARCH for the source file yourself. **Check `.deer-flow\slack_downloads\`
+    FIRST** — `app\channels\slack.py` auto-saves EVERY file Brian shares in Slack
+    there, named `YYYYMMDD_HHMMSS_<original name>`; the 260729 CICO workbook had been
+    sitting there since the previous day when the 2026-07-31 recon was built off
+    screenshots. Then Gmail attachments, then Drive. Do not ask Brian where the file
+    is; find it. Vision extraction fails
+    silently in two specific ways: it truncates rows below the visible region, and it
+    strips column context so a currency column is read as USD. Cost the whole
+    2026-07-31 Schedule 5.22 vs CICO cycle — a recon built from 4 CICO screenshots
+    dropped ~55 rows and read original-currency balances as USD; Brian had to ask
+    "could that be an artifact of poor vision?" and then supply Axel's actual
+    workbook, which showed 212 Jeeves accounts vs 80 disclosed and 151 unmatched.
+    If images are genuinely the only source: state the extracted row count, say
+    explicitly that it is vision-derived, and label every derived figure
+    [Unverified — image extraction]. More than one image needed = stop and get the file.
 
 ---
 
@@ -109,6 +135,9 @@ These are all fabrications, even if they sound reasonable:
 - Echoing a counterparty number (e.g., Vista says "$82K CO") without verifying against our own data
 - Describing customer revenue profiles (e.g., "USD-denominated revenues") without a source
 - Stating a CO rate in bps when the actual figure is in % (unit confusion = fabrication)
+- Reporting a row count, a total, or an unmatched-item count from a table read out of a
+  screenshot or image render, when the native workbook was available (vision truncation
+  and currency-column loss = fabrication, not an approximation)
 
 ---
 

@@ -105,3 +105,11 @@ backend/deerflow/
 
 # Box skill secrets (local only)
 skills/custom/box/box_secrets.json
+
+# Self-improving-agent code backups — runtime state written by skill_manage.py
+# on every self-edit, not source. Regenerated automatically; the real history
+# is in git.
+skills/public/self-improving-agent/memory/code-backups/
+
+# Timestamped .bak copies left by patch/self-edit tooling
+*.bak-*

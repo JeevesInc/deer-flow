@@ -73,6 +73,7 @@ if _ENV_FILE.exists() and not os.environ.get('ANTHROPIC_API_KEY'):
 # Config
 # ---------------------------------------------------------------------------
 LANGGRAPH_URL = os.environ.get('LANGGRAPH_URL', 'http://localhost:2024')
+GATEWAY_URL = os.environ.get('GATEWAY_URL', 'http://localhost:8001')
 ASSISTANT_ID = 'lead_agent'
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 SLACK_BOT_TOKEN = os.environ.get('SLACK_BOT_TOKEN', '')
@@ -89,8 +90,8 @@ ANALYST_QUEUE_CHANNEL_ID = os.environ.get('ANALYST_QUEUE_CHANNEL_ID', '')
 SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET', '')
 PUBSUB_VERIFICATION_TOKEN = os.environ.get('PUBSUB_VERIFICATION_TOKEN', '')
 MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
-CLASSIFIER_MODEL = 'claude-haiku-4-5-20251001'  # Haiku — fast/cheap per-message classification
-DRAFTER_MODEL = 'claude-sonnet-5'     # drafting inbound replies
+CLASSIFIER_MODEL = 'claude-opus-5'  # Opus 5 everywhere (2026-07-24)
+DRAFTER_MODEL = 'claude-opus-5'     # Opus 5 everywhere (2026-07-24)
 RUN_TIMEOUT = 20 * 60  # seconds
 
 # Proposal feedback loop — paths and config
@@ -153,41 +154,73 @@ borrowing bases, and portfolio analytics. He works directly with the CFO (Alex M
 """
 
 _ANALYST_FRAMEWORK_TAIL = """
-## What IS actionable (Brian needs to do something, or have the agent do it)
+## Addressee check (do this BEFORE applying the actionable rules below)
+Brian is often CC'd or on a reply-all thread where he is not the one being asked.
+Before flagging anything actionable for Brian, check who the message is literally
+addressed to: the greeting line ("Hi X and team") and/or the To: field. Brian's
+address is brian.mauck@tryjeeves.com — if he appears only in Cc: (or not at all),
+he is on the thread for visibility, not as the addressee.
+- If a named person other than Brian (outside counsel, another Jeeves exec, a
+  counterparty contact) is the addressee, and Brian is only CC'd/on the thread for
+  visibility -> NOT actionable, even if the topic is in his domain and even if the
+  sender is C-suite. Example: Alex (CFO) emails "Hi Eliza and team" asking Goodwin's
+  counsel for a status update, with Brian CC'd -> not actionable for Brian.
+- Only treat a message as addressed to Brian if he is named/greeted directly, the
+  reply is responding to something Brian himself sent, or no other Jeeves/counsel
+  person is a more direct addressee for the ask.
+
+## What IS actionable (worth a Slack card) — only after the addressee check above passes
 - Lender/counterparty asks for data, a tape, a report, or documents
 - Counterparty asks a specific question that requires Brian's input or pulling data
 - Lender follows up on an open checklist item
 - Term sheet, amendment, redline, or legal doc sent for Brian's review
-- Meeting request, scheduling ask, or proposed time from a counterparty
-- C-suite (Alex Melikian, CFO) asks for something
-- Anything with an explicit deadline
+- A scheduling ask that needs a written answer (proposed times, "when works for you?")
+- C-suite (Alex Melikian, CFO) asks Brian directly for something
+- Anything with an explicit deadline that names Brian as the owner
 
 ## What is NOT actionable (skip — no Slack post)
+- Calendar/Zoom invites, invite updates, and meeting confirmations — Google Calendar
+  already surfaces these; a card saying "accept the invite" is noise. Only actionable
+  if the message also asks an open question that needs a written reply.
 - W&C, Goodwin, or Akin Gump sending docs TO a counterparty on Jeeves' behalf (outbound legal)
 - External counsel updating each other without asking Brian for anything
-- Automated notifications, receipts, calendar invites, SaaS alerts
+- Automated notifications, receipts, SaaS alerts
 - Internal Jeeves emails that aren't from leadership
 - Newsletters, marketing, LinkedIn, recruiter emails
 
 ## Decision framework
-Ask: "Is there something specific Brian (or an agent on his behalf) needs to do?"
-- If yes → actionable, and you MUST name the concrete next step
+Ask: "Is there something specific here Brian would want flagged, or that an agent
+can do on his behalf?"
+- If yes → actionable
 - If it's just FYI / outbound / automated → not actionable
 - If ambiguous → not actionable (avoid noise)
 
-## When actionable, the proposed action must be:
-- ONE concrete next step, starting with a verb
-- Specific enough that the agent (or Brian) could execute it immediately
-- Examples of good actions:
-    "Pull the May MX SOFOM borrowing base and reply with the file attached"
-    "Confirm Tuesday 2pm meeting and add to calendar"
-    "Review the redlined SBLC and reply to David García with comments"
-    "Forward to Goodwin for review and ask for turnaround by Friday"
-    "Draft a short reply confirming the Aforo amount is still pending"
-- Bad actions (too vague — never produce these):
-    "Respond to the email"
-    "Handle this request"
-    "Follow up"
+## The proposed action — THE AGENT executes it, not Brian
+The proposed_action is a task for Brian's AI agent (which can draft/send email,
+pull Redshift data and reports, search Slack/Gmail/Drive, manage the calendar,
+and prep briefing docs). It is NOT a to-do item for Brian.
+
+HARD RULE: never restate the email's ask back at Brian. If the email says
+"sync with Shalom this morning," the action is NOT "Sync with Shalom" — Brian
+read the email; telling him to do his job adds nothing. Ask instead: "what can
+the AGENT produce or send that moves this forward?"
+
+- Good actions (agent-executable, verb-led, one step):
+    "Pull the May MX SOFOM borrowing base and draft a reply with the file attached"
+    "Draft a reply to Jay confirming 3:30pm ET and answering the six business points"
+    "Prep a one-page brief on the three Vista side-letter issues with our prior positions"
+    "Draft a forward to Goodwin asking for their view on the enforcement waiver by Friday"
+    "Search Gmail/Slack for the CIM wind-down plan status and draft a summary reply"
+- If every next step requires Brian personally (attend a meeting, make a judgment
+  call, talk to a colleague), set proposed_action to "" — the card is then a pure
+  heads-up, which is fine. An empty action beats a parroted one.
+- Never produce vague actions: "Respond to the email", "Handle this request", "Follow up"
+
+## Priority rubric (most cards are NOT high)
+- high: explicit same-day/next-day deadline, a lender is blocked waiting on Jeeves,
+  or the CFO marked it urgent
+- medium: needs a response this week; normal deal-flow asks
+- low: everything else worth surfacing
 """
 
 
@@ -210,7 +243,7 @@ def _analyst_context() -> str:
 # ---------------------------------------------------------------------------
 
 def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
-                       extra_context: str = '') -> dict:
+                       extra_context: str = '', to: str = '', cc: str = '') -> dict:
     """
     Call Claude to classify the message. Returns:
     {
@@ -243,6 +276,16 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
             f"{bullets}\n"
         )
 
+    # The addressee check in the framework depends on the literal To:/Cc:
+    # fields being present — without them the model guesses from the greeting
+    # line and misattributes who is being asked (the "Alex asking Brian" when
+    # the email was addressed to Aaron failure).
+    recipient_lines = ''
+    if to:
+        recipient_lines += f"To: {to}\n"
+    if cc:
+        recipient_lines += f"Cc: {cc}\n"
+
     prompt = f"""You are a classifier for Brian Mauck's inbound communications.
 
 {_analyst_context()}{patterns_block}
@@ -253,7 +296,7 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
 
 Source: {source}
 Sender: {sender}
-Subject: {subject}
+{recipient_lines}Subject: {subject}
 Body: {body_preview[:2000]}
 {f"Additional context: {extra_context}" if extra_context else ""}
 
@@ -265,11 +308,11 @@ Respond with ONLY valid JSON in this exact format:
   "priority": "high" | "medium" | "low",
   "category": "2-5 word free-form label naming the counterparty + nature (e.g. 'BBVA data request', 'NB redline', 'CFO ask', 'CIM amendment')",
   "summary": "1-2 sentences describing what the email actually says — the substance, not 'an email about X'. Name the counterparty, what they sent or asked, and any deadline. Do not quote the email verbatim.",
-  "proposed_action": "ONE concrete verb-led next step that Brian or the agent should take. Empty string if not actionable. Must be specific enough to execute immediately. Re-read the action guidance above before writing this.",
+  "proposed_action": "ONE concrete verb-led step THE AGENT can execute on Brian's behalf (draft/send a reply, pull data, prep a brief, search mail/Slack). Empty string if not actionable OR if every next step requires Brian personally — never restate the email's ask back at Brian. Re-read the action guidance above before writing this.",
   "reasoning": "1 sentence: why this classification"
 }}
 
-Be decisive. Outbound legal work from Jeeves' counsel → actionable=false. Inbound asks from lenders/counterparties/leadership → actionable=true with a concrete proposed_action."""
+Be decisive. Outbound legal work from Jeeves' counsel and calendar/Zoom invites → actionable=false. Inbound asks from lenders/counterparties/leadership → actionable=true, with a proposed_action only when the agent can genuinely execute it."""
 
     try:
         response = client.messages.create(
@@ -462,31 +505,71 @@ def _log_proposal(classification: dict, from_header: str, subject: str,
         log.error('Failed to write proposal_log entry: %s', e)
 
 
-def _get_proposal_patterns(sender_email: str, sender_domain: str, subject: str) -> list[str]:
-    """Query mem0 for proposal_pattern facts matching this sender/subject.
+# Escalation state for the pattern lookup. A lookup that fails on every call is
+# an outage, not a degradation — the pre-2026-07-08 version warned 501 times in
+# a row (embedded-Qdrant lock, then a poisoned import) and nobody noticed until
+# proposal quality collapsed. After PATTERN_LOOKUP_ALERT_THRESHOLD consecutive
+# failures we log.error and DM the owner (re-alerting at most once per day).
+PATTERN_LOOKUP_ALERT_THRESHOLD = 10
+PATTERN_LOOKUP_ALERT_INTERVAL = 24 * 3600  # seconds between owner alerts
+_pattern_lookup_failures = 0
+_pattern_lookup_last_alert = 0.0
 
-    Returns top-N pattern strings, or empty list on any error (graceful degradation).
-    """
-    try:
-        # Add harness package to path so we can import the shared mem0 client.
-        _harness = Path(__file__).resolve().parent / 'packages' / 'harness'
-        if _harness.exists() and str(_harness) not in sys.path:
-            sys.path.insert(0, str(_harness))
 
-        from deerflow.agents.memory.mem0_store import get_mem0
-
-        m = get_mem0()
-        query = f"email from {sender_email} ({sender_domain}) re: {subject}"
-        result = m.search(
-            query=query,
-            filters={'user_id': PROPOSAL_PATTERNS_USER_ID},
-            limit=PROPOSAL_PATTERN_INJECTION_LIMIT,
+def _pattern_lookup_failed(reason: str) -> None:
+    global _pattern_lookup_failures, _pattern_lookup_last_alert
+    _pattern_lookup_failures += 1
+    if _pattern_lookup_failures < PATTERN_LOOKUP_ALERT_THRESHOLD:
+        log.warning('proposal pattern lookup failed (%d consecutive): %s',
+                    _pattern_lookup_failures, reason)
+        return
+    log.error('proposal pattern lookup failed %d times in a row — feedback loop '
+              'is severed, classifier running without learned patterns: %s',
+              _pattern_lookup_failures, reason)
+    now = time.time()
+    if now - _pattern_lookup_last_alert >= PATTERN_LOOKUP_ALERT_INTERVAL:
+        _pattern_lookup_last_alert = now
+        _post_slack(
+            f":warning: *Proposal feedback loop severed* — the classifier's learned-pattern "
+            f"lookup has failed {_pattern_lookup_failures} times in a row "
+            f"(latest: {reason[:200]}). Proposals are running without your past feedback. "
+            f"Check the gateway `/api/memory/mem0` endpoint."
         )
-        hits = result.get('results', []) if isinstance(result, dict) else (result or [])
-        patterns = [h.get('memory', '').strip() for h in hits if h.get('memory')]
+
+
+def _get_proposal_patterns(sender_email: str, sender_domain: str, subject: str) -> list[str]:
+    """Fetch learned proposal patterns for this sender/subject via the Gateway.
+
+    Goes over HTTP because mem0's embedded Qdrant allows exactly ONE process —
+    the Gateway holds that lock, so importing mem0 here can never work (that
+    exact mistake silently disabled the feedback loop for weeks).
+
+    Returns top-N pattern strings; empty list on error, but errors escalate
+    after PATTERN_LOOKUP_ALERT_THRESHOLD consecutive failures.
+    """
+    global _pattern_lookup_failures
+    query = f"email from {sender_email} ({sender_domain}) re: {subject}"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(10)) as http:
+            resp = http.get(
+                f'{GATEWAY_URL}/api/memory/mem0',
+                params={
+                    'q': query,
+                    'limit': PROPOSAL_PATTERN_INJECTION_LIMIT,
+                    'user_id': PROPOSAL_PATTERNS_USER_ID,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        if data.get('error'):
+            _pattern_lookup_failed(str(data['error']))
+            return []
+        hits = data.get('results', []) or []
+        patterns = [h.get('memory', '').strip() for h in hits if isinstance(h, dict) and h.get('memory')]
+        _pattern_lookup_failures = 0
         return [p for p in patterns if p]
     except Exception as e:
-        log.warning('mem0 pattern lookup failed (continuing without): %s', e)
+        _pattern_lookup_failed(str(e))
         return []
 
 
@@ -571,11 +654,13 @@ then produce the output. Post a summary to Slack when done.
 # Slack notifications
 # ---------------------------------------------------------------------------
 
-def _post_slack(text: str, blocks: list | None = None, channel: str | None = None) -> dict:
+def _post_slack(text: str, blocks: list | None = None, channel: str | None = None,
+                thread_ts: str | None = None) -> dict:
     """Post a Slack message. Returns {channel, ts} on success, empty dict on failure.
 
     If ``channel`` is given (e.g. the approval queue channel), posts there.
     Otherwise opens and posts to the owner's DM (default for notifications).
+    ``thread_ts`` nests the message under an existing card.
     """
     if not SLACK_BOT_TOKEN:
         log.warning('Slack not configured')
@@ -591,11 +676,74 @@ def _post_slack(text: str, blocks: list | None = None, channel: str | None = Non
                 return {}
             dm = client.conversations_open(users=[SLACK_OWNER_USER_ID])
             channel_id = dm['channel']['id']
-        resp = client.chat_postMessage(channel=channel_id, text=text, blocks=blocks)
+        resp = client.chat_postMessage(channel=channel_id, text=text, blocks=blocks,
+                                       thread_ts=thread_ts)
         return {'channel': channel_id, 'ts': resp.get('ts', '')}
     except Exception as e:
         log.error('Slack post failed: %s', e)
         return {}
+
+
+# ---------------------------------------------------------------------------
+# Proposal thread dedup — one card per Gmail thread
+# ---------------------------------------------------------------------------
+# Every reply in an email thread used to spawn a fresh top-level card ("Vista -
+# Issues List" produced 3 near-identical cards in one day). Follow-ups within
+# the freshness window now nest under the original card instead.
+
+PROPOSAL_THREAD_FRESH_SECONDS = 48 * 3600
+
+
+def _proposal_threads_path() -> Path:
+    return Path(__file__).resolve().parent / '.deer-flow' / 'proposal_threads.json'
+
+
+def _load_proposal_threads() -> dict:
+    try:
+        return json.loads(_proposal_threads_path().read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def _get_proposal_thread(gmail_thread_id: str) -> dict:
+    """Return {'channel','ts','posted_at'} for a fresh existing card, else {}."""
+    if not gmail_thread_id:
+        return {}
+    entry = _load_proposal_threads().get(gmail_thread_id)
+    if not entry or not entry.get('ts'):
+        return {}
+    try:
+        posted = datetime.fromisoformat(entry.get('posted_at', ''))
+        if (datetime.now(timezone.utc) - posted).total_seconds() > PROPOSAL_THREAD_FRESH_SECONDS:
+            return {}
+    except Exception:
+        return {}
+    return entry
+
+
+def _record_proposal_thread(gmail_thread_id: str, slack_post: dict) -> None:
+    if not gmail_thread_id or not slack_post.get('ts'):
+        return
+    try:
+        threads = _load_proposal_threads()
+        now = datetime.now(timezone.utc)
+        threads[gmail_thread_id] = {
+            'channel': slack_post.get('channel', ''),
+            'ts': slack_post['ts'],
+            'posted_at': now.isoformat(),
+        }
+        # Prune stale entries so the file stays small.
+        def _fresh(e):
+            try:
+                return (now - datetime.fromisoformat(e.get('posted_at', ''))).total_seconds() <= PROPOSAL_THREAD_FRESH_SECONDS
+            except Exception:
+                return False
+        threads = {k: v for k, v in threads.items() if _fresh(v)}
+        path = _proposal_threads_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(threads, indent=1), encoding='utf-8')
+    except Exception as e:
+        log.warning('Failed to record proposal thread mapping: %s', e)
 
 
 def _post_email_alert(sender: str, subject: str, snippet: str, 
@@ -621,7 +769,8 @@ def _post_email_alert(sender: str, subject: str, snippet: str,
 
 
 def _post_action_proposal(from_header: str, subject: str, classification: dict,
-                          gmail_msg_id: str = '') -> dict:
+                          gmail_msg_id: str = '', thread_ts: str = '',
+                          thread_channel: str = '') -> dict:
     """
     Post an actionable email to Slack as a *proposal* — no auto-dispatch.
     Brian replies in the thread to direct the agent.
@@ -649,7 +798,7 @@ def _post_action_proposal(from_header: str, subject: str, classification: dict,
     if proposed_action:
         lines.append(f"*Proposed action:* {proposed_action}")
     else:
-        lines.append("*Proposed action:* _(classifier could not name a concrete step — reply with direction)_")
+        lines.append("*Heads-up only* — nothing here the agent can usefully do; reply in thread if you want something.")
     if reasoning and not proposed_action:
         lines.append(f"_Why surfaced:_ {reasoning}")
 
@@ -669,6 +818,12 @@ def _post_action_proposal(from_header: str, subject: str, classification: dict,
     if gmail_msg_id:
         lines.append(f"_gmail_msg_id: {gmail_msg_id}_")
 
+    if thread_ts:
+        # Follow-up on an email thread that already has a card — nest under it.
+        lines.insert(0, ":thread: *Update on this thread*")
+        return _post_slack("\n".join(lines),
+                           channel=thread_channel or ANALYST_QUEUE_CHANNEL_ID or None,
+                           thread_ts=thread_ts)
     return _post_slack("\n".join(lines), channel=ANALYST_QUEUE_CHANNEL_ID or None)
 
 
@@ -788,7 +943,7 @@ def _list_new_message_ids(service, start_history_id: str) -> tuple[list[str], st
 def _fetch_gmail_message(service, msg_id: str) -> dict:
     meta = service.users().messages().get(
         userId='me', id=msg_id, format='metadata',
-        metadataHeaders=['From', 'Subject', 'Date', 'To'],
+        metadataHeaders=['From', 'Subject', 'Date', 'To', 'Cc'],
     ).execute()
     full = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
     return {'meta': meta, 'full': full}
@@ -930,7 +1085,34 @@ def _sweep_gmail_pending() -> None:
             log.error('Gmail msg %s dropped after %s failed attempts (first seen %s) — '
                       'check it manually in the inbox', msg_id, entry.get('attempts'),
                       entry.get('first_seen'))
-            _mark_gmail_seen(msg_id)  # stop retrying; loud log above is the alert
+            # A log line is not an alert -- Brian only finds these by grepping.
+            # If the dropped message is the SOFOM distribution trigger, that's a
+            # business-critical daily deliverable silently dying; post a loud
+            # Slack alert so it gets manual attention instead of vanishing into
+            # seen_ids forever. (Root-caused 2026-07-24: msg 19f940dae821bd8d
+            # was marked seen via this exact path without ever reaching the
+            # SOFOM fast-path, and nobody knew until Brian asked why it hadn't fired.)
+            try:
+                subj = ''
+                try:
+                    meta = service.users().messages().get(
+                        userId='me', id=msg_id, format='metadata',
+                        metadataHeaders=['Subject']).execute()
+                    headers = {h['name']: h['value'] for h in meta.get('payload', {}).get('headers', [])}
+                    subj = headers.get('Subject', '')
+                except Exception:
+                    pass
+                if _SOFOM_SUBJECT_RE.search(subj or ''):
+                    _post_slack(
+                        f':rotating_light: SOFOM distribution email dropped after '
+                        f'{entry.get("attempts")} failed processing attempts and was '
+                        f'never run — gmail msg `{msg_id}` (first seen {entry.get("first_seen")}). '
+                        f'Manual tape generation needed: '
+                        f'`python report_scheduler_cron.py sofom-distribution`.'
+                    )
+            except Exception:
+                log.exception('Failed to post SOFOM-drop Slack alert for %s', msg_id)
+            _mark_gmail_seen(msg_id)  # stop retrying; alert above (if SOFOM) or log is the record
             continue
         try:
             msg = _fetch_gmail_message(service, msg_id)
@@ -953,6 +1135,56 @@ def _gmail_sweep_loop() -> None:
             log.exception('Gmail sweep iteration failed')
 
 
+# ---------------------------------------------------------------------------
+# SOFOM distribution fast-path -- pubsub-driven, bypasses LLM classification
+# ---------------------------------------------------------------------------
+# Subject line is stable regardless of sender. Previously report_scheduler_cron.py
+# polled Gmail hourly with a from:axel@tryjeeves.com-only search; when William Filho
+# covered for Axel (2026-07-23) that search silently missed the day's email, stalling
+# the tape until manual intervention. This fast-path fires on the FIRST push of the
+# day that matches the subject -- no sender check, no waiting for the next poll --
+# and shares report_scheduler_cron's state file so the two never double-run.
+_SOFOM_SUBJECT_RE = re.compile(r'F/12339\s*>\s*F/12340\s*Distribution', re.IGNORECASE)
+
+
+def _try_trigger_sofom_distribution(gmail_msg_id: str, subject: str) -> bool:
+    """Returns True if this message was the SOFOM distribution email and was
+    handled (fired just now, or already done today via an earlier push/the
+    hourly poll) -- caller should skip LLM classification entirely in that
+    case. Returns False (falls through to normal classification) if the
+    borrowing-base module can't be reached, so a bad import never eats the
+    email silently."""
+    if not _SOFOM_SUBJECT_RE.search(subject or ''):
+        return False
+    try:
+        _bb_skill = Path(__file__).resolve().parent.parent / 'skills' / 'custom' / 'jeeves-borrowing-base'
+        if str(_bb_skill) not in sys.path:
+            sys.path.insert(0, str(_bb_skill))
+        import report_scheduler_cron as rsc
+
+        today_str = datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d')
+        key = 'last_sofom_distribution'
+        with rsc._state_lock:
+            state = rsc.load_state()
+            if rsc._state_completed_today(state, key, today_str):
+                log.info('SOFOM distribution already handled today -- skipping duplicate push for %s', gmail_msg_id)
+                return True
+            state[key] = f'{today_str}_running'
+            rsc.save_state(state)
+        try:
+            log.info('SOFOM fast-path: triggering distribution tape for %s (%s)', gmail_msg_id, subject)
+            rsc.run_sofom_distribution(gmail_msg_id, subject)
+        finally:
+            with rsc._state_lock:
+                state = rsc.load_state()
+                state[key] = today_str
+                rsc.save_state(state)
+        return True
+    except Exception as e:
+        log.error('SOFOM fast-path failed, falling back to normal classification: %s', e)
+        return False
+
+
 def _handle_gmail_message(msg: dict) -> None:
     """Classify and dispatch (or alert) for a single Gmail message."""
     import html
@@ -969,9 +1201,18 @@ def _handle_gmail_message(msg: dict) -> None:
         return ''
 
     from_header = _h('From')
+    to_header = _h('To')
+    cc_header = _h('Cc')
     subject = _h('Subject') or '(no subject)'
     date = _h('Date')
     snippet = html.unescape(meta.get('snippet', '')).strip()
+
+    # SOFOM distribution fast-path — check before any noise/self-send skip so
+    # a same-day resend or reply-all doesn't get lost, and before the LLM call
+    # so the daily tape never waits on classification latency or quota.
+    _sofom_msg_id = full.get('id', '') or meta.get('id', '')
+    if _try_trigger_sofom_distribution(_sofom_msg_id, subject):
+        return
 
     # Extract sender email
     m = re.search(r'<([^>]+)>', from_header)
@@ -1004,6 +1245,8 @@ def _handle_gmail_message(msg: dict) -> None:
         subject=subject,
         body_preview=f"{snippet}\n\n{body_text[:2000]}",
         extra_context=f"Date: {date}",
+        to=to_header,
+        cc=cc_header,
     )
 
     # Non-actionable: silent — no Slack post, no dispatch.
@@ -1023,7 +1266,13 @@ def _handle_gmail_message(msg: dict) -> None:
     # Actionable: post a PROPOSAL to Slack so Brian can approve/redirect before any dispatch.
     # No auto-dispatch — the agent runs only when Brian replies in the proposal thread.
     gmail_msg_id = full.get('id', '') or meta.get('id', '')
-    slack_post = _post_action_proposal(from_header, subject, classification, gmail_msg_id)
+    gmail_thread_id = full.get('threadId', '') or meta.get('threadId', '')
+    existing = _get_proposal_thread(gmail_thread_id)
+    slack_post = _post_action_proposal(
+        from_header, subject, classification, gmail_msg_id,
+        thread_ts=existing.get('ts', ''), thread_channel=existing.get('channel', ''))
+    if not existing:
+        _record_proposal_thread(gmail_thread_id, slack_post)
     _log_proposal(classification, from_header, subject, gmail_msg_id, slack_post)
 
 

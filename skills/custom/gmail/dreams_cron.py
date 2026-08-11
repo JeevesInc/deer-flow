@@ -576,6 +576,16 @@ HARD RULES for this message:
 
 def run_dream() -> None:
     log.info("Starting dream session...")
+
+    # Weekly consolidation of the brian-behavior namespace written by
+    # action_learner: merge duplicates, resolve contradictions (recent wins),
+    # cap the ceiling so the behavioral model cannot bloat. Silent + non-fatal.
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from action_learner import consolidate_if_due
+        log.info("Behavior-pattern consolidation: %s", consolidate_if_due())
+    except Exception as e:
+        log.error("Behavior consolidation failed (non-fatal): %s", e)
     state = load_state()
     audit_events = _read_recent_audit(hours=24)
 

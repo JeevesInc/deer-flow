@@ -159,6 +159,8 @@ Use `web_fetch` to read full content when:
 - The source contains data, case studies, or expert analysis
 - You want to understand the full context of a finding
 
+**If `web_fetch` fails with a Jina API 401 (authentication) error, STOP retrying immediately -- do not try it again on a different URL in the same session.** This is a broken API key on the tool side, not a bad URL; every subsequent call will fail identically. Fall back to `web_search` result snippets for the rest of the session and tell the user full-page fetch is unavailable right now. (Recurred 2026-07-02 and again 2026-07-20 -- 6 identical retries burned in one thread each time. The fix is procedural, not code: check for a 401 on the FIRST failure and switch strategy before it happens twice, let alone six times.)
+
 ### Iterative Refinement
 
 Research is iterative. After initial searches:

@@ -151,15 +151,23 @@ def get_memory_status() -> MemoryStatusResponse:  # sync: blocking mem0 I/O → 
 
 
 @router.get("/memory/mem0", summary="Search mem0 memories")
-def search_mem0(q: str = "", limit: int = 20):  # sync: blocking mem0 I/O → threadpool
-    """Search or list mem0 memories. If q is empty, returns all."""
+def search_mem0(q: str = "", limit: int = 20, user_id: str = ""):  # sync: blocking mem0 I/O → threadpool
+    """Search or list mem0 memories. If q is empty, returns all.
+
+    ``user_id`` selects a mem0 namespace (default: the main memory namespace).
+    Out-of-process consumers (e.g. webhook_receiver's proposal-pattern lookup)
+    must go through this endpoint — embedded Qdrant allows exactly one process,
+    and the Gateway holds that lock.
+    """
     try:
         if q:
             from deerflow.agents.memory.mem0_store import search_memories
-            results = search_memories(q, top_k=limit)
+            kwargs = {"user_id": user_id} if user_id else {}
+            results = search_memories(q, top_k=limit, **kwargs)
         else:
             from deerflow.agents.memory.mem0_store import get_all_memories
-            results = get_all_memories()
+            kwargs = {"user_id": user_id} if user_id else {}
+            results = get_all_memories(**kwargs)
         return {"results": results, "count": len(results)}
     except Exception as e:
         logger.error("mem0 search failed: %s", e)

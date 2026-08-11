@@ -55,8 +55,40 @@ If reauth fails, tell the user:
 **Root cause:** When the `zscaler://` or `zsa://` protocol URL fires, Edge closes the Playwright page immediately. `page.wait_for_timeout(5000)` then throws "Target page has been closed" — this bubbled up to the outer `except`, skipped `_verify_zpa_authenticated`, and returned False even though the token had landed.
 **Fix:** Wrapped post-auth `page.wait_for_timeout` calls in try/except for "closed". If caught, call `_verify_zpa_authenticated(timeout=45)` directly. If registry flips to AUTHENTICATED → return True. This is now the normal success path for FastPass flows.
 
+### 3. Session-0 / service architecture (built 2026-08-09)
+
+DeerFlow runs as a **Windows service as SYSTEM in session 0**; ZSATray lives in Brian's interactive
+session 1. UI Automation cannot cross that boundary. `reauth.py` therefore detects session 0
+(`_in_session_zero`) and **relaunches itself into the logged-on session** via
+`session_launcher.run_in_user_session` (WTSQueryUserToken + CreateProcessAsUserW). The child is an
+ordinary session-1 user process, sees the tray, drives UIA, and needs **no human**. This is verified
+working: `Env: session_id=1, active_user=brianmauck console 1 Active` (2026-08-09 18:49) and a
+successful unattended reauth at **2026-08-09 19:59**.
+
+**Headless reauth is a hard product requirement from Brian (2026-08-09): "No, headless reauth is a
+requirement, figure it out."** Never propose a manual tray click as the solution.
+
+### 4. The rate limiter can masquerade as a broken reauth (2026-08-09)
+
+`reauth.py` reads `C:\Jeeves\redshift-bot\zscaler_reauth_state.json` and self-blocks on a **300s
+cooldown** and **4 attempts/hour**, exiting rc=1 with `Reauth cooldown active (Ns remaining). Skipping.`
+The report scheduler's own "connection error -> reauth -> retry once" path then logs
+`zscaler reauth failed`, which reads like an Okta failure but is **the automation refusing itself**.
+**Before diagnosing Okta/FastPass, read that state file and check the cooldown.**
+
+## Diagnosing: read the RIGHT log
+
+Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (services back on
+2026-08-09 15:48) — `deerflow-gateway.err.log` for scheduler/reauth invocation lines.
+`manual_startsh.log` is FROZEN at 2026-08-06 and must not be read as current. **Stat mtime first.**
+
 ## Do NOT
 
 - Do not call this skill preemptively — only when you actually get a connection error
 - Do not call it more than once per conversation — if it fails once, escalate to the user
 - Do not retry the reauth script in a loop
+- Do not tell Brian a human step is required without positive evidence. Do not infer he is logged
+  out from `active_user=none` read in session 0 — that field is session-local and was wrong on
+  2026-08-09; query the active session properly (`session_launcher.find_active_session`) instead.
+- Do not patch `report_scheduler_cron.py` and assume the fix is live — see the borrowing-base skill:
+  long-running cron modules are imported at gateway start and need a restart to pick up edits.

@@ -41,7 +41,7 @@ def build_mem0_config(api_key: str, qdrant_host: str, qdrant_port: int) -> dict:
         "llm": {
             "provider": "anthropic",
             "config": {
-                "model": "claude-sonnet-5",
+                "model": "claude-opus-5",
                 "api_key": api_key,
                 "max_tokens": 4096,
                 # mem0's BaseLlmConfig defaults temperature=0.1 and its

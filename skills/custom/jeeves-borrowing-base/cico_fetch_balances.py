@@ -130,7 +130,7 @@ def _call_claude_vision(image_paths):
     })
 
     resp = client.messages.create(
-        model='claude-sonnet-5',
+        model='claude-opus-5',
         max_tokens=4096,
         messages=[{'role': 'user', 'content': content}]
     )

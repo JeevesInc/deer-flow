@@ -4,23 +4,23 @@ Nine scripts used to hardcode model ids — the Fable-5→Opus and
 Sonnet-5 migrations each meant 13 separate edits. New code imports the
 tier constants; the next migration is one env var (or one line here).
 
-Tiers (see MEMORY: model standardization 2026-06-30):
-- SONNET (quality-sensitive: drafters, synthesizers, dossiers, SQL gen)
-- HAIKU  (high-frequency/cost-sensitive: classifiers, labelers, SLL)
-- OPUS   (resilience fallback only)
+Tiers (consolidated to Opus 5 for everything, 2026-07-24):
+- SONNET / HAIKU / OPUS all resolve to `claude-opus-5` by default.
+  The three names are kept so the ~9 importing scripts need no edits and
+  a future re-split is one env var each (DEERFLOW_{SONNET,HAIKU,OPUS}_MODEL).
 
-Both `claude-sonnet-5` and `claude-opus-4-8` are adaptive-thinking-only:
-no budget_tokens, no temperature-with-thinking, and responses may lead
-with a ThinkingBlock — ALWAYS use text_from_response(), never
-resp.content[0].text (that crashed the proposal synthesizer and the CICO
-vision extractor).
+`claude-opus-5` is adaptive-thinking-only: no budget_tokens, no
+temperature-with-thinking, and responses may lead with a ThinkingBlock —
+ALWAYS use text_from_response(), never resp.content[0].text (that crashed
+the proposal synthesizer and the CICO vision extractor).
 """
 
 import os
 
-SONNET = os.environ.get("DEERFLOW_SONNET_MODEL", "claude-sonnet-5")
-HAIKU = os.environ.get("DEERFLOW_HAIKU_MODEL", "claude-haiku-4-5-20251001")
-OPUS = os.environ.get("DEERFLOW_OPUS_MODEL", "claude-opus-4-8")
+# All tiers point at Opus 5. Override any one via its env var to re-split later.
+SONNET = os.environ.get("DEERFLOW_SONNET_MODEL", "claude-opus-5")
+HAIKU = os.environ.get("DEERFLOW_HAIKU_MODEL", "claude-opus-5")
+OPUS = os.environ.get("DEERFLOW_OPUS_MODEL", "claude-opus-5")
 
 
 def text_from_response(resp) -> str:

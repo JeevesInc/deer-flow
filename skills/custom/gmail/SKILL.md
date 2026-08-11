@@ -43,6 +43,9 @@ python /mnt/skills/custom/gmail/gmail_tool.py draft <message_id> "See attached" 
 ```
 
 ### Draft a new email
+
+**`draft-new` has NO `--cc` flag.** Its arg parser only recognizes `--attach`/`--body-file`; any other flag (e.g. `--cc "x@y.com"`) is silently dropped with no error -- the draft is created successfully but the CC never lands. Cost a missed CC on a FinOps ask (2026-07-08). To CC on a brand-new (non-reply) email: put ALL recipients -- To and Cc together -- comma-separated in the single `to` positional arg, or create the draft then add the Cc field directly in Gmail before sending. Only `draft` (reply) genuinely supports `--cc`. To get a REAL Cc on a new email, write a workspace script that sys.path.inserts the gmail skill dir, imports `gmail_tool`, and calls `_build_mime(body, my_email, to, subject, cc="a@x.com, b@x.com")` then `service.users().drafts().create()` -- `_build_mime` supports `cc`, only the CLI wrapper does not. ALSO: `--body-file` is positional-sensitive -- for `draft-new` the body is argv[4], so passing a body string AND `--body-file` makes the string win and silently ignores the file (2026-07-29: shipped a draft whose entire body was the word PLACEHOLDER; Brian: "maybe actually write the email?"). Correct form: `draft-new "to" "subject" --body-file <path>` with no body string, then verify the created draft body before reporting done.
+
 ```bash
 python /mnt/skills/custom/gmail/gmail_tool.py draft-new "recipient@email.com" "Subject line" "Body text"
 python /mnt/skills/custom/gmail/gmail_tool.py draft-new "recipient@email.com" "Q1 Report" "See attached." --attach /mnt/user-data/outputs/report.xlsx
@@ -69,15 +72,80 @@ These live in this skill directory but run inside the gateway via `cron_supervis
 - **Weekly open items (`weekly_open_items_cron.py`)** -- Monday 08:00 (catches up after downtime). Sweeps the past 7 days for threads still awaiting Brian, live Gmail + Slack only.
 - **Proposal learner (`proposal_learner.py`)** -- runs inside the EOD cycle; pairs webhook proposals with Brian's replies and stores classifier patterns in mem0 (`proposal-patterns` namespace).
 
+
+
+<!-- Evolution: 2026-08-04 | source: self-improving-agent -->
+### Action learner (action_learner.py) -- behavioral cloning from what Brian does unprompted
+
+Sibling of proposal_learner.py. That one learns from how Brian reacts to agent
+proposals; this one learns from his own unprompted actions.
+
+- Sources: full sent-mail bodies paired with the message that triggered them and
+  the reply latency; inbound threads he never answered (negative triage signal);
+  Slack messages he sent.
+- Output: pattern sentences in mem0 under user_id `brian-behavior`, tagged
+  `[TRIAGE]` / `[VOICE]` / `[SUBSTANCE]`, stored with infer=False so the curated
+  sentence survives verbatim.
+- Daily incremental pass runs inside eod_review_cron (`_run_action_learner`).
+- Consolidation runs weekly from dreams_cron via `consolidate_if_due()`:
+  iterative rounds of 40-pattern chunks merge duplicates and resolve
+  contradictions (more recent wins), capped at BEHAVIOR_TARGET_MAX facts.
+- Chunks MUST stay near 40. Synthesizer thinking tokens count against
+  max_tokens, so 110-item chunks truncate mid-JSON and return no usable plan
+  (verified 2026-08-03).
+- mem0 `get_all()` pages at 20 rows for this namespace, which silently made
+  consolidation operate on a sliver. Read the namespace by scrolling Qdrant
+  directly (`_all_behavior_memories`), never `get_all`.
+
+```bash
+python action_learner.py --status
+python action_learner.py --backfill --since 2026-01-01
+python action_learner.py --consolidate --force
+```
 ## Rules
+
+- **HARD RULE — there is NO `gmail_tool.get_service()`.** The accessor is private: `_get_service()`
+  (and `_get_drive_service()`). Calling the public-looking name raised
+  `AttributeError: module 'gmail_tool' has no attribute 'get_service'` in two separate threads on
+  2026-08-03 (Vista swag aggregation, Mastercard file reply), each time inside a hand-rolled
+  workspace script. Preferred order: (1) call the CLI — `gmail_tool.py search|read|draft|draft-new|
+  download` — via subprocess with an argv list; (2) only if that genuinely cannot express the task,
+  import the module and use `cmd_draft_reply` / `cmd_draft_new` / `cmd_search`, which already build
+  MIME, handle attachments, and set threading headers. Do not re-implement message assembly against
+  a raw service object — that is how the non-threaded-reply failure mode comes back.
 
 - ALWAYS search first to find the relevant email before reading or replying
 - NEVER send emails directly -- only create drafts for the user to review
 - ALWAYS reply-all by default unless Brian explicitly says otherwise
 - The draft command handles reply-all automatically (fetches To/Cc, excludes Brian)
+- **HARD RULE -- if the ask is a REPLY, it MUST be `draft <message_id>`. NEVER `draft-new`.** `draft` supports everything `draft-new` does (`--attach`, `--body-file`) PLUS `--to`/`--cc`, and it is the only command that sets `threadId` + `In-Reply-To` + `References`, i.e. the only one that actually lands in the counterpartys thread. A new email with a matching subject is NOT a reply -- it starts a second thread the counterparty has to reconcile. Brian corrected this twice: 2026-05-12 (episode logged, did not stick) and again 2026-07-24 on the Kroll/Nick P2 closeout ("you didnt put it in the thread, you just drafted a new email"). If you cannot find the message_id: search harder (`search "from:<sender>"`, check Trash/All Mail -- the Kroll thread had been trashed and restored), or ask Brian for the thread. NEVER fall back to `draft-new`, and never silently -- a non-threaded reply is a failed deliverable, not a partial one. After creating any reply draft, confirm the printed Thread ID matches the source messages threadId before reporting done.
 - If someone is mentioned in the body but not CC'd, look up their email via Slack and add them
 - When drafting, match Brian's style: direct, short, key points up front
 - Show what you drafted and confirm it is in the Drafts folder
 - Prefer drive:<ID> for files already on Drive rather than re-uploading. External/counterparty-facing attachments -- naming rule: the goal is a CLEAN, professional filename, not necessarily the unchanged original. Never include (a) internal process/editing words -- Trimmed, Draft, v2, Redacted, WIP, etc. -- these expose internal editing history to the counterparty, and (b) any other counterparty/party name that does not match who you are sending it to (e.g. never send NB a file whose name references BBVA). Rename when needed to strip either of those, but keep the rest of the original name/content descriptor intact.
-- CLASSIFIER RULE -- reply-all threads: When a message is a reply-all and does NOT explicitly name Brian, check who the last active Jeeves-side sender was before the reply. If another Jeeves employee (e.g. Jorge Hurrle, Isabel Diaz) sent the preceding message, the reply is most likely directed at THEM -- classify as FYI_ONLY for Brian. Only flag ACTIONABLE for Brian if: (a) he is explicitly named, (b) the ask is in his exclusive domain with no other Jeeves person more directly involved, or (c) the reply is responding to a message Brian himself sent. Being CC'd for visibility ≠ being the action owner.
+- **STATUS RULE -- never carry a "drafted, awaiting Brian's send" claim forward without re-checking `in:sent` for that thread.** Brian sends drafts himself and that leaves no bot-visible signal, so any later restatement (EOD review, dream comms scan, STRATEGIC_CONTEXT entry) must run `search "in:sent newer_than:Nd"` (or read the thread) first. The Kroll/Hexa reply was reported as sitting unsent for two days after Brian had already sent it 2026-07-24 14:48 PT.
+- CLASSIFIER RULE -- reply-all threads: Default to FYI_ONLY for Brian. Check the literal addressee first: the greeting line ("Hi X and team") and/or the To: field of the specific message, not just who is CC'd on the broader thread. Only flag ACTIONABLE for Brian if: (a) he is explicitly named as addressee/greeted, (b) the ask requires info or authority only Brian has with no other Jeeves person (counsel, exec, another CC'd employee) more directly addressed, or (c) the reply is responding to a message Brian himself sent. Being CC'd or present on a reply-all thread where someone else (e.g. outside counsel, another Jeeves exec) is the named addressee = FYI_ONLY, even if the topic is in Brian's general domain (e.g. Alex asking Goodwin's Eliza Chute for a Vista issues-list status, with Brian only CC'd, is FYI_ONLY -- not "Brian's team" or actionable for Brian). Corrected 2026-07-14 after Brian flagged repeated over-flagging: "you're highlighting a lot of messages that don't require action from me."
 - **Never paste a list of more than ~5 items (customer names, account IDs, row data, etc.) inline in an email body.** Attach a file instead. Violated on 2026-07-01 (25 customers pasted inline, Brian: "that was ugly af") despite already being a standing rule -- treat as hard, not stylistic, for any draft with list-shaped content.
+- **For live deal-negotiation replies (Vista/NB issue lists, term pushback, etc.), never invent Jeeves' business/legal rationale or positions on Brian's behalf** -- not even as a "draft to edit." Two attempts on 2026-07-08 (thin yes/no, then full invented rationale) were both rejected as garbage before Brian wrote it himself. These need Brian's actual arguments. If asked to draft inline replies to a negotiation issues list, ask Brian for his position on each point first (or what specifically was wrong after a first attempt) rather than guessing bigger on a second attempt.
+
+
+
+<!-- Evolution: 2026-07-29 | source: dream-74 -->
+**EXISTENCE RULE — never tell Brian a document "isn't available" until you have searched
+his own sent mail with context words.** On 2026-07-28 the agent reported it could not find
+the PwC quality-of-earnings report; Brian replied "False. We have it. We even have the
+password." It was in `in:sent` — Brian had emailed it to Jay Berger on 2026-07-20 12:10 PT
+with the open password in the body. Before any negative-existence claim about a deal
+document, run all of:
+
+- `in:sent` / `from:brian.mauck` for the document type,
+- the same search with **context words** — `password`, `attached`, `NRL`, `non-reliance`,
+  and the project codename (deal reports often travel as "Project J", not by their title),
+- the counterparty's name (the doc is usually named in the covering email, not the subject),
+- and a Drive search for files owned by brian.mauck.
+
+Only after all four come back empty may you say it is not available — and say which
+searches you ran. The same failure mode hit Drive the same day ("no board deck was built"),
+so treat *any* "we don't have X" answer as a claim that requires evidence, not an absence
+of evidence.
+

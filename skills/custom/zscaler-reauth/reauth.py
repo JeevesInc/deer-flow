@@ -74,6 +74,37 @@ def _check_rate_limit() -> bool:
     return False
 
 
+def _in_session_zero() -> bool:
+    """True if this process is in Windows session 0 (running as a service).
+
+    ZSATray lives in the interactive user's session. Token injection drives that
+    tray window via UI Automation, which cannot cross the session boundary, so a
+    reauth launched from session 0 can never complete no matter how many times it
+    retries.
+    """
+    try:
+        import ctypes
+        k32 = ctypes.windll.kernel32
+        sid = ctypes.c_ulong()
+        if k32.ProcessIdToSessionId(k32.GetCurrentProcessId(), ctypes.byref(sid)):
+            return sid.value == 0
+    except Exception as e:
+        print(f"session detection failed: {e}", file=sys.stderr)
+    return False
+
+
+def _alert_owner(msg: str) -> None:
+    """DM Brian through the audited slack_tool send path (never hand-rolled)."""
+    try:
+        tool = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "slack-search", "slack_tool.py"))
+        if not os.path.exists(tool):
+            print(f"slack_tool not found at {tool}", file=sys.stderr)
+            return
+        subprocess.run([sys.executable, tool, "send", "U05B5HGNCN9", msg], timeout=60)
+    except Exception as e:
+        print(f"owner alert failed: {e}", file=sys.stderr)
+
+
 def main():
     # Step 1: Verify the problem — maybe it's a transient blip
     print("Checking Redshift connectivity...")
@@ -88,6 +119,25 @@ def main():
         print('Rate limit active -- not attempting reauth. Waiting for cooldown.', file=sys.stderr)
         sys.exit(1)
 
+    # Step 1.6: Session-0 preflight. As a Windows service we run as SYSTEM in
+    # session 0 while ZSATray runs in Brian's desktop session. UI Automation
+    # cannot cross that boundary, so reauth structurally cannot succeed here --
+    # retrying just burns 3 minutes and eats the hourly rate limit. Alert and
+    # exit instead of failing blind.
+    if _in_session_zero():
+        sys.path.insert(0, SCRIPT_DIR)
+        from session_launcher import find_active_session
+        if find_active_session()[0] is None:
+            _alert_owner(
+                ":lock: *Zscaler reauth blocked* -- no interactive Windows session "
+                "is logged on, so there is no user token to launch the tray flow "
+                "with. Log in to the laptop and the next scheduled attempt will "
+                "self-heal without you doing anything else."
+            )
+            print("ERROR: session 0 and no interactive session to launch into.",
+                  file=sys.stderr)
+            sys.exit(1)
+
     # Step 2: Run the main reauth script (single attempt)
     if not os.path.exists(MAIN_SCRIPT):
         print(f"ERROR: Reauth script not found at {MAIN_SCRIPT}", file=sys.stderr)
@@ -97,11 +147,25 @@ def main():
     # only reflects the public-internet tunnel, so it can read "connected" while
     # ZPA (private access, which Redshift goes through) is deauthed. We already
     # know Redshift is broken — go straight to reauth.
-    result = subprocess.run(
-        [sys.executable, MAIN_SCRIPT, "--once", "--force"],
-        timeout=300,  # 5 min max
-        capture_output=False,  # let output flow to agent
-    )
+    reauth_cmd = [sys.executable, MAIN_SCRIPT, "--once", "--force"]
+
+    if _in_session_zero():
+        # We are a Windows service (SYSTEM, session 0). ZSATray lives in the
+        # interactive session and the token-injection step drives it through UI
+        # Automation, which cannot cross a session boundary. So do not reach
+        # across it -- spawn the reauth ON the other side using the logged-on
+        # user's token (WTSQueryUserToken + CreateProcessAsUserW). The child is
+        # an ordinary session-1 user process: it sees the tray, drives UIA, and
+        # needs no human. This is what makes headless reauth work as a service.
+        from session_launcher import run_in_user_session, find_active_session
+        sid, user = find_active_session()
+        print(f"Session 0 detected -- launching reauth into session {sid} ({user}).")
+        rc, out = run_in_user_session(reauth_cmd, timeout=300)
+        if out:
+            print(out[-4000:])
+        print(f"Session-{sid} reauth exited rc={rc}")
+    else:
+        subprocess.run(reauth_cmd, timeout=300, capture_output=False)
 
     # Step 3: Wait a moment for Zscaler tunnel to re-establish
     print("Waiting for Zscaler tunnel to stabilize...")
@@ -116,7 +180,11 @@ def main():
         time.sleep(5)
 
     print("ERROR: Reauth ran but Redshift is still unreachable.", file=sys.stderr)
-    print("Brian may need to authenticate manually on the laptop.", file=sys.stderr)
+    _alert_owner(
+        ":lock: *Zscaler reauth ran but Redshift is still unreachable.* The "
+        "automated flow completed without restoring ZPA -- this one needs eyes. "
+        "Check the Zscaler tray on the laptop."
+    )
     sys.exit(1)
 
 

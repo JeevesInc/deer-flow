@@ -37,6 +37,11 @@ _shared = SCRIPT_DIR.parent / "_shared"
 if _shared.exists():
     sys.path.insert(0, str(_shared))
 
+# Wiki layer (grep-able, evergreen, non-size-limited memory) + git repo connector
+sys.path.insert(0, str(SCRIPT_DIR))
+import wiki
+import repo_connector
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -285,7 +290,7 @@ def _classify_domains(domain_info: dict) -> dict:
         )
 
         response = client.messages.create(
-            model="claude-sonnet-5",
+            model="claude-opus-5",
             max_tokens=1000,
             messages=[{"role": "user", "content": f"""You are analyzing email domains from a Capital Markets professional's sent mail to identify potential counterparties (lenders, investors, fund managers, financial institutions).
 
@@ -685,7 +690,7 @@ If the raw data doesn't contain meaningful new intelligence, just say "No signif
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-5",
+            model="claude-opus-5",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -742,8 +747,10 @@ def write_intelligence(synthesis: str, drive_files: list, email_threads: dict, s
                     except Exception as e:
                         log.warning("Strategic-context re-index skipped: %s", e)
 
-    # Write per-counterparty summaries
-    for cp_name in set(list(email_threads.keys()) + list({f["folder"].split("/")[0] for f in drive_files if "/" in f.get("folder", "")})):
+    # Write per-counterparty summaries (JSON facts, cheap/no-LLM) AND the
+    # evergreen wiki page (merged narrative, grep-able, no size limit).
+    all_cp_names = set(list(email_threads.keys()) + list({f["folder"].split("/")[0] for f in drive_files if "/" in f.get("folder", "")}))
+    for cp_name in all_cp_names:
         cp_safe = cp_name.lower().replace(" ", "_")
         cp_path = KNOWLEDGE_DIR / f"counterparty_{cp_safe}.json"
         existing = {}
@@ -764,6 +771,39 @@ def write_intelligence(synthesis: str, drive_files: list, email_threads: dict, s
             ]
 
         cp_path.write_text(json.dumps(existing, indent=2, default=str), encoding="utf-8")
+
+        raw_bits = []
+        if cp_name in email_threads:
+            email_lines = chr(10).join(
+                f"- {t['date'][:16]} | {t['subject']} | from: {t['from'][:50]} | {t['snippet'][:150]}"
+                for t in email_threads[cp_name][:15]
+            )
+            raw_bits.append("Recent email:" + chr(10) + email_lines)
+        if cp_name in slack_messages:
+            slack_lines = chr(10).join(
+                f"- #{m['channel']} @{m['user']}: {m['text'][:200]}"
+                for m in slack_messages[cp_name][:10]
+            )
+            raw_bits.append("Recent Slack:" + chr(10) + slack_lines)
+        if cp_files:
+            file_lines = chr(10).join(
+                f"- {f['name']} (modified {f['modified'][:10]})" for f in cp_files[:10]
+            )
+            raw_bits.append("Recent Drive documents:" + chr(10) + file_lines)
+        if raw_bits:
+            try:
+                wiki.update_page(
+                    "counterparties", cp_name, (chr(10)+chr(10)).join(raw_bits),
+                    source_label="knowledge-crawler", title=cp_name,
+                )
+            except Exception as e:
+                log.warning(f"Wiki update failed for {cp_name}: {e}")
+
+    if all_cp_names:
+        try:
+            wiki.rebuild_index()
+        except Exception as e:
+            log.warning(f"Wiki index rebuild failed: {e}")
 
     log.info("Knowledge files updated")
 
@@ -793,7 +833,7 @@ def run_crawl(source: str = None, force: bool = False, counterparty: str = None)
             log.info(f"Discovered {len(new_parties)} new counterparties: {', '.join(new_parties)}")
         save_state(state)
 
-    sources = [source] if source else ["drive", "email", "slack"]
+    sources = [source] if source else ["drive", "email", "slack", "repos"]
 
     if "drive" in sources:
         drive_files = crawl_drive(state, force=force, counterparty=counterparty)
@@ -803,6 +843,14 @@ def run_crawl(source: str = None, force: bool = False, counterparty: str = None)
 
     if "slack" in sources:
         slack_messages = crawl_slack(state, force=force, counterparty=counterparty)
+
+    if "repos" in sources and not counterparty:
+        try:
+            repos_updated = repo_connector.run_repo_crawl(force=force)
+            if repos_updated:
+                log.info(f"Repo connector: {repos_updated} repo wiki page(s) updated")
+        except Exception as e:
+            log.warning(f"Repo connector crawl failed: {e}")
 
     save_state(state)
 
@@ -854,7 +902,7 @@ def show_status():
 
 def main():
     parser = argparse.ArgumentParser(description="Knowledge crawler — strategic intelligence builder")
-    parser.add_argument("--source", choices=["drive", "email", "slack"], help="Crawl specific source only")
+    parser.add_argument("--source", choices=["drive", "email", "slack", "repos"], help="Crawl specific source only")
     parser.add_argument("--force", action="store_true", help="Ignore last-crawled timestamps")
     parser.add_argument("--counterparty", help="Crawl specific counterparty only")
     parser.add_argument("--status", action="store_true", help="Show crawl status")

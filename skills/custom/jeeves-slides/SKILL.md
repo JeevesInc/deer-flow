@@ -119,6 +119,50 @@ Urbanist installed, PowerPoint will substitute a fallback font. To ensure fideli
 
 ---
 
+## Board Deck Content Standard — MANDATORY for any Board of Directors deck
+
+**Learned 2026-07-22 (Q3 BoD Capital Section thread, 2 rounds of correction on the same slides):**
+Board decks are strategic narrative documents, not status trackers. Brian corrected a
+first draft twice in the same session:
+1. "this is for a board meeting, not a daily standup -- look at some of my old board
+   slides for the type of content. should be storytelling."
+2. Even after a revision: "still a little too tactical. strategic impact, expected
+   completion is what we're focusing on."
+
+Before drafting any BoD slide content:
+- **Lead with strategic impact, not task status.** Each initiative/deal slide should
+  answer "why does this matter to the company" before "what did we do this week."
+  Do not list line-item tactical steps (e.g. "sent X email", "fixed Y bug in the report").
+- **Always include expected completion** for any in-flight item (a date or quarter),
+  not just current state.
+- **Frame as a narrative arc** (problem -> action -> outcome/impact), not a bulleted
+  activity log. Pull the actual structure from a real prior board deck Brian approved
+  (search Drive for his most recent BoD deck, not the 2026.02 Company Overview format
+  deck, which is for external/investor use) before drafting new content.
+- **Surface negotiated wins explicitly** -- e.g. when a refinance or amendment produces
+  a concrete concession (fee waiver, expanded facility, freed-up capacity), call it
+  out as its own narrative beat, not a footnote. (Example: NB refinance -> CIM waived
+  prepayment penalties + expanded MX facility to $150M, which let CIM grow in MX
+  instead of tying up the corp refinance -- this is the level of insight a board slide
+  needs.)
+- If unsure whether a fact is "board-level" vs "operational," default to cutting it --
+  ask Brian rather than including tactical detail and waiting for a correction.
+
+---
+
+## Metric Charts on Slides — MANDATORY
+
+**Learned 2026-07-30 (Aug 2026 BoD slide 20, 50 turns for one chart):**
+
+- **Confirm the metric definition against the actual columns of the source file before plotting.** Brian: "the chart should be GTV based, you have total disbursements in the recv file. **It's jp disbursements + disbursements**." The definition was already available in the file the agent itself had generated. Read the header row, do not assume the series you happened to compute is the series he means.
+- **When Brian is choosing a metric or a periodicity, produce every standard cut in ONE image** — quarterly, monthly, and rolling-3-month, and both candidate numerators when the definition is ambiguous — as a small multiples panel. Serving one cut per turn turned a single chart into four sequential asks ("can you look at it monthly?", "can we do a rolling 3mo average", "does recv balance look better?"). Deliver the menu, then let him pick.
+- **Back-fit any new construction to the existing bars before proposing it.** If prior-period bars on the live slide were built a specific way (e.g. average monthly flow ÷ average daily cash), reproduce those values first; a series that does not tie to the slide it is replacing is not a candidate.
+- **Explain the shape, not just the trend** — a QoQ dip that traces to a one-month cash spike is the answer Brian wants, not a restatement of the numbers.
+- **Never write a literal newline inside a string literal in a generated chart script.** `labels = [p.strftime("%b\n%y") ...]` written with a real line break produced `SyntaxError: unterminated string literal` and burned a turn. Build multi-line tick labels with `chr(10)`.
+- **Edit an existing deck through this skill's slides helpers, not a hand-rolled Slides API call in an ad-hoc workspace script** — an improvised `presentations().get/batchUpdate` chain failed on the first run (2026-07-30). Copy the working script, do not re-derive the API.
+
+---
+
 ## Source Discipline — MANDATORY
 
 **Every factual claim in any Jeeves deck must be traceable to a source document or verified data pull. No exceptions.**

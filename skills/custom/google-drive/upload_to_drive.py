@@ -202,10 +202,18 @@ def upload_file(local_path, target_folder_id=None, file_id=None, force_new=False
             'fields': 'id,webViewLink',
         }
         parents = existing.get('parents') or []
-        if folder_id not in parents:
+        # Only re-parent when the caller EXPLICITLY named a destination folder.
+        # Regression fixed 2026-08-07: --file-id with no --folder fell back to the default
+        # 'DeerFlow Output' folder and then silently moved a correctly-filed lender
+        # deliverable out of its real home (NB borrowing base 2026-08-05/06; Brian asked
+        # "why did you not upload it?" twice while the link still resolved).
+        if target_folder_id and folder_id not in parents:
             update_kwargs['addParents'] = folder_id
             if parents:
                 update_kwargs['removeParents'] = ','.join(parents)
+        elif not target_folder_id and parents:
+            print("NOTE: no --folder given; leaving file in its existing parent(s): "
+                  + ','.join(parents), file=sys.stderr)
         uploaded = service.files().update(**update_kwargs).execute()
         action = 'UPDATED existing file (ID and link unchanged)'
     else:

@@ -47,8 +47,39 @@ ALLOWED_TABLES = {
     'dms_mysql_jeeves_raw.companies',
     'dms_mysql_jeeves_raw.company_settings',
     'dms_mysql_jeeves_raw.instalments',
+    'dms_mysql_jeeves_raw.cities',
+    'dms_mysql_jeeves_raw.company_addresses',
+    'dms_mysql_jeeves_raw.company_statements',
+    'dms_mysql_jeeves_raw.collateral_records',
     'dms_mysql_underwriting_raw.taktile_data',
+    'master_dimensions.currency_lookup_dim',
+    # Added 2026-08-04 (Dream #80): dms_mysql_jeeves_raw.states (id -> statename) is REAL and
+    # confirmed; it was missing from this list while its sibling .cities was present, which is
+    # what pushed the agent to guess the nonexistent .state_lookup / .country_lookup names and
+    # broke the canonical AIG invoice query twice (2026-07-21, 2026-08-03).
+    'dms_mysql_jeeves_raw.states',
+    'analytics_sandbox.jurs_test',
+    'capital_markets_dm.rms_transactions',
+    'capital_markets_dm.intraday_collections',
+    'dms_mysql_jeeves_raw.satws_invoices',
 }
+# Added 2026-07-18 (Dream #63): jurs_test/rms_transactions/intraday_collections/satws_invoices
+# are all documented in this skill's own SKILL.md (Additional Tables section + worked example
+# queries) but were missing from the whitelist -- same lagging-whitelist pattern as Dream #60.
+# rms_transactions specifically was needed for the 2026-07-17 Kroll currency rebuild and had to
+# be re-approved via --allow-tables. NOTE: dms_mysql_jeeves_raw has a much longer "Full Table
+# List (209 tables)" reference further down in SKILL.md -- those are NOT whitelisted here by
+# design (scope decision, not an oversight); flagged to Brian separately if broader access is
+# ever needed.
+# Added 2026-07-15 (Dream #60): cities/company_addresses/company_statements/collateral_records
+# are all documented in this skill's own SKILL.md schema reference but were rejected at runtime
+# as "not in the allowed list" across 3+ threads (2026-07-13/14, incl. AIG TEX file validation) --
+# whitelist was lagging the documented reference, not a real access restriction.
+# Added 2026-07-18 (Dream #63): master_dimensions.currency_lookup_dim resolves numeric ->
+# alpha currency codes (join on cur.numeric_code = t.local_currency from rms_transactions).
+# Confirmed correct table for "customer currency" asks. Do NOT guess
+# dms_mysql_jeeves_raw.country_lookup / currency_lookup / state_lookup -- those do not
+# exist and burned an --allow-tables retry loop on 2026-07-17 (Kroll payment tracing file).
 
 DEPRECATED_COLUMNS = {
     'v0_charge_off_amount_usd': 'Use balance_usd WHERE dt = charge_off_dt instead',
@@ -539,7 +570,7 @@ def main():
         elif 'relation' in err_msg.lower() and 'does not exist' in err_msg.lower():
             print("Hint: Check table name. Allowed tables: " + ', '.join(sorted(ALLOWED_TABLES)), file=sys.stderr)
         elif 'permission denied' in err_msg.lower():
-            print("Hint: The analytics_dev user may not have access to this table.", file=sys.stderr)
+            print("Hint: The bmauck user may not have access to this table.", file=sys.stderr)
         elif 'statement_timeout' in err_msg.lower() or 'canceling statement' in err_msg.lower():
             print(f"Hint: Query exceeded {STATEMENT_TIMEOUT_MS // 1000}s timeout. Simplify the query or add tighter filters.", file=sys.stderr)
         elif 'invalid input syntax' in err_msg.lower():

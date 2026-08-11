@@ -165,7 +165,7 @@ def _setup_dspy():
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY not set")
 
-    model = os.environ.get("DSPY_MODEL", "anthropic/claude-sonnet-5")
+    model = os.environ.get("DSPY_MODEL", "anthropic/claude-opus-5")
     lm = dspy.LM(model, api_key=api_key, max_tokens=1024)
     dspy.configure(lm=lm)
     return lm
@@ -207,11 +207,17 @@ class JeevesSQL(dspy.Module):
             raise ValueError("Generated query uses deprecated v0_charge_off_amount_usd")
 
         # loc_tape queries must have filters
-        if "loc_tape" in sql_lower and "charge_off_dt" not in sql_lower:
-            if "charge_off_flag" not in sql_lower:
+        if "loc_tape" in sql_lower:
+            # charge_off_flag is legitimately omitted on charge-off cohort queries
+            # (they key off charge_off_dt), but is_in_repayment is NOT exempt --
+            # SKILL.md: "must be applied to ALL loc_tape queries without exception ...
+            # even when querying charged-off accounts". Aligned 2026-08-07 after the
+            # 24-month Mastercard charge-off cut shipped at $4.64M all-in instead of
+            # $3.86M ex-RPP (a $778K / 16.8% difference) because this guard stayed silent.
+            if "charge_off_dt" not in sql_lower and "charge_off_flag" not in sql_lower:
                 warnings.append("Missing charge_off_flag = false filter on loc_tape")
             if "is_in_repayment" not in sql_lower:
-                warnings.append("Missing is_in_repayment = false filter on loc_tape")
+                warnings.append("Missing is_in_repayment filter on loc_tape (required even for charge-off cohorts)")
 
         # transactions_ssot must filter test companies
         if "transactions_ssot" in sql_lower and "is_company_test" not in sql_lower:

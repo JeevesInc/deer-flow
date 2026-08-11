@@ -119,7 +119,41 @@ def _state_completed_today(state: dict, key: str, today_str: str) -> bool:
     is the only persistent guard.
     """
     val = state.get(key, '')
-    return val == today_str or val == f"{today_str}_running"
+    # '_failed' also blocks: the run already fired today and errored (Slack alert
+    # posted). Without this, the new failure state would re-launch the task on
+    # every poll tick and spam the channel. It stays failed until re-run by hand,
+    # which is correct for infra faults like a Zscaler deauth that need a human.
+    return (val == today_str
+            or val == f"{today_str}_running"
+            or val == f"{today_str}_failed")
+
+
+def _wait_for_bb_pipeline(today_str: str, max_wait_seconds: int = 600, poll_interval: int = 15) -> bool:
+    """Block until BOTH today's US Bridge and MX SOFOM BB builds are fully
+    'completed' (not just '_running') in _report_scheduler_state.json, or
+    until max_wait_seconds elapses.
+
+    Root-caused 2026-07-15: run_weekly_bb, run_mx_bb, and run_morning_brief
+    all launch as parallel background threads in the same loop tick (all
+    gated only on their OWN '_running'/'completed' key, with no cross-task
+    dependency). The brief posted 3s after launch while the actual tape
+    builds/merges took another 2-5 minutes -- cm_morning_brief.py then read
+    _cap_markets_state.json before the day's file existed, rendering
+    $0/n/a instead of erroring. This gate makes the brief wait on the
+    OTHER two tasks' exact 'completed' state (== today_str), not the
+    looser _state_completed_today() check (which treats '_running' as
+    already-handled -- correct for preventing double-launch, wrong for
+    "is the data actually ready").
+    """
+    waited = 0
+    while waited < max_wait_seconds:
+        with _state_lock:
+            state = load_state()
+        if state.get('last_bb') == today_str and state.get('last_mx_bb') == today_str:
+            return True
+        time.sleep(poll_interval)
+        waited += poll_interval
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -162,14 +196,21 @@ def _launch_background(task_name: str, fn, state_key: str, today_str: str):
     log.info(f"State[{state_key}] = '{today_str}_running'")
 
     def _wrapper():
+        outcome = today_str
         try:
             fn()
+        except BaseException as exc:
+            # Never record a failed run as complete -- downstream gates
+            # (morning brief, dashboard) treat '<today>' as "data is ready".
+            outcome = f"{today_str}_failed"
+            log.error(f"{task_name} failed: {exc}", exc_info=True)
         finally:
             with _state_lock:
                 s = load_state()
-                s[state_key] = today_str
+                s[state_key] = outcome
                 save_state(s)
-            log.info(f"State[{state_key}] = '{today_str}' (completed)")
+            status = 'completed' if outcome == today_str else 'FAILED'
+            log.info(f"State[{state_key}] = '{outcome}' ({status})")
 
     t = threading.Thread(target=_wrapper, name=task_name, daemon=True)
     _running_tasks[task_name] = t
@@ -312,7 +353,10 @@ def _find_axel_distribution_email(today_str: str) -> dict | None:
         gmail = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gmail)
         service  = gmail._get_service()
-        query    = f'from:axel@tryjeeves.com subject:Distribution subject:F/12339 after:{today_str}'
+        # Sender varies -- Axel usually sends, but William Filho has covered for
+        # him (confirmed 2026-07-23: William sent the day's distribution email
+        # and the Axel-only query missed it, stalling the cron all morning).
+        query    = f'(from:axel@tryjeeves.com OR from:william.filho@tryjeeves.com) subject:Distribution subject:F/12339 after:{today_str}'
         result   = service.users().messages().list(userId='me', q=query, maxResults=5).execute()
         messages = result.get('messages', [])
         if not messages:
@@ -597,6 +641,10 @@ def run_mx_bb():
             f":warning: *MX Borrowing Base -- {yesterday}* failed to generate.\n"
             f"`{str(exc)[:400]}`\nRun manually: `build_mx.py --end-date {yesterday}`"
         )
+        # Re-raise so _launch_background records '<today>_failed' rather than
+        # marking the day complete. Swallowing it here is what let the
+        # 2026-08-08 build report success in state while producing nothing.
+        raise
 
 
 def run_weekly_bb():
@@ -745,12 +793,61 @@ def run_weekly_bb():
 
 
 def run_morning_brief():
-    """Post daily Capital Markets brief to Brian's Slack DM (~8am weekdays)."""
+    """Post daily Capital Markets brief to Brian's Slack DM (~8am weekdays).
+
+    Root-caused 2026-07-15: this used to fire immediately (3s after launch)
+    in parallel with run_weekly_bb/run_mx_bb -- and separately,
+    cap_markets_metrics_refresh.py (which writes the _cap_markets_state.json
+    this brief's cm_morning_brief.py reads) runs on its OWN independent
+    1-hour cron, so its last snapshot before the brief fired could be
+    mid-build/stale for today's date label. Two unsynchronized crons racing
+    on the same state file produced the $0/n/a brief.
+
+    Fix: (1) wait for today's US Bridge + MX SOFOM BB builds to report
+    'completed' via _wait_for_bb_pipeline, then (2) force a synchronous
+    cap_markets_metrics_refresh.py run so _cap_markets_state.json reflects
+    the just-finished tapes -- instead of trusting whatever the independent
+    hourly refresh cron last happened to write -- THEN post.
+    """
     import subprocess
+    today_str = datetime.now().date().isoformat()
+    # deer-flow root: parents[3] from skills/custom/jeeves-borrowing-base/.
+    deer_flow_root = Path(__file__).resolve().parents[3]
+    scripts_dir = deer_flow_root / 'backend' / 'scripts'
+
+    log.info("Waiting for today's BB pipelines before posting morning brief...")
+    ready = _wait_for_bb_pipeline(today_str)
+    if not ready:
+        log.warning(
+            "BB pipelines not marked 'completed' after max wait -- "
+            "posting brief anyway with a staleness warning."
+        )
+
+    # Force a fresh metrics snapshot now that the tapes are (believed) built,
+    # rather than trusting cap_markets_metrics_refresh.py's own independent
+    # hourly cadence to have already caught up.
+    refresh_script = str(scripts_dir / 'cap_markets_metrics_refresh.py')
+    try:
+        r = subprocess.run(
+            [sys.executable, refresh_script],
+            capture_output=True, text=True, timeout=240
+        )
+        if r.returncode == 0:
+            log.info("Pre-brief metrics refresh OK.")
+        else:
+            log.error(f"Pre-brief metrics refresh failed: {r.stderr.strip()[-300:]}")
+    except Exception as e:
+        log.error(f"Pre-brief metrics refresh error: {e}")
+
+    if not ready:
+        _post_slack(
+            ":warning: Morning brief delayed -- BB pipeline still building after "
+            "10 min. Figures below may be incomplete/stale."
+        )
+
     log.info("Posting morning Capital Markets brief...")
     # cm_morning_brief.py lives in backend/scripts/, not skills/custom/scripts/.
-    # parents[3] from skills/custom/jeeves-borrowing-base/ == the deer-flow root.
-    script = str(Path(__file__).resolve().parents[3] / 'backend' / 'scripts' / 'cm_morning_brief.py')
+    script = str(scripts_dir / 'cm_morning_brief.py')
     try:
         result = subprocess.run(
             [sys.executable, script],

@@ -222,6 +222,10 @@ def start_crons() -> None:
     _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
     _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
+    # linear-mention-monitor: watches for Linear @mentions of Brian via Gmail
+    # notification emails and autonomously handles them (2026-07-08, Brian: "when
+    # I'm tagged I want you to handle it... automatic").
+    _load_and_start("linear-mention-monitor", skills_dir / "linear" / "linear_mention_cron.py")
     # gmail-watch-renew: Gmail watch expires after 7 days; without renewal,
     # Pub/Sub silently stops and inbound-email proposals die (33-day outage
     # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.

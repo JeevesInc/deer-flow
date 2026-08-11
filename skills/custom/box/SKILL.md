@@ -56,6 +56,36 @@ No allowed-origin/CORS or redirect URI is needed for CCG (server-side).
     me = client.users.get_user_me()
     items = client.folders.get_folder_items("0")   # "0" = root
 
+## Operational hard rules (learned the hard way)
+
+- **Never satisfy a Box deliverable with a shortcut, web_link, or bookmark.** Diligence
+  folders must contain REAL FILE BYTES. A Box shortcut/Drive-shortcut looks like a filed
+  document in the folder listing but downloads/syncs as a 0-byte stub -- Brian discovered
+  this on 2026-07-24 when Pedros Kroll underwriting files uploaded as stubs
+  ("they were just stubs, and not real files"). Always download the real content and
+  `uploads.upload_file` the bytes into the target folder.
+- **Verify every write.** After any upload/copy/move, re-list the parent folder and assert
+  each intended item has `type == "file"` and `size > 0`. Report the count of 0-byte items
+  explicitly -- a 0-byte file in a data room is a defect whether it came from a shortcut or
+  from a bad source export (the 6 empty SCR reports -- 2Eletro, Copastur, Easytech, Flytour,
+  Onfly, Voll -- were bad at source and had to be re-pulled from Pedro).
+- **Folders are addressed by numeric ID, never by name.** Passing a name yields
+  `Cannot access folder (ID: Kroll)`, which reads like a permissions error but is not.
+  Resolve name -> ID first by listing the parent (`folders.get_folder_items`) or searching.
+  Known IDs: Kroll root `391275668946`, Phase 1 `391276628990`.
+- **Do not guess `box_sdk_gen` class names.** There is no `UpdateFileByIdRequestBody` and no
+  request-body class for search -- both were invented and cost ImportErrors on 2026-07-24.
+  The managers take plain kwargs:
+  `client.files.update_file_by_id(file_id, name="New Name.pdf")`,
+  `client.search.search_for_content(query="...", ancestor_folder_ids=["<id>"])`,
+  `client.files.delete_file_by_id(file_id)`,
+  `client.uploads.upload_file(UploadFileAttributes(name=..., parent=UploadFileAttributesParentField(id=...)), file=<bytes stream>)`.
+  If unsure, `dir(box_sdk_gen.managers.files.FilesManager)` / `inspect.signature(...)` before writing the script.
+  `box_sdk_gen` IS installed in the backend venv -- run scripts with `$PYTHON_PATH`.
+- **Sorting a tree by recency** (Brian asks this when hunting "the folder someone touched"):
+  request `fields=["name","modified_at","size","type"]` and sort client-side on `modified_at`;
+  Box folder listings are not returned in modified order.
+
 ## Connectivity self-test
     uv run python C:/Jeeves/redshift-bot/deer-flow/skills/custom/box/box_client.py
 Prints the authenticated identity and lists the root folder, or a clear config error.

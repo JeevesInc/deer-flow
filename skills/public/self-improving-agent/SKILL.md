@@ -27,6 +27,13 @@ This is a **universal self-improvement system** that learns from ALL skill exper
 
 ## Skill Management Tool
 
+Always invoke `skill_manage.py` as a subprocess (`python C:/Jeeves/redshift-bot/deer-flow/skills/public/self-improving-agent/scripts/skill_manage.py ...`) -- never `import skill_manage as sm` from an ad-hoc workspace script. That import pattern has no sibling-relative path setup and throws ModuleNotFoundError (cost multiple retries 2026-07-13). If a one-off script genuinely needs its functions, add this first:
+```python
+import sys, os
+sys.path.insert(0, os.path.join(os.environ.get('SKILLS_PATH', 'C:/Jeeves/redshift-bot/deer-flow/skills'), 'public', 'self-improving-agent', 'scripts'))
+import skill_manage as sm
+```
+
 Use the `skill_manage.py` CLI for all skill operations:
 
 ```bash

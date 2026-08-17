@@ -31,6 +31,27 @@ python /mnt/skills/custom/gmail/gmail_tool.py read <message_id>
 ```
 
 ### Download attachments
+
+**HARD RULE -- when a request email carries an attachment, that attachment IS the
+specification.** Before building ANY deliverable in response to an inbound request,
+run `download <message_id>` and open every attachment. If the requester attached a
+workbook, build inside THAT workbook's structure (tab name, row labels, column
+layout) -- do not recreate a look-alike, and never infer the format from a slide,
+screenshot or a prior version of the report. `read` now prints an `Attachments (n)`
+block; an empty body-only read of a request you are about to build against means you
+have not verified there is no template.
+
+**Resolve the template from the message that MADE the request — not from an earlier
+message in the same thread.** On 2026-08-14 the format question was answered off
+`6. Quarterly Chargeoffs - Mastercard.pdf` (a deck slide attached to a prior message)
+while the actual request carried `7. Mastercard - Brazil Receivables Report Jun 2026.xlsx`;
+the answer to Brian was wrong for three turns until the right message was opened
+("Right — I was looking at the wrong message"). Print the message ID and the attachment
+filename you are conforming to, so the claim is checkable. Cost two corrections on the 2026-08-14
+Mastercard Brazil receivables aging file: the first build copied a deck slide while
+Alex's Excel template sat attached to the same email ("No he attached an Excel file
+along with the request. That's what he wanted to conform to").
+
 ```bash
 python /mnt/skills/custom/gmail/gmail_tool.py download <message_id>
 python /mnt/skills/custom/gmail/gmail_tool.py download <message_id> --output-dir /mnt/user-data/outputs
@@ -67,7 +88,7 @@ If Brian asks to tweak dispatch config: `python /mnt/skills/custom/gmail/dispatc
 
 These live in this skill directory but run inside the gateway via `cron_supervisor.py`:
 
-- **Dreams (`dreams_cron.py`)** -- once nightly in the 2-8am PT window. Behavior/infra review + silent memory consolidation (STRATEGIC_CONTEXT.md, SOUL.md size budget). Applies changes directly -- there is NO approve/discard step. Messages Brian ONLY if it found real problems; a silent dream is a successful dream. Manual run: `uv run python dreams_cron.py once`.
+- **Dreams (`dreams_cron.py`)** -- once nightly in the 2-8am PT window. Behavior/infra review + silent memory consolidation (STRATEGIC_CONTEXT.md, SOUL.md size budget). Applies changes directly -- there is NO approve/discard step. Messages Brian ONLY if it found real problems; a silent dream is a successful dream. **Caveat verified 2026-08-17: the dream run is NOT actually silent.** `autonomous_dispatch.py::_run_and_report` posts `*Dream — completed:*` plus the first 3000 chars of the agent's final answer to Brian's DM unconditionally; `notification=None` suppresses only the start ping. Dream #89's full write-up landed in his DM 2026-08-16 02:10 next to the short review. Until that is fixed, treat a dream's (or latent-learning's) FINAL ANSWER as a message to Brian: short, no consolidation stats, no Drive links, no insights section. Manual run: `uv run python dreams_cron.py once`.
 - **EOD review (`eod_review_cron.py`)** -- daily from 17:00 (first tick past the hour). Surfaces unhandled items as a HIGH/MEDIUM/LOW briefing to Brian's Slack DM. **Briefing only -- never creates Gmail drafts** (Brian deletes them). Manual: `uv run python eod_review_cron.py once`.
 - **Weekly open items (`weekly_open_items_cron.py`)** -- Monday 08:00 (catches up after downtime). Sweeps the past 7 days for threads still awaiting Brian, live Gmail + Slack only.
 - **Proposal learner (`proposal_learner.py`)** -- runs inside the EOD cycle; pairs webhook proposals with Brian's replies and stores classifier patterns in mem0 (`proposal-patterns` namespace).
@@ -123,7 +144,7 @@ python action_learner.py --consolidate --force
 - When drafting, match Brian's style: direct, short, key points up front
 - Show what you drafted and confirm it is in the Drafts folder
 - Prefer drive:<ID> for files already on Drive rather than re-uploading. External/counterparty-facing attachments -- naming rule: the goal is a CLEAN, professional filename, not necessarily the unchanged original. Never include (a) internal process/editing words -- Trimmed, Draft, v2, Redacted, WIP, etc. -- these expose internal editing history to the counterparty, and (b) any other counterparty/party name that does not match who you are sending it to (e.g. never send NB a file whose name references BBVA). Rename when needed to strip either of those, but keep the rest of the original name/content descriptor intact.
-- **STATUS RULE -- never carry a "drafted, awaiting Brian's send" claim forward without re-checking `in:sent` for that thread.** Brian sends drafts himself and that leaves no bot-visible signal, so any later restatement (EOD review, dream comms scan, STRATEGIC_CONTEXT entry) must run `search "in:sent newer_than:Nd"` (or read the thread) first. The Kroll/Hexa reply was reported as sitting unsent for two days after Brian had already sent it 2026-07-24 14:48 PT.
+- **STATUS RULE -- never make ANY statement about a draft's state without re-checking `in:sent` for that thread FIRST.** This covers status reports, EOD/dream restatements, AND in-thread clarifying questions -- on 2026-08-12 the agent asked Brian which action he wanted on the Shalom NB-requirements draft ("the draft is sitting unsent in your Drafts") at 14:46 PT, six hours after Brian had already answered Shalom himself at 08:57 PT. The right move was to check `in:sent`, see the sent reply, and say "you already answered this -- want the stale draft deleted?" A draft whose thread already has an outbound message from Brian is SUPERSEDED, not pending; report it that way and offer to delete it. Never carry a "drafted, awaiting Brian's send" claim forward without re-checking `in:sent` for that thread.** Brian sends drafts himself and that leaves no bot-visible signal, so any later restatement (EOD review, dream comms scan, STRATEGIC_CONTEXT entry) must run `search "in:sent newer_than:Nd"` (or read the thread) first. The Kroll/Hexa reply was reported as sitting unsent for two days after Brian had already sent it 2026-07-24 14:48 PT.
 - CLASSIFIER RULE -- reply-all threads: Default to FYI_ONLY for Brian. Check the literal addressee first: the greeting line ("Hi X and team") and/or the To: field of the specific message, not just who is CC'd on the broader thread. Only flag ACTIONABLE for Brian if: (a) he is explicitly named as addressee/greeted, (b) the ask requires info or authority only Brian has with no other Jeeves person (counsel, exec, another CC'd employee) more directly addressed, or (c) the reply is responding to a message Brian himself sent. Being CC'd or present on a reply-all thread where someone else (e.g. outside counsel, another Jeeves exec) is the named addressee = FYI_ONLY, even if the topic is in Brian's general domain (e.g. Alex asking Goodwin's Eliza Chute for a Vista issues-list status, with Brian only CC'd, is FYI_ONLY -- not "Brian's team" or actionable for Brian). Corrected 2026-07-14 after Brian flagged repeated over-flagging: "you're highlighting a lot of messages that don't require action from me."
 - **Never paste a list of more than ~5 items (customer names, account IDs, row data, etc.) inline in an email body.** Attach a file instead. Violated on 2026-07-01 (25 customers pasted inline, Brian: "that was ugly af") despite already being a standing rule -- treat as hard, not stylistic, for any draft with list-shaped content.
 - **For live deal-negotiation replies (Vista/NB issue lists, term pushback, etc.), never invent Jeeves' business/legal rationale or positions on Brian's behalf** -- not even as a "draft to edit." Two attempts on 2026-07-08 (thin yes/no, then full invented rationale) were both rejected as garbage before Brian wrote it himself. These need Brian's actual arguments. If asked to draft inline replies to a negotiation issues list, ask Brian for his position on each point first (or what specifically was wrong after a first attempt) rather than guessing bigger on a second attempt.

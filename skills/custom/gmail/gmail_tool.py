@@ -243,6 +243,26 @@ def cmd_read(message_id):
     print(f"Thread:  {msg.get('threadId', 'N/A')}")
     print(f"---")
 
+    # HARD RULE: a request's attachments ARE part of the request. Surface them here so
+    # a caller reading an email can never miss an attached template/workbook.
+    # (2026-08-14: the Mastercard aging deliverable was built off a slide image while
+    # Alex's Excel template sat attached to the same request email -> two corrections.)
+    def _walk_atts(part, found):
+        fn = part.get('filename') or ''
+        body_meta = part.get('body', {}) or {}
+        if fn and body_meta.get('attachmentId'):
+            found.append((fn, body_meta.get('size', 0), part.get('mimeType', '')))
+        for sub in part.get('parts', []) or []:
+            _walk_atts(sub, found)
+        return found
+
+    atts = _walk_atts(msg.get('payload', {}), [])
+    if atts:
+        print(f"Attachments ({len(atts)}) -- download with: gmail_tool.py download {message_id}")
+        for fn, size, mt in atts:
+            print(f"  - {fn}  ({size} bytes, {mt})")
+        print("---")
+
     body = _get_body(msg.get('payload', {}))
     if body:
         print(body[:5000])

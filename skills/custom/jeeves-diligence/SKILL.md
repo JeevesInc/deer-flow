@@ -98,6 +98,17 @@ allowed-tools:
     explicitly that it is vision-derived, and label every derived figure
     [Unverified — image extraction]. More than one image needed = stop and get the file.
 
+12. **The requester's attached file is the format of record — enumerate attachments
+    BEFORE building anything.** Rule 11 covers finding a source file for *data*; this
+    covers *format*. A counterparty data request that arrives with a workbook attached
+    is telling you the exact shape it wants back: build inside that workbook's tab and
+    row/column labels rather than producing a well-formed file of your own design.
+    Run `gmail_tool.py download <message_id>` on the request itself as step one, and
+    when Brian asks "is this the same format as the file he attached?" the answer must
+    be traceable to the opened attachment, not to a deck slide or a prior report.
+    Cost two rebuild cycles on the 2026-08-14 Mastercard Brazil receivables aging file
+    (Alex's Sheet1 template: FAIXA ATRASO rows × month columns).
+
 ---
 
 ## Core Rule: Never Fabricate

@@ -22,6 +22,7 @@ Env vars:
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -126,6 +127,26 @@ def _state_completed_today(state: dict, key: str, today_str: str) -> bool:
     return (val == today_str
             or val == f"{today_str}_running"
             or val == f"{today_str}_failed")
+
+
+def _sofom_blocked_today(state: dict, key: str, today_str: str) -> bool:
+    """Like _state_completed_today, but a '_failed' SOFOM run is RETRYABLE.
+
+    2026-08-17: the webhook fast-path fired at 07:03, died because a Zscaler
+    ZPA deauth had taken Redshift down, and still stamped the day complete.
+    Both the fast-path and this hourly backstop then treated the day as done
+    and skipped silently — a ~90-second network blip cost the whole day's tape,
+    and nobody noticed until Brian asked.
+
+    Retrying hourly is safe here: the failure mode is almost always a transient
+    tunnel outage (which now self-heals — see the ZPA auto-recovery in
+    _shared/redshift.py), the task is idempotent (it regenerates the tape and
+    replaces the Gmail draft), and hourly is far too slow to spam Slack. The
+    *webhook* path deliberately keeps using _state_completed_today, so
+    push-driven retries stay blocked and only this hourly path retries.
+    """
+    val = state.get(key, '')
+    return val == today_str or val == f"{today_str}_running"
 
 
 def _wait_for_bb_pipeline(today_str: str, max_wait_seconds: int = 600, poll_interval: int = 15) -> bool:
@@ -340,9 +361,23 @@ def _run_agent_task(task_message: str) -> str | None:
 # Gmail helper — find today's SOFOM distribution email from Axel
 # ---------------------------------------------------------------------------
 
-def _find_axel_distribution_email(today_str: str) -> dict | None:
-    """Search Gmail for today's SOFOM distribution email from Axel.
-    Returns {message_id, thread_id, subject} or None.
+# The distribution email is identified by its SUBJECT alone. Sender is not part
+# of the contract: Axel usually sends it, William Filho has covered for him
+# (2026-07-23, when a from:axel-only query silently missed the day and stalled
+# the tape), and anyone else may cover next. Keep this in sync with
+# _SOFOM_SUBJECT_RE in backend/webhook_receiver.py -- the Pub/Sub push is the
+# primary trigger and this poll is only the backstop for a missed push, so the
+# two must agree on what counts as the email.
+SOFOM_SUBJECT_RE = re.compile(r'F/12339\s*>\s*F/12340\s*Distribution', re.IGNORECASE)
+
+
+def _find_sofom_distribution_email(today_str: str) -> dict | None:
+    """Find today's SOFOM distribution email by subject, from any sender.
+
+    Returns {message_id, thread_id, subject} or None. Gmail's query language
+    tokenises '/' and '>' unhelpfully, so we search broadly on the one reliable
+    keyword plus today's date and apply SOFOM_SUBJECT_RE client-side — that way
+    the poll and the webhook fast-path match byte-for-byte the same emails.
     """
     try:
         import importlib.util
@@ -353,28 +388,41 @@ def _find_axel_distribution_email(today_str: str) -> dict | None:
         gmail = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(gmail)
         service  = gmail._get_service()
-        # Sender varies -- Axel usually sends, but William Filho has covered for
-        # him (confirmed 2026-07-23: William sent the day's distribution email
-        # and the Axel-only query missed it, stalling the cron all morning).
-        query    = f'(from:axel@tryjeeves.com OR from:william.filho@tryjeeves.com) subject:Distribution subject:F/12339 after:{today_str}'
-        result   = service.users().messages().list(userId='me', q=query, maxResults=5).execute()
-        messages = result.get('messages', [])
-        if not messages:
+        # -from:me -in:drafts: with the sender filter gone, our OWN reply and the
+        # draft this job creates both match the subject. Replying to those would
+        # be nonsense. This excludes self-authored mail without pinning the
+        # search to any particular incoming sender.
+        query    = f'subject:Distribution after:{today_str} -from:me -in:drafts -in:trash -in:spam'
+        result   = service.users().messages().list(userId='me', q=query, maxResults=25).execute()
+        matches  = []
+        for ref in result.get('messages', []):
+            msg = service.users().messages().get(
+                userId='me', id=ref['id'],
+                format='metadata',
+                metadataHeaders=['Subject', 'From', 'Date']
+            ).execute()
+            headers = {h['name']: h['value'] for h in msg.get('payload', {}).get('headers', [])}
+            subject = headers.get('Subject', '')
+            if not SOFOM_SUBJECT_RE.search(subject):
+                continue
+            matches.append((int(msg.get('internalDate', '0')), ref['id'], msg.get('threadId'),
+                            subject, headers.get('From', '?')))
+        if not matches:
             return None
-        msg     = service.users().messages().get(
-            userId='me', id=messages[0]['id'],
-            format='metadata',
-            metadataHeaders=['Subject', 'From', 'Date']
-        ).execute()
-        headers = {h['name']: h['value'] for h in msg.get('payload', {}).get('headers', [])}
-        return {
-            'message_id': messages[0]['id'],
-            'thread_id':  msg.get('threadId'),
-            'subject':    headers.get('Subject', ''),
-        }
+        # Oldest match = the original distribution email, not a later reply-all
+        # on the same thread.
+        matches.sort()
+        _, msg_id, thread_id, subject, sender = matches[0]
+        log.info(f'SOFOM distribution email matched: {subject!r} from {sender}'
+                 + (f' ({len(matches)} candidates, used oldest)' if len(matches) > 1 else ''))
+        return {'message_id': msg_id, 'thread_id': thread_id, 'subject': subject}
     except Exception as e:
         log.error(f'Gmail search for distribution email failed: {e}')
         return None
+
+
+# Back-compat alias: older code and code-backups call the Axel-specific name.
+_find_axel_distribution_email = _find_sofom_distribution_email
 
 
 # ---------------------------------------------------------------------------
@@ -466,6 +514,7 @@ def run_sofom_distribution(message_id: str, subject: str):
             f'Draft reply ready in Gmail. Review and send.'
         )
         log.info('SOFOM distribution completed.')
+        return True
 
     except Exception as e:
         log.error(f'SOFOM distribution failed: {e}', exc_info=True)
@@ -473,6 +522,10 @@ def run_sofom_distribution(message_id: str, subject: str):
             f':warning: SOFOM tape failed for {repr(subject)}: `{e}`\n'
             f'Run manually: reply to `{message_id}` with 3-day tape ({three_days_ago} → {yesterday}).'
         )
+        # Callers stamp scheduler state from this return value. Returning False
+        # rather than raising keeps the webhook fast-path's fallback behaviour
+        # intact, but the outcome is no longer invisible to the caller.
+        return False
 
 
 def run_portfolio_report():
@@ -937,8 +990,12 @@ def run_loop():
                     _launch_background('portfolio_report', run_portfolio_report, month_key, today_str)
 
                 # ── US Borrowing Base ─────────────────────────────────────
-                # Every weekday (used by dashboard).
-                if (not is_weekend
+                # DISABLED 2026-08-10: the CIM US bridge facility is TERMINATED and
+                # replaced by the NB facility (Brian, 2026-08-10). Bridge borrowing bases
+                # are no longer produced. Replacement cadence is an NB borrowing base every
+                # Monday, as of the prior Sunday (Brian, 2026-08-11). To re-enable temporarily, set env BRIDGE_BB_ENABLED=1.
+                if (os.environ.get('BRIDGE_BB_ENABLED') == '1'
+                        and not is_weekend
                         and not _state_completed_today(state, 'last_bb', today_str)
                         and not state.get('last_bb', '').endswith('_running')):
                     _launch_background('weekly_bb', run_weekly_bb, 'last_bb', today_str)
@@ -967,35 +1024,53 @@ def run_loop():
                     _launch_background('cico_dashboard', run_cico_dashboard,
                                        'last_cico_dashboard', today_str)
 
-                # ── SOFOM distribution tape ───────────────────────────────
-                # Weekdays only — Axel doesn't send on weekends.
-                # Fires once per day as soon as his email is detected.
-                if not is_weekend:
-                    sofom_key = 'last_sofom_distribution'
-                    if not _state_completed_today(state, sofom_key, today_str):
-                        eml = _find_axel_distribution_email(today_str)
-                        if eml:
-                            log.info(f"Found Axel distribution email: {eml['subject']}")
-                            # Mark running synchronously (direct fn, not threaded).
-                            # finally-stamp like _launch_background does: without
-                            # it, an exception here leaves '{today}_running' stuck
-                            # and silently blocks retries until the next restart's
-                            # reconcile pass (GW-F9).
-                            with _state_lock:
-                                state = load_state()
-                                state[sofom_key] = f"{today_str}_running"
-                                save_state(state)
-                            try:
-                                run_sofom_distribution(eml['message_id'], eml['subject'])
-                            finally:
-                                with _state_lock:
-                                    state = load_state()
-                                    state[sofom_key] = today_str
-                                    save_state(state)
-                        else:
-                            log.info('No Axel distribution email yet — retrying next hour.')
+            # ── SOFOM distribution tape ───────────────────────────────────
+            # Deliberately OUTSIDE the `now.hour >= 8` and weekday gates. The
+            # real trigger is the Pub/Sub push (webhook_receiver's SOFOM
+            # fast-path), which fires the moment an email matching the subject
+            # arrives — whatever the hour, whatever the day, whoever sent it.
+            # This poll exists only to catch a push that never landed (a lapsed
+            # Gmail watch has cost 33 days before), so gating it by office hours
+            # or weekdays would just reintroduce the blind spot it's here to
+            # cover. Identification is by subject alone — see SOFOM_SUBJECT_RE.
+            sofom_key = 'last_sofom_distribution'
+            # _sofom_blocked_today, not _state_completed_today: a run that
+            # failed earlier today (usually a Zscaler/Redshift blip) must be
+            # retryable, or one transient error silently costs the entire day.
+            if not _sofom_blocked_today(state, sofom_key, today_str):
+                eml = _find_sofom_distribution_email(today_str)
+                if eml:
+                    log.info(f"SOFOM distribution email found by backstop poll: {eml['subject']}")
+                    # Mark running synchronously (direct fn, not threaded).
+                    # finally-stamp like _launch_background does: without
+                    # it, an exception here leaves '{today}_running' stuck
+                    # and silently blocks retries until the next restart's
+                    # reconcile pass (GW-F9).
+                    with _state_lock:
+                        state = load_state()
+                        state[sofom_key] = f"{today_str}_running"
+                        # Records WHICH message we acted on, so the webhook
+                        # fast-path can tell a duplicate push of this same
+                        # email (skip) from a reply on the thread (classify).
+                        state[f'{sofom_key}_msg_id'] = eml['message_id']
+                        save_state(state)
+                    ok = False
+                    try:
+                        ok = bool(run_sofom_distribution(eml['message_id'], eml['subject']))
+                    finally:
+                        with _state_lock:
+                            state = load_state()
+                            # Record the real outcome. Stamping the bare
+                            # date on failure is what turned a 90-second
+                            # outage into a lost day on 2026-08-17.
+                            state[sofom_key] = today_str if ok else f"{today_str}_failed"
+                            save_state(state)
+                    if not ok:
+                        log.warning('SOFOM distribution failed — will retry on the next tick.')
                 else:
-                    log.info('Weekend — skipping SOFOM distribution check.')
+                    # Cheap, but it is the only evidence the backstop is alive.
+                    # A silently-skipped check is exactly how 2026-08-17 hid.
+                    log.info('SOFOM backstop: no matching distribution email today yet.')
 
         except Exception as e:
             log.error(f"Scheduler loop error: {e}")
@@ -1025,7 +1100,7 @@ if __name__ == '__main__':
         run_mx_bb()
     elif args.mode == 'sofom-distribution':
         today_str = datetime.now().date().isoformat()
-        eml = _find_axel_distribution_email(today_str)
+        eml = _find_sofom_distribution_email(today_str)
         if eml:
             run_sofom_distribution(eml['message_id'], eml['subject'])
         else:

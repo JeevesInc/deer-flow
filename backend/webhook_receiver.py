@@ -1164,21 +1164,47 @@ def _try_trigger_sofom_distribution(gmail_msg_id: str, subject: str) -> bool:
 
         today_str = datetime.now(timezone.utc).astimezone().strftime('%Y-%m-%d')
         key = 'last_sofom_distribution'
+        msg_key = f'{key}_msg_id'
         with rsc._state_lock:
             state = rsc.load_state()
             if rsc._state_completed_today(state, key, today_str):
-                log.info('SOFOM distribution already handled today -- skipping duplicate push for %s', gmail_msg_id)
-                return True
+                # Only a genuine duplicate push of the SAME message may skip
+                # classification. Anything else sharing this subject is a reply
+                # or a resend and must go through the normal pipeline.
+                #
+                # 2026-08-17: this returned True for every subject match, so
+                # Gustavo Villarreal's reply confirming the day's distribution
+                # amount ($110,210,423.47) was dropped before the classifier
+                # ever saw it -- no proposal, no Slack, nothing. The reply from
+                # the trustee is arguably the most important message on the
+                # thread, and it was the one guaranteed to be swallowed.
+                if state.get(msg_key) == gmail_msg_id:
+                    log.info('SOFOM distribution already handled today -- skipping duplicate push for %s', gmail_msg_id)
+                    return True
+                log.info('SOFOM tape already done today; %s is a different message on the '
+                         'thread (reply/resend) -- passing to normal classification', gmail_msg_id)
+                return False
             state[key] = f'{today_str}_running'
+            state[msg_key] = gmail_msg_id
             rsc.save_state(state)
+        ok = False
         try:
             log.info('SOFOM fast-path: triggering distribution tape for %s (%s)', gmail_msg_id, subject)
-            rsc.run_sofom_distribution(gmail_msg_id, subject)
+            ok = bool(rsc.run_sofom_distribution(gmail_msg_id, subject))
         finally:
             with rsc._state_lock:
                 state = rsc.load_state()
-                state[key] = today_str
+                # Record the real outcome. This used to stamp the bare date
+                # unconditionally, so a failed run looked identical to a
+                # successful one: on 2026-08-17 the 07:03 run died on a
+                # ZPA-deauthed Redshift connection, stamped the day complete,
+                # and silently disabled the hourly backstop for the rest of
+                # the day. '_failed' still blocks duplicate push-driven runs
+                # here, but lets the hourly poll retry.
+                state[key] = today_str if ok else f'{today_str}_failed'
                 rsc.save_state(state)
+        if not ok:
+            log.warning('SOFOM fast-path run failed — hourly report_scheduler will retry today.')
         return True
     except Exception as e:
         log.error('SOFOM fast-path failed, falling back to normal classification: %s', e)

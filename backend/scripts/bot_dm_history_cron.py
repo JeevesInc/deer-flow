@@ -59,6 +59,22 @@ except ImportError:
 BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN", "")
 OWNER_USER_ID = os.environ.get("SLACK_OWNER_USER_ID", "")
 
+# Slackbot's DM is listed by conversations.list but its history is never
+# readable — Slack answers channel_not_found. It is also not reported as a bot
+# unless the app holds users:read, so the is_bot filter below doesn't catch it.
+_SKIP_USER_IDS = {"USLACKBOT"}
+
+# Slack errors that will never succeed on a retry. Left unhandled, these turn
+# into one WARNING per channel per poll forever: the Slackbot DM alone logged
+# 730 identical lines between 2026-08-14 and 2026-08-17, which is enough noise
+# to bury a real failure.
+_PERMANENT_CHANNEL_ERRORS = {
+    "channel_not_found",
+    "is_archived",
+    "not_in_channel",
+    "invalid_channel",
+}
+
 
 def _load_state() -> dict:
     if STATE_PATH.exists():
@@ -133,18 +149,45 @@ def poll_once(client: WebClient, bot_user_id: str, state: dict, user_cache: dict
             other_user_id = im.get("user", "")
             if not other_user_id or other_user_id == OWNER_USER_ID or other_user_id == bot_user_id:
                 continue
+            if other_user_id in _SKIP_USER_IDS:
+                continue
+
+            channel_id = im["id"]
+            chan_state = state.get(channel_id, {})
+            # Previously found to be permanently unreadable — don't spend an API
+            # call or a log line on it again.
+            if chan_state.get("skip_reason"):
+                continue
+
             info = _resolve_user(client, other_user_id, user_cache)
             if info.get("is_bot"):
                 continue
 
-            channel_id = im["id"]
-            last_ts = state.get(channel_id, {}).get("last_ts", "0")
+            last_ts = chan_state.get("last_ts", "0")
 
             # Pull only messages newer than last_ts
             try:
                 hist = client.conversations_history(channel=channel_id, oldest=last_ts, limit=200)
             except SlackApiError as e:
-                log.warning("conversations_history failed for %s: %s", channel_id, e)
+                err = ""
+                try:
+                    err = e.response.get("error", "") or ""
+                except Exception:
+                    pass
+                if err in _PERMANENT_CHANNEL_ERRORS:
+                    # Record it so this is the first and last time we log it.
+                    entry = dict(chan_state)
+                    entry.update({
+                        "skip_reason": err,
+                        "skipped_at": datetime.now().isoformat(timespec="seconds"),
+                        "user_id": other_user_id,
+                    })
+                    state[channel_id] = entry
+                    log.warning(
+                        "conversations_history permanently unavailable for %s (user %s): %s — "
+                        "skipping this channel from now on", channel_id, other_user_id, err)
+                else:
+                    log.warning("conversations_history failed for %s: %s", channel_id, e)
                 continue
 
             new_msgs = hist.get("messages", [])

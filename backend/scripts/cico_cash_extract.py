@@ -29,6 +29,7 @@ from pathlib import Path
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from PIL import Image
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -53,14 +54,45 @@ def _gmail_service():
     return build("gmail", "v1", credentials=creds, cache_discovery=False)
 
 
+def _payload_has_image(payload) -> bool:
+    if payload.get("mimeType", "").startswith("image/") and payload.get("body", {}).get("attachmentId"):
+        return True
+    return any(_payload_has_image(p) for p in (payload.get("parts") or []))
+
+
 def _fetch_latest_cico(svc):
+    """Newest CICO email that actually carries balance screenshots.
+
+    Broken until 2026-08-11: the query pinned from:axel@tryjeeves.com and took
+    exactly 1 result. The daily balances email moved to Mariana Herrera Cruz
+    ("YYMMDD CICO- Daily balances"), so the pinned query started matching an
+    unrelated Aug-4 diligence thread ("Schedule 5.22 ... vs CICO") that has no
+    images -> "No images to OCR; aborting" -> state frozen on 2026-07-27 cash
+    while the digest kept printing it as current.
+
+    Sender-agnostic now: scan newest-first, take the first message with an
+    image attachment (checked from the payload, no attachment download).
+    """
     res = svc.users().messages().list(
-        userId="me", q="subject:CICO from:axel@tryjeeves.com", maxResults=1
+        userId="me", q="subject:CICO has:attachment", maxResults=25
     ).execute()
     msgs = res.get("messages", [])
     if not msgs:
         raise RuntimeError("No CICO emails found")
-    return svc.users().messages().get(userId="me", id=msgs[0]["id"], format="full").execute()
+    skipped = []
+    for m in msgs:
+        full = svc.users().messages().get(userId="me", id=m["id"], format="full").execute()
+        hdrs = {h["name"]: h["value"] for h in full["payload"].get("headers", [])}
+        if _payload_has_image(full["payload"]):
+            if skipped:
+                log.info("Skipped %d CICO hit(s) with no images: %s",
+                         len(skipped), "; ".join(skipped[:5]))
+            return full
+        skipped.append(hdrs.get("Subject", "")[:60])
+    raise RuntimeError(
+        "No CICO email with image attachments in the last %d hits (checked: %s)"
+        % (len(msgs), "; ".join(skipped[:5]))
+    )
 
 
 def _collect_image_attachments(payload, out: list, svc, msg_id: str):
@@ -79,6 +111,65 @@ def _collect_image_attachments(payload, out: list, svc, msg_id: str):
 
 
 
+# ── Image conditioning ───────────────────────────────────────────────────────
+# The CICO screenshots arrive tiny (~456x950) with ~7px digit height. At that
+# size Claude reliably misreads single digits in the 8-figure totals — on
+# 2026-08-17 it read Total cash as 91,804,860 and 91,604,860 on two runs when
+# the true value was 91,604,850, and the reconciliation gate (correctly) threw
+# both away. Magnification is the fix: upscaling the same crop to ~2500px on
+# the long edge reads every figure exactly right, repeatably.
+_OCR_TARGET_LONG_EDGE = 2500
+# Band geometry for the totals pass. A band must be tall enough to hold
+# "Total cash" through "Total cash + restricted deposits" together, otherwise
+# no single band can satisfy the reconciliation check.
+_BAND_HEIGHT = 260
+_BAND_STRIDE = 120
+
+
+def _upscale(im, target: int = _OCR_TARGET_LONG_EDGE):
+    """Enlarge so the long edge is ~target px. Never downscales."""
+    factor = target / max(im.size)
+    if factor <= 1.0:
+        return im
+    return im.resize((round(im.width * factor), round(im.height * factor)), Image.LANCZOS)
+
+
+def _to_png_b64(im) -> str:
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, format="PNG")
+    return base64.standard_b64encode(buf.getvalue()).decode("ascii")
+
+
+def _is_blank(im, threshold: float = 0.01) -> bool:
+    """True when a band is essentially white — skips empty spacer rows so we
+    don't spend an API call on them."""
+    mono = im.convert("L").point(lambda p: 255 if p > 240 else 0)
+    dark = mono.histogram()[0]
+    return (dark / float(im.width * im.height)) <= threshold
+
+
+def _summary_bands(img_bytes: bytes):
+    """Yield overlapping, upscaled horizontal bands of one screenshot.
+
+    Banding (rather than upscaling the whole page) is what buys the
+    magnification: a full 456x950 page can only be enlarged ~2.6x before it
+    hits the long-edge budget, which still misreads digits. A 456x260 band
+    gets ~5.5x, which reads clean.
+    """
+    im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    if im.height <= _BAND_HEIGHT:
+        yield _upscale(im)
+        return
+    y = 0
+    while True:
+        band = im.crop((0, y, im.width, min(y + _BAND_HEIGHT, im.height)))
+        if not _is_blank(band):
+            yield _upscale(band)
+        if y + _BAND_HEIGHT >= im.height:
+            break
+        y += _BAND_STRIDE
+
+
 # ── Second-pass prompt: extract named summary totals ─────────────────────────
 _TOTALS_PROMPT = (
     "This is a screenshot from a Jeeves daily CICO cash report. Some images show "
@@ -92,10 +183,20 @@ _TOTALS_PROMPT = (
     "  total_cash_plus_restricted_usd: <number or null>\n"
     "}\n\n"
     "Rules:\n"
-    "- The line labeled DACA + pledged countries maps to daca_pledged_usd.\n"
-    "- The line labeled Total cash (main subtotal excl restricted) maps to total_cash_usd.\n"
-    "- Total restricted deposits accounts balance maps to total_restricted_usd.\n"
-    "- Total cash + restricted deposits maps to total_cash_plus_restricted_usd.\n"
+    "- Match the label EXACTLY. If the exact label is not in this image, return null.\n"
+    "- 'DACA + pledged countries' -> daca_pledged_usd.\n"
+    "- 'Total cash' (the standalone grand total line, immediately above the\n"
+    "  'DACA + pledged countries' line) -> total_cash_usd.\n"
+    "- 'Total restricted deposits accounts balance' -> total_restricted_usd.\n"
+    "- 'Total cash + restricted deposits' -> total_cash_plus_restricted_usd.\n"
+    "- NEVER use a section subtotal for these fields. In particular these are\n"
+    "  NOT the grand totals and must be ignored: 'Total operating accounts\n"
+    "  balance', 'Total credit - Card and Jeeves Pay accounts balance', 'Total\n"
+    "  prepaid - Card, Jeeves Pay, and stablecoin accounts balance', 'Total AP\n"
+    "  accounts balance', 'Demo/Testing accounts balance', 'Total not used bank\n"
+    "  accounts', 'Total self funded balances', 'Total client collateral\n"
+    "  balances', 'Total client balances'. Reading one of those as total_cash\n"
+    "  is the exact failure this pass exists to prevent.\n"
     "- Output valid JSON with double-quoted keys, plain numbers, no commas in numbers.\n"
     "- If a field is not visible in this image, return null for that field.\n"
     "- No prose, no markdown fences, just the raw JSON object."
@@ -112,37 +213,67 @@ def _extract_summary_totals(client, images: list) -> dict:
     """
     import re as _re
     merged: dict = {}
+    candidates: list = []
     for i, img_bytes in enumerate(images):
-        b64 = base64.standard_b64encode(img_bytes).decode("ascii")
-        resp = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=400,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {"type": "base64", "media_type": "image/png", "data": b64},
-                    },
-                    {"type": "text", "text": _TOTALS_PROMPT},
-                ],
-            }],
-        )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
-        text = _re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=_re.MULTILINE).strip()
-        try:
-            data = json.loads(text)
-        except (json.JSONDecodeError, ValueError):
+        for band_idx, band in enumerate(_summary_bands(img_bytes)):
+            resp = client.messages.create(
+                # Sonnet, not Haiku: the totals block is a dense multi-column table and
+                # Haiku misread "98,264,115" as "96,264,115" and mapped the
+                # cash+restricted line onto total_restricted (2026-08-11). These four
+                # numbers are the ones that reach the digest, so pay for the better read.
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=400,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": _to_png_b64(band)},
+                        },
+                        {"type": "text", "text": _TOTALS_PROMPT},
+                    ],
+                }],
+            )
+            text = "".join(b.text for b in resp.content if b.type == "text").strip()
+            text = _re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=_re.MULTILINE).strip()
+            try:
+                data = json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            cand = {k: float(v) for k, v in data.items()
+                    if k in ("daca_pledged_usd", "total_cash_usd", "total_restricted_usd",
+                             "total_cash_plus_restricted_usd")
+                    and isinstance(v, (int, float))}
+            if cand:
+                log.info("  Summary pass img %d band %d: %s", i + 1, band_idx,
+                         {k: round(v) for k, v in cand.items()})
+                candidates.append(cand)
+
+    # Prefer a single image that carries the grand totals AND reconciles:
+    #   Total cash + Total restricted == Total cash + restricted deposits.
+    # 2026-08-11: without this, image 1's section subtotals ('Total operating'
+    # 53,041,173 and 'Total credit' 38,920,674) were merged in as total cash and
+    # restricted, while the real grand totals (98,264,115 / 11,076,642 /
+    # 109,340,757, DACA 75,470,863) sat on image 3.
+    for cand in candidates:
+        c, r, cr = (cand.get("total_cash_usd"), cand.get("total_restricted_usd"),
+                    cand.get("total_cash_plus_restricted_usd"))
+        if None in (c, r, cr):
             continue
-        for key in (
-            "daca_pledged_usd",
-            "total_cash_usd",
-            "total_restricted_usd",
-            "total_cash_plus_restricted_usd",
-        ):
-            if key not in merged and isinstance(data.get(key), (int, float)):
-                merged[key] = float(data[key])
-                log.info("  Summary pass img %d: %s = %.0f", i + 1, key, data[key])
+        if abs((c + r) - cr) <= 1.0:
+            cand["_verified"] = True
+            log.info("Summary totals reconcile on one image: cash %.0f + restricted "
+                     "%.0f = %.0f", c, r, cr)
+            return cand
+
+    # No self-consistent image: merge field-wise but flag it as unverified so
+    # the caller refuses to overwrite good state with a mis-read.
+    for cand in candidates:
+        for k, v in cand.items():
+            merged.setdefault(k, v)
+    merged["_verified"] = False
+    log.error("Summary totals did NOT reconcile on any image: %s",
+              {k: round(v) for k, v in merged.items() if isinstance(v, float)})
     return merged
 
 
@@ -171,11 +302,49 @@ with numeric balances. No prose, no markdown, just the JSON object.\
 """
 
 
+_CATEGORIES = ["operating", "credit", "prepaid", "ap", "restricted", "pledged", "cim_reporting"]
+
+# Structured-output schema for the row pass. Guarantees the response is a
+# single valid JSON object, which removes two whole failure classes seen on
+# 2026-08-17: unescaped quotes inside bank names ("Expecting ',' delimiter")
+# and stray markdown fences.
+_ROWS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rows": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "bank": {"type": "string"},
+                    "account": {"type": "string"},
+                    "currency": {"type": "string"},
+                    "balance_native": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "balance_usd": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "category": {"type": "string", "enum": _CATEGORIES},
+                },
+                "required": ["bank", "account", "currency", "balance_native", "balance_usd", "category"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["rows"],
+    "additionalProperties": False,
+}
+
+
 def _ocr_image(client: Anthropic, img_bytes: bytes) -> list[dict]:
-    b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+    # Same magnification rationale as the totals pass — at native size the
+    # per-account balances misread too.
+    b64 = _to_png_b64(_upscale(Image.open(io.BytesIO(img_bytes))))
     resp = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=2000,
+        # 2026-08-17: this was 2000, which truncated the row JSON mid-string on
+        # every single image (~5.7-5.9k chars of output) — the parse then failed
+        # and the pass silently returned zero rows. A full CICO page of accounts
+        # needs roughly 4x that.
+        max_tokens=8000,
+        output_config={"format": {"type": "json_schema", "schema": _ROWS_SCHEMA}},
         messages=[
             {
                 "role": "user",
@@ -189,6 +358,11 @@ def _ocr_image(client: Anthropic, img_bytes: bytes) -> list[dict]:
     text = "".join(b.text for b in resp.content if b.type == "text").strip()
     # Strip code fences if present
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE).strip()
+    if resp.stop_reason == "max_tokens":
+        # Never silently drop a page: a truncated read is a data-loss bug, and
+        # downstream reconciliation can't tell "no accounts" from "cut off".
+        log.error("OCR hit max_tokens (%d chars returned) — rows for this image are incomplete", len(text))
+        return []
     try:
         data = json.loads(text)
         return data.get("rows", [])
@@ -270,6 +444,11 @@ def main() -> int:
     # A second Claude pass reads the summary line directly from the images.
     log.info("Running summary-totals extraction pass...")
     summary = _extract_summary_totals(client, images)
+    if summary.get("_verified") is not True:
+        log.error("Refusing to write _cico_state.json: summary totals failed the "
+                  "cash + restricted = cash+restricted check. Keeping previous state "
+                  "(email: %s / %s).", subject, date)
+        return 2
     if summary.get("daca_pledged_usd") is not None:
         pledged_daca = summary["daca_pledged_usd"]
         log.info("DACA/pledged from summary pass: $%.0f", pledged_daca)

@@ -28,6 +28,13 @@ log = logging.getLogger('honcho_sync')
 _SKILL_DIR = Path(__file__).resolve().parent
 _SHARED_DIR = _SKILL_DIR.parent / '_shared'
 sys.path.insert(0, str(_SHARED_DIR))
+# The skill dir must be importable at module scope, not lazily inside one
+# function. Run standalone, Python puts the script's own directory on sys.path
+# for free — but cron_supervisor loads this via spec_from_file_location, which
+# does not, so `from peer_card_tool import ...` raised ModuleNotFoundError on
+# every gateway run (silent apart from one log line per 4h cycle).
+if str(_SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(_SKILL_DIR))
 
 from env_loader import load_env  # noqa: E402
 load_env()
@@ -40,7 +47,6 @@ INTER_PEER_DELAY = float(os.environ.get('HONCHO_SYNC_PEER_DELAY', '0.5'))  # sec
 def _get_known_peers() -> list[str]:
     """Return list of peer emails from Honcho. Falls back to dossier JSON scan."""
     try:
-        sys.path.insert(0, str(_SKILL_DIR))
         from peer_card_tool import _get_honcho_client, _iter_pages, _peer_email  # noqa: E402
         client = _get_honcho_client()
         peers = sorted({_peer_email(p) for p in _iter_pages(client.peers())})
@@ -93,7 +99,6 @@ def run_sync():
     # Refresh the Grafana ONA graph (Honcho Postgres tables) from the updated
     # ona_graph.json. Best-effort — never let a viz refresh fail the sync.
     try:
-        sys.path.insert(0, str(_SKILL_DIR))
         import ona_tool  # noqa: E402
         # Keep all external counterparties + top internal connectors, top-3 ties
         # each — clean enough to read, complete enough to be useful.

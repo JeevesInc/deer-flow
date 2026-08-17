@@ -461,7 +461,7 @@ against recent session transcripts, and produce a clean consolidated version.
 
 **2a. Read the current STRATEGIC_CONTEXT.md:**
 ```python
-path = Path(r'C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow\STRATEGIC_CONTEXT.md')
+path = Path(r'C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/STRATEGIC_CONTEXT.md')
 content = path.read_text(encoding='utf-8', errors='replace')
 ```
 
@@ -496,7 +496,7 @@ These are summaries of the last {n_transcripts} agent sessions — what was aske
 7. **Keep it under 300 lines** — trim where possible without losing facts.
 
 **2d. Write the consolidated version as a proposed file:**
-Save to: `C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow\STRATEGIC_CONTEXT_proposed.md`
+Save to: `C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/STRATEGIC_CONTEXT_proposed.md`
 Do NOT overwrite the live file yet.
 
 **2e. Apply it:** review your own proposed version once, then apply the consolidation

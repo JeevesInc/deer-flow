@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 117,
+      "applications": 132,
       "created": "2026-04-07",
-      "last_applied": "2026-08-10T09:09:26.175599+00:00",
+      "last_applied": "2026-08-17T09:09:58.057873+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3422,6 +3422,166 @@
       "solution": "",
       "target_skills": [
         "jeeves-redshift"
+      ]
+    },
+    "pat-2026-08-11-215": {
+      "id": "pat-2026-08-11-215",
+      "name": "Daily US bridge BB block in report_scheduler_cron.py run_loo",
+      "source": "ep-2026-08-11-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-11",
+      "last_applied": "2026-08-11T00:37:34.750558+00:00",
+      "category": "general",
+      "pattern": "Daily US bridge BB block in report_scheduler_cron.py run_loop is now gated behind env BRIDGE_BB_ENABLED=1 (off). MX SOFOM daily BB is UNAFFECTED - CIM Mexico facility survives. Downstream: _bb_metrics_state.json us_bridge and the Grafana CICO dashboard plus morning brief still read a bridge facility panel that will now go stale - they must be repointed at NB. A cron-able NB build script does not exist in the skill dir yet; only thread-scratch build_nb_bb.py versions. Promote one before wiring a Friday job.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-11-216": {
+      "id": "pat-2026-08-11-216",
+      "name": "After editing an in-process cron module, compare file mtime ",
+      "source": "ep-2026-08-11-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-11",
+      "last_applied": "2026-08-11T17:11:41.842493+00:00",
+      "category": "general",
+      "pattern": "After editing an in-process cron module, compare file mtime to the last Report scheduler started line in deerflow-gateway.err.log. If the edit is newer, it is NOT live until a gateway restart; for immediate effect put the guard in a subprocess-invoked script entrypoint.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-11-217": {
+      "id": "pat-2026-08-11-217",
+      "name": "Any n/a or unchanged figure in an automated report is a pipe",
+      "source": "ep-2026-08-11-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-11",
+      "last_applied": "2026-08-11T17:28:18.866030+00:00",
+      "category": "general",
+      "pattern": "Any n/a or unchanged figure in an automated report is a pipeline failure until proven otherwise - grep the log for the swallowed warning. Fixes: create C:\\Windows\\System32\\config\\systemprofile\\Desktop and the SysWOW64 twin for Excel COM under SYSTEM; never pin an ingest query to a sender; select the newest message that has the required attachment type; and gate any OCR-derived total behind an arithmetic identity check (cash + restricted = cash+restricted) so a mis-read cannot overwrite good state. Use Sonnet not Haiku for dense-table figure OCR.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-11-218": {
+      "id": "pat-2026-08-11-218",
+      "name": "Build closing binders as: counsel official set = canonical n",
+      "source": "ep-2026-08-11-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-11",
+      "last_applied": "2026-08-11T19:10:34.752709+00:00",
+      "category": "general",
+      "pattern": "Build closing binders as: counsel official set = canonical numbering; add one tab per local jurisdiction; separate tab for final Word execution copies and one for as-delivered counsel zips (provenance); exclude superseded duplicate escrow zips and note the exclusion. Windows MAX_PATH breaks zipfile.extractall on long counsel filenames - extract to a SHORT dir with index filenames plus a manifest, then upload with the real name via the Drive API (upload_to_drive.py cannot rename). Always ship an index workbook with per-file provenance (delivering counsel, source email, date, Drive link) plus a post-closing punch list tab.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-08-12-219": {
+      "id": "pat-2026-08-12-219",
+      "name": "Before quoting or summarizing any facility term, resolve to ",
+      "source": "ep-2026-08-12-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-12",
+      "last_applied": "2026-08-12T09:06:55.737564+00:00",
+      "category": "general",
+      "pattern": "Before quoting or summarizing any facility term, resolve to the EXECUTED document via the counterparty closing-binder folder and drive_registry.json. Artifacts you built are part of your own state - re-read the index before answering, and never assert a final copy is missing without naming the Drive/Gmail searches you ran.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-08-13-220": {
+      "id": "pat-2026-08-13-220",
+      "name": "When an instruction contains a Windows path with obviously e",
+      "source": "ep-2026-08-13-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-13",
+      "last_applied": "2026-08-13T09:08:32.506951+00:00",
+      "category": "general",
+      "pattern": "When an instruction contains a Windows path with obviously eaten escapes (missing letters right after a backslash, e.g. 'Jeevesedshift-bot', 'deer-flowackend'), do NOT attempt the literal path and do NOT report it as missing. Reconstruct the canonical root (C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow) and, if the corruption is in code you own, fix the generator: use forward slashes in prompt text, since a non-raw f-string will always eat \\r, \\b, \\t, \\n, \\a, \\f, \\v.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-08-14-221": {
+      "id": "pat-2026-08-14-221",
+      "name": "Two corrections on one artifact in one thread. (1) The month",
+      "source": "ep-2026-08-14-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-14",
+      "last_applied": "2026-08-14T09:06:30.058047+00:00",
+      "category": "general",
+      "pattern": "Two corrections on one artifact in one thread. (1) The month's newly-issued invoices are not the amount owed - A-19888 (116,000) and A-19627 (20,300) had been carried unpaid since June/July and existed only in the counterparty's own pending-invoice email (CXC Pending Invoices, 2026-08-06). Pull the counterparty's pending/aging summary and reconcile before writing any fee total; list every folio that rolls into the figure. (2) One figure lives in several places: Exhibit B G128/G132 (CxC), G133 (Trust/Monex), source notes Q35/Q36, the waterfall clause (iii) text, G127 servicing fee (formula-driven, moves with the expense block), clause (x) remanente (needs D36 from Brian), and the Anexo J Word paragraph. Brian had to say 'put these in the waterfall too'. Sweep all locations in one pass and report before/after per location instead of 'added'.",
+      "problem": "July 2026 CIM MX servicer report + Anexo J: booking CxC and Monex fee invoices into the waterfall (2026-08-13, thread d7acec6e)",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-15-222": {
+      "id": "pat-2026-08-15-222",
+      "name": "When an inbound request carries an attachment, that attachme",
+      "source": "ep-2026-08-15-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-15",
+      "last_applied": "2026-08-15T09:06:15.838384+00:00",
+      "category": "general",
+      "pattern": "When an inbound request carries an attachment, that attachment IS the specification. Run `gmail_tool.py download <message_id>` on the request BEFORE building, and build inside the attached workbook's tab/row/column structure rather than producing a look-alike. Never infer deliverable format from a slide, screenshot or a prior version of the report.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-08-16-223": {
+      "id": "pat-2026-08-16-223",
+      "name": "Before attributing a mangled cron prompt to a stale in-memor",
+      "source": "ep-2026-08-16-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-16",
+      "last_applied": "2026-08-16T09:09:18.591465+00:00",
+      "category": "general",
+      "pattern": "Before attributing a mangled cron prompt to a stale in-memory module, read the template source and confirm what it contains. If the source is already correct, the defect is downstream in prompt assembly/delivery and no gateway restart will fix it; app/gateway/path_utils.py does no path rewriting either. Reconstruct the real .deer-flow root instead of attempting a mangled path.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-08-17-224": {
+      "id": "pat-2026-08-17-224",
+      "name": "Split infra @mentions into the reversible part and the destr",
+      "source": "ep-2026-08-17-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-17",
+      "last_applied": "2026-08-17T15:08:12.643289+00:00",
+      "category": "general",
+      "pattern": "Split infra @mentions into the reversible part and the destructive part. Reversible config change (disable Ingress): verify no CM dependency by grepping the skills tree for the hostname/service name plus a DNS probe, then green-light it in-ticket autonomously. Destructive part (delete HelmRelease/namespace/volume): never sign off - check whether the earlier migration ticket actually recorded Brian's verification (DEV-6138: dinesha asserted PVC data migrated 2026-06-02, ticket closed Done next day with no Brian confirmation), say so explicitly, require a snapshot with the ID posted back, and DM Brian for the one-line sign-off.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "linear"
       ]
     }
   }

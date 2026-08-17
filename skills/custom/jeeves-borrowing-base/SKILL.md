@@ -256,6 +256,65 @@ the BOP/EOP-only vs full-month-loop bug fixed 2026-07-08/09). Default to updatin
 existing dated file in place only when correcting a known-bad prior version of the SAME
 report date; a genuinely new period still gets a new dated file per the BB `--new` rule.
 
+### Fee and payable lines — sweep EVERY representation, and check the counterparty's pending list
+
+Booking a fee/payable change in one place is not the job. Brian corrected this twice on the
+same artifact in one thread (2026-08-13, July 2026 period):
+
+1. *Completeness.* "Did you add all the items we owe Monex to the single line? And the total
+   amount we owe CxC?" - the month's newly-issued invoices are NOT the amount owed. Carried
+   balances (A-19888 116,000 and A-19627 20,300, unpaid since June/July) existed only in the
+   counterparty's own pending-invoice email (Gustavo Villarreal, "CXC Pending Invoices",
+   2026-08-06). ALWAYS pull the counterparty's pending/aging summary and reconcile it against
+   the invoice stream before writing any fee total, and list every invoice number that rolls
+   into the figure so Brian can audit it.
+2. *Propagation.* "put these in the waterfall too" - one figure appears in several places and
+   all of them must move together. For the CIM MX monthly package the map is:
+   Exhibit B **G128** and **G132** (CxC), **G133** (Trust/Monex fees), the source-note cells
+   **Q35/Q36** (invoice detail), the **waterfall clause (iii)** text, **G127** servicing fee
+   (formula-driven: (1%/12) x average daily balance - it moves when the expense block moves),
+   clause **(x) remanente** (only computable once D36 is filled by Brian), AND the matching
+   paragraph in the **Anexo J** Word file. After the edit, re-read each of those cells and
+   report the before/after per location - never report "added" off a single write.
+
+### No Excel on this host — replicate the workbook math in Python, then validate on the prior month
+
+Excel COM automation does not work here: `xlwings`/`win32com` import fine and `xw.App()` starts, but
+`app.books.open(...)` dies with `Open method of Workbooks class failed` (service session, no interactive
+desktop), and LibreOffice is not installed. So an agent-built servicer report / BB carries NO cached
+values — every formula reads `None` — and any figure needed for the Anexo J (which is plain text, not
+formulas) has to be computed outside the workbook. Do NOT burn retries on Excel.
+
+Working method (2026-08-14, July 2026 period):
+1. Read the formulas you need with openpyxl (`data_only=False`); array formulas come back as
+   `ArrayFormula` objects — use `.text`.
+2. Re-implement them in Python straight off the `tape` tab in `read_only=True` mode (23.8k rows x 138
+   cols loads in ~40s). Column letters map to the tape header: AC=`sofom_balance`, EF=`elig`,
+   EA=`elig_nn`, CH=`credit_limit_usd`, CF=risk score, CI=`state_name`, CJ=`city_name`,
+   CK=`naics_industry_id`, CL=`is_startup`, CC=onboarding date.
+3. **Validate against the PRIOR month's file, which does have cached values** — recompute D90:D100,
+   L35, L52, L81, N87, G36 and G47 from the June tape and require a to-the-cent match before you
+   trust the current month. That check reproduced all 11 concentration cells and G47 = 38,108,614.19
+   exactly, which is the only reason the July remanente could be signed off.
+   Quirks the replication must honour: D92/D94 test against empty `D8` so their IF is always TRUE
+   (1st largest, and sum of 2nd-4th largest, of eligible rows with `credit_limit_usd` < C90 = 2,000,000);
+   D91/D93 are 0 whenever the eligible pool exceeds 40,000,000 x FX; D100 uses `TODAY()`, so state the
+   as-of date you assumed.
+4. Exhibit A L54 (collection-account cash, "Prerecycling") stays 0 per Brian; the borrowing base can
+   therefore run a deficit that flows into the waterfall via G36 = D36 + `Exhibit A`!N87 (July: N87 =
+   -8,716,170.42, June: -124,933,097.33). A deficiency is NOT booked into clause (vii) — G44 stays 0.
+5. Tell Brian to open the workbook in Excel to materialise the values, and give him the computed
+   waterfall in the message so he can check Excel against it.
+
+### A change to the expense block silently invalidates the Anexo J servicing fee
+
+G127 = (1%/12) x average daily balance − G128, so **every edit to G128/G132 moves clause (iv)**. On
+2026-08-11 the July Anexo J was written with (iv) = MXN 950,416.71 (G128 = 71,920). The 8/13 CxC
+correction raised G128 to 208,220 and nobody re-derived (iv) — the Word file sat wrong by exactly
+136,300 until 8/14. Whenever the CxC/Monex/trust expense figures move, recompute
+(1%/12) x G10 − G128 and rewrite clause (iv) in the Word file in the same pass. Cross-check:
+(1%/12) x G10 must equal (iv) + G128 (July: 1,022,336.71 = 814,116.71 + 208,220).
+
 ### Payment Rate — do NOT use a DPD-bucket stock proxy for a single bill's amount
 
 CIM's contractual Payment Rate is a **flow** definition (collections $ as % of opening/
@@ -304,6 +363,15 @@ against the source form tab-by-tab and be able to say what you deleted and nothi
    see the concentration brief rules in cfo-org-kb `diligence/ARTIFACTS.md`.
 4. Mexico is excluded from the NB pool.
 5. Deliverable of record: `Form - NB Borrowing Base Certificate - {YYYYMMDD}.xlsx`.
+5b. **Account balances on the NB borrowing base come from the DAILY CICO BALANCES
+   EMAIL -- not Redshift, not the prior day's workbook, not a screenshot** (Brian,
+   2026-08-14: "You should be populating from the daily CICO email"). Workflow: find
+   the most recent CICO daily balances email (sender Mariana, subject carries the
+   `YYMMDD` stamp; confirm it is the LATEST one out before using it), download its
+   attachment, and match each row to the **non-excluded** accounts on Schedule 5.22
+   (Excluded = N) **by trailing account digits** -- the schedule and CICO write account
+   numbers differently, so a full-string match silently drops rows. Report the
+   as-of date and the source email timestamp alongside the balances.
    Gemini action item from the 2026-07-28 "Jeeves 3 Financings Check Point" assigns
    Brian to propose this form to NB **after** the excess-concentration detail is final.
 6. **No frozen refs, ever (Brian, 2026-08-04).** Every figure on the form must be a live

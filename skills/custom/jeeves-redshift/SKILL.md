@@ -310,6 +310,14 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Revenue vs spend:** `revenue_usd` from transactions_ssot = Jeeves revenue; `disbursement_amount_usd` from loc_tape = customer spend
 - **String matching:** Use `ILIKE '%pattern%'` for case-insensitive partial matches
 - **CTEs:** Fully supported and encouraged for complex queries
+- **`column X does not exist` -> LIST the columns, never guess a second name.** Two
+  guesses in a row (`t.transaction_date`, then `t.created_at`) burned turns on
+  2026-08-14. On the FIRST such error, run:
+  `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='<schema>' AND table_name='<table>' ORDER BY ordinal_position;`
+  and pick from the result. Column names differ per table -- `transactions_ssot` has
+  `created_at`/`posted_at`/`completed_at`, `loc_tape`/`gwc_tape` key off `dt`. An alias
+  (`t.`) proves nothing about which table is behind it: re-read your own FROM clause
+  before assuming the schema doc is wrong.
 
 ## Query Examples by Intent
 

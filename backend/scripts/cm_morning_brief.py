@@ -4,7 +4,9 @@
 Posts a daily Capital Markets brief to Brian's Slack DM (~8am weekdays).
 
 Reads from .deer-flow/_cap_markets_state.json (written by cap_markets_metrics_writer.py).
-Covers: US Bridge BB, MX SOFOM BB, CICO cash, alerts.
+Covers: NB facility, MX SOFOM BB, CICO cash, alerts.
+US Bridge (CIM) removed 2026-08-11: facility paid off and terminated 2026-08-10.
+NB borrowing base cadence: weekly, built Mondays as of Sunday (Brian, 2026-08-11).
 """
 from __future__ import annotations
 
@@ -114,19 +116,45 @@ def build_brief() -> str:
     cico_cash       = cico.get("total_cash_usd")
     cico_daca       = cico.get("daca_pledged_usd")
     cico_restricted = cico.get("restricted_deposits_usd")
-    cico_dt         = (cico.get("source_date") or "")[:10]
+    # source_date is an RFC-2822 header ("Mon, 27 Jul 2026 21:55:34 -0600");
+    # the old [:10] slice printed the garbage "Mon, 27 Ju".
+    cico_raw = cico.get("source_date") or ""
+    cico_age_days = None
+    try:
+        from email.utils import parsedate_to_datetime
+        _dt = parsedate_to_datetime(cico_raw)
+        cico_dt = _dt.strftime("%a %d %b").replace(" 0", " ")
+        cico_age_days = (date.today() - _dt.date()).days
+    except Exception:
+        cico_dt = cico_raw[:16]
+
+    # ── NB facility ───────────────────────────────────────────
+    # Only rendered from real state; never print figures we have not built.
+    nb = state.get("nb") or {}
+    if nb.get("borrowing_base") is not None:
+        nb_line = (
+            f"BB {_m(nb.get('borrowing_base'), 1)}  |  Drawn {_m(nb.get('total_drawn'), 1)}"
+            f"   {_avail_emoji(nb.get('availability'))} {_m(nb.get('availability'), 1)} avail"
+            f"  _(as of {(nb.get('tape_as_of') or '')[:10] or 'n/a'})_"
+        )
+    else:
+        nb_line = "_no base built yet — NB BB pipeline pending_"
 
     # ── Alerts ───────────────────────────────────────────────────────────
     alerts = []
-    if us_avail is not None and us_avail < 5_000_000:
-        alerts.append(f"Bridge availability tight: {_m(us_avail)}")
+    if cico_age_days is not None and cico_age_days > 3:
+        alerts.append(f"CICO cash is {cico_age_days} days stale (as of {cico_dt})")
+    if mx_bb_usd is None:
+        alerts.append("SOFOM borrowing base unavailable — workbook recalc failed")
+    if nb.get("availability") is not None and nb["availability"] < 5_000_000:
+        alerts.append(f"NB availability tight: {_m(nb['availability'])}")
     if mx_avail is not None and mx_avail < 0:
         alerts.append(f"SOFOM availability *negative*: {_m(mx_avail)}")
     # Covenant breaches
-    for cov in us.get("covenants", []):
+    for cov in nb.get("covenants", []):
         if cov.get("excess_usd", 0) > 0:
             short = cov.get("test", "")[:60].strip()
-            alerts.append(f"Bridge covenant breach: _{short}_ (+${cov['excess_usd']/1e6:.1f}M excess)")
+            alerts.append(f"NB covenant breach: _{short}_ (+${cov['excess_usd']/1e6:.1f}M excess)")
     for cov in mx.get("covenants", []):
         if cov.get("excess_mxn", 0) > 0:
             short = cov.get("test", "")[:50].strip()
@@ -136,12 +164,8 @@ def build_brief() -> str:
     lines = [
         f":bar_chart: *Capital Markets · {today}*",
         "",
-        f"*🏦 US Bridge* _(tape: {us_tape_dt})_",
-        f"  Total Recv:   {_m(us_recv, 1)}",
-        f"  Ineligible:   {_m(us_inelig, 1)}",
-        f"  Eligible:     {_m(us_elig, 1)}",
-        f"  Final BB:     {_m(us_bb, 1)}  _(incl. {_m(us_cash, 1)} cash)_",
-        f"  Drawn:        {_m(us_drawn, 1)}   {_avail_emoji(us_avail)} {_m(us_avail, 1)} avail",
+        f"*🏦 NB Facility* _(weekly base — Mondays, as of Sunday)_",
+        f"  {nb_line}",
         "",
         f"*🇲🇽 MX SOFOM* _(tape: {mx_tape_dt})_",
         f"  Total Recv:   {mxn_m(mx_recv_mxn)}",

@@ -100,6 +100,23 @@ def _dpd_bucket(dpd) -> str:
     return "90+ DPD"
 
 
+def _ensure_com_desktop_dirs() -> None:
+    """Excel COM refuses to open ANY file when running as a service account
+    whose profile has no Desktop folder ("Microsoft Excel cannot access the
+    file 'C:\\Windows\\Temp\\...'"). That is why every xlwings recalc failed
+    833 times up to 2026-08-11 and the MX SOFOM panel read n/a: the SOFOM
+    workbook is formula-only, so with no recalc openpyxl(data_only) sees None.
+    Creating the two systemprofile Desktop dirs is the standard fix; it is
+    idempotent, so keep it here to survive a machine rebuild.
+    """
+    for d in (r"C:\Windows\System32\config\systemprofile\Desktop",
+              r"C:\Windows\SysWOW64\config\systemprofile\Desktop"):
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError as e:
+            log.warning("could not create COM desktop dir %s: %s", d, e)
+
+
 def _download_xlsx(svc, file_id: str):
     """Download .xlsx from Drive, open in Excel via xlwings to force a
     full recalc (so formula cells get cached values), then re-load with
@@ -129,6 +146,7 @@ def _download_xlsx(svc, file_id: str):
         tmp.write(fh.getvalue())
         tmp_path = tmp.name
 
+    _ensure_com_desktop_dirs()
     try:
         import xlwings as xw
         app = xw.App(visible=False, add_book=False)
@@ -140,7 +158,10 @@ def _download_xlsx(svc, file_id: str):
         finally:
             app.quit()
     except Exception as e:
-        log.warning("xlwings recalc failed (%s) — falling back to formula-only read", e)
+        # Not a warning: for the formula-only SOFOM workbook this silently
+        # turns the whole MX panel into n/a. Make it loud.
+        log.error("xlwings recalc FAILED (%s) — formula-only read; MX SOFOM "
+                  "eligible/BB will be null until Excel COM works", e)
 
     wb = load_workbook(tmp_path, data_only=True)
     try:
@@ -832,7 +853,11 @@ def fetch_bb_metrics() -> dict:
     """Pull latest US Bridge + MX SOFOM BB from Drive."""
     svc = dfu.get_drive_service()
 
-    bridge_file = dfu.search_latest_bb(svc, "Bridge Borrowing Base")
+    # RETIRED 2026-08-10: CIM US bridge paid off and terminated. Do not keep
+    # republishing a dead facility's numbers (that is what put a stale
+    # 2026-08-10 bridge base in the 2026-08-11 digest).
+    bridge_enabled = os.environ.get("BRIDGE_BB_ENABLED") == "1"
+    bridge_file = dfu.search_latest_bb(svc, "Bridge Borrowing Base") if bridge_enabled else None
     sofom_file = dfu.search_latest_bb(svc, "SOFOM Borrowing Base")
 
     us: dict = {}
@@ -842,6 +867,10 @@ def fetch_bb_metrics() -> dict:
         us = _read_us_bridge(wb)
         us["source_file"] = bridge_file["name"]
         us["source_mtime"] = bridge_file.get("modifiedTime")
+    elif not bridge_enabled:
+        log.info("US bridge retired 2026-08-10 — skipping bridge BB refresh")
+        us = {"retired": True, "retired_on": "2026-08-10",
+              "note": "CIM US bridge paid off and terminated; replaced by NB facility"}
     else:
         log.warning("No US Bridge BB file found on Drive")
 

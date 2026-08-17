@@ -188,4 +188,12 @@ def main():
 
 
 if __name__ == '__main__':
+    # RETIRED 2026-08-10: the CIM US bridge facility was paid off and
+    # terminated. Do not build bridge borrowing bases. Set BRIDGE_BB_ENABLED=1
+    # for a deliberate one-off historical rebuild.
+    import os as _os
+    if _os.environ.get('BRIDGE_BB_ENABLED') != '1':
+        print('build_us.py: US bridge facility retired 2026-08-10 - skipping build. '
+              'Set BRIDGE_BB_ENABLED=1 to override.')
+        raise SystemExit(0)
     main()

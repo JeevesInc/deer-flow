@@ -33,19 +33,25 @@ def _get_gmail_service():
 
 def _search_latest_cico_email(service):
     """Find the most recent CICO daily balances email."""
-    result = service.users().messages().list(
-        userId='me',
-        q='subject:CICO newer_than:7d from:axel@tryjeeves.com',
-        maxResults=5
-    ).execute()
-    messages = result.get('messages', [])
-    if not messages:
+    # 2026-08-17: the old query led with from:axel + subject:CICO, which
+    # matched Axel's "Re: CICO - August 2026" 13-week-forecast thread and fed
+    # its chart images to vision (0 balances, and a truncated JSON blob before
+    # that). The daily balances mail is Mariana's "YYMMDD CICO- Daily
+    # balances"; the sender is not guaranteed, so match the subject form first
+    # and only fall back to a sender.
+    queries = (
+        'subject:"CICO- Daily balances" newer_than:10d',
+        'subject:"CICO- Daily" newer_than:14d',
+        'subject:CICO newer_than:7d from:axel@tryjeeves.com',
+    )
+    messages = []
+    for q in queries:
         result = service.users().messages().list(
-            userId='me',
-            q='subject:"CICO- Daily" newer_than:14d',
-            maxResults=5
+            userId='me', q=q, maxResults=5
         ).execute()
         messages = result.get('messages', [])
+        if messages:
+            break
     if not messages:
         return None
     msg_id = messages[0]['id']
@@ -129,22 +135,46 @@ def _call_claude_vision(image_paths):
         )
     })
 
-    resp = client.messages.create(
-        model='claude-opus-5',
-        max_tokens=4096,
-        messages=[{'role': 'user', 'content': content}]
-    )
+    # 2026-08-17: the scheduled NB run died on a half-written JSON object
+    # ("Unterminated string ... char 2130"). Adaptive-thinking tokens count
+    # against max_tokens, so 4096 could be exhausted before the balance map
+    # finished. Bigger budget + explicit truncation check + one retry. Never
+    # parse a response that stopped on max_tokens: a partial balance set in a
+    # lender-facing borrowing base is worse than a failed run.
+    data = None
+    last_err = None
+    for budget in (16000, 16000):
+        resp = client.messages.create(
+            model='claude-opus-5',
+            max_tokens=budget,
+            messages=[{'role': 'user', 'content': content}]
+        )
+        stop = getattr(resp, 'stop_reason', None)
 
-    # Sonnet 5 (adaptive thinking) can return a ThinkingBlock as content[0];
-    # resp.content[0].text raises on it. Always iterate for the text block.
-    raw = ''.join(b.text for b in resp.content if getattr(b, 'type', '') == 'text').strip()
-    if raw.startswith('```'):
-        raw = raw.split('```')[1]
-        if raw.startswith('json'):
-            raw = raw[4:]
-    raw = raw.strip()
+        # Sonnet/Opus 5 (adaptive thinking) can return a ThinkingBlock as
+        # content[0]; resp.content[0].text raises on it. Always iterate.
+        raw = ''.join(b.text for b in resp.content if getattr(b, 'type', '') == 'text').strip()
+        if raw.startswith('```'):
+            raw = raw.split('```')[1]
+            if raw.startswith('json'):
+                raw = raw[4:]
+        raw = raw.strip()
 
-    data = json.loads(raw)
+        if stop == 'max_tokens':
+            last_err = RuntimeError(
+                'CICO vision response truncated (stop_reason=max_tokens, '
+                '{} chars of JSON) - refusing to parse a partial balance set'.format(len(raw)))
+            continue
+        try:
+            data = json.loads(raw)
+            break
+        except ValueError as exc:
+            last_err = RuntimeError(
+                'CICO vision returned unparseable JSON ({}); stop_reason={}; tail: {!r}'.format(
+                    exc, stop, raw[-200:]))
+            continue
+    if data is None:
+        raise last_err
     result = {}
     for k, v in data.items():
         try:

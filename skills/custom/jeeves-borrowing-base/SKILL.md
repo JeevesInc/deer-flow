@@ -45,6 +45,19 @@ When asked to run the SOFOM distribution tape for Axel's daily distribution emai
 - **Draft reply:** Gmail message ID from Axel's email, body = "tape attached, please review", attach the raw tape file.
 - **Never** attach `Jeeves SOFOM Borrowing Base - Master - *.xlsx` to this thread. That is a separate product.
 
+**IT IS AUTOMATIC — do not tell Brian it needs a manual run (he corrected exactly that, 2026-08-17:
+"That's not true. It's supposed be triggered by an email with the subject F12340 distribution and
+today's date").** `report_scheduler_cron.py` polls Gmail hourly on weekdays from 08:00 PT
+(`_find_sofom_distribution_email`): subject must match `F/12339 > F/12340 Distribution`, dated today,
+ANY sender (not pinned to Axel), and it replies to the **OLDEST** match in the thread, never a later
+reply-all. State key `last_sofom_distribution`; a `_failed` value here IS retried on the next tick
+(unlike `last_nb_bb`). So "why hasn't the distribution run today?" is always one of four things, in
+this order: (1) no matching subject/date email has arrived yet, (2) the gateway is running pre-patch
+code (compare module mtime to the last "Report scheduler started" line), (3) the tape step failed —
+on 2026-08-17 it was **Redshift unreachable and reauth did not restore it**, so the run died before the
+draft, or (4) state already says today. Check the state file and the gateway log before answering; never
+answer this question from the skill's prose alone.
+
 ---
 
 ## Request Router
@@ -398,6 +411,60 @@ against the source form tab-by-tab and be able to say what you deleted and nothi
   **Root defect fixed in the tool 2026-08-07:** upload_to_drive.py now only re-parents when --folder is
   passed explicitly; --file-id alone leaves the file in its existing parents and prints a NOTE. Rules (1)
   and (2) still stand as hygiene, but a missing --folder can no longer silently move a filed deliverable.
+
+## When a scheduled report fails: FIX IT, RE-RUN IT, DELIVER IT — never just diagnose (2026-08-17)
+
+Brian's escalation "i asked you to do this" came 3 minutes after a clean, correct root-cause writeup
+of the 15:22 NB failure. A diagnosis is not a deliverable. On any scheduler alert: patch the defect,
+re-run the job, produce the workbook, upload it, and report the numbers — in one turn, without asking.
+
+And when you patch one step of a pipeline, **sweep the whole chain before saying done**: data source →
+math → template selection → output filename → Drive folder → upload flags → the Slack/email delivery.
+On 2026-08-17 the truncation bug was fixed and reported as done, and Brian then had to ask two more
+questions one at a time — "and is it writing to the right folder?" and "no it should always use the most
+recent as a template" — both of which were inspectable in the same file at the same time. Three
+round-trips for one fix is the failure mode; enumerate and verify every link before reporting.
+
+## NB borrowing base — the Monday pipeline (`build_nb.py`, 2026-08-17)
+
+Cadence: **weekly, MONDAYS, as of the PREVIOUS DAY (Sunday)** — Brian 2026-08-11, and again
+2026-08-17 as a correction ("I told you it needs to run every monday as of the previous day")
+when the 8/17 run did not happen. Root cause: NB had no key in `_report_scheduler_state.json`
+and no builder; MX SOFOM/CICO/SOFOM-distribution were wired but NB never was. Now:
+`build_nb.py` + the `last_nb_bb` scheduler job (Mondays 08:30 PT).
+
+`build_nb.py --as-of <Sunday> --template <prior form> [--out-date YYYYMMDD] [--tape-csv f.csv]
+[--cico-msg <gmail id>]`:
+1. Tape = `cfo-org-kb/sql/data_tape.sql` @ `dt = as-of`; the 20 data columns of the `tape` tab
+   map 1:1 from it, and columns U-AE are re-written as **live formulas** (openpyxl `Translator`
+   off row 2) — never pasted values.
+2. `obligors` = eligible rows aggregated by EIN group, key `(no EIN) {company_id}` when EIN is
+   null, groups with total <= 0 dropped, **sorted by NET exposure (balance - collateral) desc**.
+   Verified by reproducing the prior workbook off its own tape — balances tie to the cent.
+   Do this replication check first whenever the form's derived tabs are rebuilt.
+3. Bank balances from the latest CICO email (vision), matched to col P labels by trailing digits.
+   Accounts whose label says "not in use" (Coopcentral 0850) keep their prior value instead of
+   failing the run; anything else unmatched raises rather than zero-filling.
+4. FX (col R) refreshed from the tape's `spot_rate` (USD per 1 local unit, median per currency).
+
+**A Monday-morning run always carries FRIDAY's balances** — verified 2026-08-18: Mariana does send a
+Monday file (`260817 CICO- Daily balances`, Mon 2026-08-17 21:30 CT) but it lands ~13 hours AFTER the
+08:30 PT job, and there is no Saturday/Sunday file at all. So the newest email at run time is Friday's
+(`260814` for the 8/17 run). Say that in the delivery and do not wait for a Monday email — but never
+state "there is no Monday CICO email" as a fact, because there is one; it is just late.
+
+**Controlled accounts drive ALL the cash (Brian, 2026-08-17).** `controlled_acct` = the accounts
+**we will perfect**, not only executed DACAs: Citibank 31393601 and JPMorgan 933056167 (Goodwin
+Section 6.18 ACA scope, Jeeves Intermediate Holdco). With every row set to `No` — how the 8/14
+form shipped — the clause (i) cash pool AND Section 7.01(a) Liquidity both compute to $0, which
+reads as a covenant failure that isn't real. Never deliver an NB form with zero cash without
+first checking the flags against the perfection scope in
+`.deer-flow\wiki\deals\nb_facility_closing.md`. Colombian/Mexican **trust** liquidity lines
+(liquidity!E8/E9) stay $0 — "there would be no trust in colombia or mex yet."
+
+**No LibreOffice on this box**, so the saved workbook carries no cached values. Compute the
+headline figures (eligible, excess concentration, cash pool, liquidity, BB, step-up prongs) in
+Python by replicating the tab formulas, report them, and tell Brian to open in Excel to recalc.
 
 ## `--new` is REQUIRED on EVERY dated NB/CIM upload, not just the MX master (2026-08-07)
 

@@ -700,6 +700,153 @@ def run_mx_bb():
         raise
 
 
+def run_nb_bb():
+    """Build the NB Borrowing Base — WEEKLY, MONDAYS, as of the prior Sunday.
+
+    Cadence set by Brian 2026-08-11 and re-confirmed 2026-08-17 ("it needs to run
+    every monday as of the previous day"). Pipeline mirrors run_mx_bb:
+      1. Find the most recent prior "Jeeves NB Borrowing Base - Form - {YYYYMMDD}.xlsx"
+         in Debt/Neuberger Berman/Reporting/{YYYYMM}/ and download it as the template
+         (clone-and-edit — never re-architect the form).
+      2. build_nb.py --as-of {yesterday} --template {template} --out-date {today}
+         (tape from cfo-org-kb data_tape.sql; bank balances from the latest CICO
+         daily balances email, matched to Schedule 5.22 by trailing digits)
+      3. upload_to_drive.py --new  ->  the {YYYYMM} Reporting subfolder
+      4. Post Slack with the Drive link + headline stats
+    """
+    import subprocess, re as _re
+
+    yesterday   = (datetime.now().date() - timedelta(days=1)).isoformat()
+    today_stamp = datetime.now().date().strftime('%Y%m%d')
+    yyyymm      = yesterday.replace('-', '')[:6]
+    outputs_dir = os.environ.get('OUTPUTS_PATH', '').replace(chr(92), '/')
+    skills_dir  = os.path.dirname(os.path.abspath(__file__))
+    NB_REPORTING_FOLDER = '17Eji0ZgVcaAZcdoPDKNNJaClN8PKuTLW'
+
+    log.info(f"run_nb_bb: building NB BB as of {yesterday}")
+    _post_slack(f":bank: Running scheduled *NB Borrowing Base* as of {yesterday}...")
+
+    def _run(cmd, step, timeout=900):
+        log.info(f"  [{step}] {' '.join(str(c) for c in cmd)}")
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                           encoding='utf-8', errors='replace', env=env,
+                           stdin=subprocess.DEVNULL)
+        out = ((r.stdout or '') + (r.stderr or '')).strip()
+        if r.returncode != 0:
+            raise RuntimeError(f"Step '{step}' failed (rc={r.returncode}):\n{out[-1000:]}")
+        log.info(f"  [{step}] OK: {out[-300:]}")
+        return out
+
+    try:
+        # -- 1. Locate the most recent prior NB form as template ---------------
+        list_script = os.path.join(skills_dir, '..', 'google-drive', 'list_drive_folder.py')
+        listing = _run([sys.executable, list_script, NB_REPORTING_FOLDER,
+                        '--recursive', '--max-depth', '3'], 'list_drive', timeout=180) or ""
+        # Brian, 2026-08-17: ALWAYS template off the most recent workbook on
+        # Drive. The old rule matched only the '- Form -' name and only dates
+        # strictly before today, so a short-named file (e.g. 'Jeeves NB
+        # Borrowing Base - 20260807.xlsx') or a manual build done earlier the
+        # same day was invisible and the run inherited a stale form.
+        best_date, best_is_form, template_id, month_folder_id = '', False, '', ''
+        for line in listing.splitlines():
+            m_date = _re.search(r'NB Borrowing Base - (Form - )?(\d{8})\.xlsx', line)
+            m_id   = _re.search(r'id:\s*([A-Za-z0-9_-]+)', line)
+            if m_date and m_id:
+                d, is_form = m_date.group(2), bool(m_date.group(1))
+                # newest date wins; on a same-date tie prefer the '- Form -' copy
+                if d > best_date or (d == best_date and is_form and not best_is_form):
+                    best_date, best_is_form, template_id = d, is_form, m_id.group(1)
+            m_f = _re.search(r'\[folder\]\s+' + yyyymm + r'/', line)
+            if m_f and m_id and not month_folder_id:
+                month_folder_id = m_id.group(1)
+        if not template_id:
+            raise RuntimeError('No "NB Borrowing Base - [Form - ]YYYYMMDD.xlsx" found on Drive')
+        tpl_name = 'Jeeves NB Borrowing Base - {}{}.xlsx'.format(
+            'Form - ' if best_is_form else '', best_date)
+        log.info(f"  Template: {tpl_name} ({template_id})")
+
+        dl_script = os.path.join(skills_dir, '..', 'google-drive', 'download_file.py')
+        _run([sys.executable, dl_script, template_id], 'download_template', timeout=300)
+        template = os.path.join(outputs_dir, tpl_name)
+        if not os.path.exists(template):
+            raise FileNotFoundError(f'template download missing: {template}')
+
+        # -- 2. Build (one zscaler-reauth retry on a connection error) ---------
+        build_script = os.path.join(skills_dir, 'build_nb.py')
+        cmd = [sys.executable, build_script, '--as-of', yesterday,
+               '--template', template, '--out-date', today_stamp]
+        try:
+            build_out = _run(cmd, 'build_nb', timeout=1800)
+        except RuntimeError as build_err:
+            msg = str(build_err).lower()
+            if not any(k in msg for k in ('connection', 'timeout', 'ssl', 'could not connect',
+                                          'connection refused', 'operationalerror', 'reset')):
+                raise
+            log.warning('build_nb hit a connection error — zscaler reauth then one retry.')
+            reauth = os.path.join(skills_dir, '..', 'zscaler-reauth', 'reauth.py')
+            try:
+                _run([sys.executable, reauth], 'zscaler_reauth', timeout=180)
+            except Exception as re_err:
+                log.error(f'zscaler reauth failed: {re_err}')
+            build_out = _run(cmd, 'build_nb_retry', timeout=1800)
+
+        final_wb = os.path.join(outputs_dir,
+                                f'Jeeves NB Borrowing Base - Form - {today_stamp}.xlsx')
+        if not os.path.exists(final_wb):
+            raise FileNotFoundError(f'build_nb.py did not produce {final_wb}')
+
+        # -- 3. Upload into the month subfolder (--new: never overwrite a snapshot)
+        if not month_folder_id:
+            # 2026-08-17: a new month has no subfolder until somebody makes one,
+            # so the first Monday run of every month would hard-fail here after
+            # a clean build. Create it under NB Reporting instead.
+            sys.path.insert(0, os.path.join(skills_dir, '..', '_shared'))
+            from google_auth import get_credentials
+            from googleapiclient.discovery import build as _gbuild
+            _svc = _gbuild('drive', 'v3', credentials=get_credentials())
+            month_folder_id = _svc.files().create(
+                body={'name': yyyymm,
+                      'mimeType': 'application/vnd.google-apps.folder',
+                      'parents': [NB_REPORTING_FOLDER]},
+                fields='id', supportsAllDrives=True).execute()['id']
+            log.info(f'  Created {yyyymm} subfolder under NB Reporting ({month_folder_id})')
+        upload_script = os.path.join(skills_dir, '..', 'google-drive', 'upload_to_drive.py')
+        upload_out = _run([sys.executable, upload_script, final_wb,
+                           '--folder', month_folder_id, '--new'], 'upload', timeout=180)
+        drive_link = ''
+        m_link = _re.search(r'https://(?:docs|drive)\.google\.com/\S+', upload_out)
+        if m_link:
+            drive_link = m_link.group(0).rstrip(')')
+
+        # -- 4. Slack ----------------------------------------------------------
+        bits = []
+        m_stats = _re.search(r"STATS: (\{.*\})", build_out)
+        m_cico  = _re.search(r"CICO email: '([^']+)'", build_out)
+        if m_stats:
+            bits.append(f"`{m_stats.group(1)[:220]}`")
+        if m_cico:
+            bits.append(f"Bank balances from *{m_cico.group(1)}*")
+        _post_slack(
+            f":white_check_mark: *NB Borrowing Base -- as of {yesterday}*\n"
+            + ("\n".join(bits) + "\n" if bits else "")
+            + (f"<{drive_link}|Open in Drive>" if drive_link
+               else f"Uploaded to Drive/Neuberger Berman/Reporting/{yyyymm}/")
+            + "\nOpen in Excel to recalculate the form."
+        )
+        log.info('run_nb_bb: done.')
+
+    except Exception as exc:
+        log.error(f"run_nb_bb failed: {exc}", exc_info=True)
+        _post_slack(
+            f":warning: *NB Borrowing Base -- as of {yesterday}* failed to generate.\n"
+            f"`{str(exc)[:400]}`\n"
+            f"Run manually: `build_nb.py --as-of {yesterday} --template <prior form>`"
+        )
+        raise
+
+
 def run_weekly_bb():
     """Build US Borrowing Base directly (no agent) to avoid 90-min LangGraph timeout.
 
@@ -1007,6 +1154,15 @@ def run_loop():
                             and not state.get('last_mx_bb', '').endswith('_running'):
                         _launch_background('mx_bb', run_mx_bb, 'last_mx_bb', today_str)
 
+
+                # ── NB Borrowing Base ───────────────────────────────
+                # Weekly, MONDAYS at 8:30am PT, as of the prior day (Sunday).
+                # Cadence set by Brian 2026-08-11, re-confirmed 2026-08-17.
+                if (weekday == 0
+                        and (now.hour > 8 or (now.hour == 8 and now.minute >= 30))
+                        and not _state_completed_today(state, 'last_nb_bb', today_str)
+                        and not state.get('last_nb_bb', '').endswith('_running')):
+                    _launch_background('nb_bb', run_nb_bb, 'last_nb_bb', today_str)
 
                 # ── Morning Capital Markets Brief ─────────────────────────
                 # Weekdays only, once per day at 8am — posts BB + CICO snapshot to Brian.

@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 132,
+      "applications": 142,
       "created": "2026-04-07",
-      "last_applied": "2026-08-17T09:09:58.057873+00:00",
+      "last_applied": "2026-08-18T09:08:10.705327+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3582,6 +3582,70 @@
       "solution": "",
       "target_skills": [
         "linear"
+      ]
+    },
+    "pat-2026-08-17-225": {
+      "id": "pat-2026-08-17-225",
+      "name": "The daily CICO balances email is Mariana's 'YYMMDD CICO- Dai",
+      "source": "ep-2026-08-17-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-17",
+      "last_applied": "2026-08-17T22:39:52.033607+00:00",
+      "category": "general",
+      "pattern": "The daily CICO balances email is Mariana's 'YYMMDD CICO- Daily balances'. Never match on 'subject:CICO' alone - the monthly CICO forecast thread collides with it. And any vision->JSON call must check stop_reason before parsing.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-18-226": {
+      "id": "pat-2026-08-18-226",
+      "name": "A recurring-cadence decision from Brian is not done until it",
+      "source": "ep-2026-08-18-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-18",
+      "last_applied": "2026-08-18T09:08:51.740361+00:00",
+      "category": "general",
+      "pattern": "A recurring-cadence decision from Brian is not done until it exists as a scheduler job. Brian decided on 2026-08-11 that the NB BB runs Mondays as of the prior Sunday; that went into STRATEGIC_CONTEXT as a fact but no builder and no key in _report_scheduler_state.json were ever created, so the 8/17 run silently did not exist and he had to repeat himself (\"I told you it needs to run every monday as of the previous day\"). RULE: when Brian sets or changes a cadence for any recurring report, in the SAME turn (a) write/verify the builder, (b) add the job + state key to report_scheduler_cron.py, (c) confirm the gateway restarted so the in-process loop sees it, and (d) state the next fire date back to him. Recording a cadence in memory without wiring it is the failure, not a partial success. Corollary found 2026-08-18: last_nb_bb blocks on a <today>_failed value with no same-day retry (SOFOM has a retryable helper, NB does not), so one transient failure costs a full week on a weekly job.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-18-227": {
+      "id": "pat-2026-08-18-227",
+      "name": "Jupyter kernel launch fails on this Windows host (jupyter_co",
+      "source": "ep-2026-08-18-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-18",
+      "last_applied": "2026-08-18T17:53:53.944426+00:00",
+      "category": "general",
+      "pattern": "Jupyter kernel launch fails on this Windows host (jupyter_core win32 LookupAccountName WinError 1332 in secure_write). Do NOT retry nbclient/nbconvert --execute. Instead: build cells with nbformat, then execute each code cell in-process via exec() in a shared globals dict, capturing stdout with contextlib.redirect_stdout and figures via matplotlib Agg + fig.savefig to BytesIO -> base64 into a display_data output. Produces a fully-executed .ipynb that opens in Colab from Drive.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-08-18-228": {
+      "id": "pat-2026-08-18-228",
+      "name": "transactions_ssot has a TRANSACTION-GRAIN funding_source col",
+      "source": "ep-2026-08-18-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-18",
+      "last_applied": "2026-08-18T18:10:49.130375+00:00",
+      "category": "general",
+      "pattern": "transactions_ssot has a TRANSACTION-GRAIN funding_source column (not in the SKILL.md key-column list) with values loc / self-funded / stablecoin. Credit-funded = funding_source = 0x27loc0x27. For JP (product = 0x27Jeeves Pay0x27, is_company_test=false): loc completed = 111,908 txns / 1,510 companies / $1.715B; self-funded = 62,508 / $627M; stablecoin = 9,262 / $154M (stablecoin starts 2025-09-05). Company-level companies_dm.funding_source is the WRONG grain - companies mix rails.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
       ]
     }
   }

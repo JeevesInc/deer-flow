@@ -206,6 +206,9 @@ def start_crons() -> None:
     _load_and_start("knowledge-crawler", skills_dir / "knowledge-crawler" / "knowledge_cron.py")
     _load_and_start("revenue-comp", skills_dir / "jeeves-analytics" / "revenue_comp_cron.py")
     _load_and_start("state-backup", backend_dir / "scripts" / "backup_state.py")
+    # Runs at 03:30, after dreams (~02:00) and the 03:00 backup, so the day's
+    # self-edits are settled before they are committed.
+    _load_and_start("selfedit-commit", backend_dir / "scripts" / "selfedit_commit_cron.py")
     _load_and_start("checkpoint-cleanup", backend_dir / "scripts" / "checkpoint_cleanup_cron.py")
     _load_and_start("idle-thread-cleanup", backend_dir / "scripts" / "idle_thread_cleanup_cron.py")
     _load_and_start("slack-dm-monitor", skills_dir / "slack-search" / "slack_dm_monitor_cron.py")

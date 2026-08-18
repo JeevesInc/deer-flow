@@ -218,8 +218,11 @@ def bump_parent_pointer() -> str | None:
         return None
     sub = REPO.name
     status = _git_in(parent, "status", "--porcelain", "--", sub).stdout.strip()
-    # Uppercase M means the recorded commit moved. A lowercase m is only dirty
-    # content inside the submodule, which is not ours to record.
+    # Cheap pre-filter only. In porcelain v1 a submodule reads " M" both when the
+    # recorded commit moved AND when it merely has dirty content -- the two are not
+    # distinguishable here, so this can pass when nothing actually moved (e.g.
+    # commit_once skipped on quiescence and left the submodule dirty). The staged
+    # check below is what makes that a no-op instead of an empty commit; verified.
     if not status or "M" not in status[:2]:
         logger.info("[selfedit-commit] parent pointer unchanged")
         return None

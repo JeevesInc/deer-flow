@@ -39,6 +39,7 @@ QUIESCE_SECONDS = 15 * 60
 MAX_FILES_IN_MESSAGE = 40
 GIT_TIMEOUT = 120
 
+NEWLINE = chr(10)
 _TRAILER = "Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 
@@ -57,12 +58,16 @@ def _slack_alert(text: str) -> None:
         logger.warning("[selfedit-commit] slack alert failed: %s", e)
 
 
-def _git(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+def _git_in(repo: Path, *args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["git", "-C", str(REPO), *args],
+        ["git", "-C", str(repo), *args],
         input=stdin, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=GIT_TIMEOUT, check=True,
     )
+
+
+def _git(*args: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+    return _git_in(REPO, *args, stdin=stdin)
 
 
 def _dirty_paths() -> list[str]:
@@ -75,9 +80,17 @@ def _dirty_paths() -> list[str]:
     return paths
 
 
-def _mid_operation() -> str | None:
+def _mid_operation(repo: Path = REPO) -> str | None:
     """Name any in-progress git operation we must not commit over."""
-    gitdir = REPO / ".git"
+    gitdir = repo / ".git"
+    if gitdir.is_file():  # submodule: .git is a file pointing at the real dir
+        try:
+            target = gitdir.read_text(encoding="utf-8").split("gitdir:", 1)[1].strip()
+            gitdir = Path(target)
+            if not gitdir.is_absolute():
+                gitdir = (repo / gitdir).resolve()
+        except (OSError, IndexError):
+            return None
     for marker, label in (
         ("MERGE_HEAD", "merge"),
         ("rebase-merge", "rebase"),
@@ -188,6 +201,47 @@ def commit_once() -> str | None:
     return sha
 
 
+def bump_parent_pointer() -> str | None:
+    """Commit the submodule pointer in the parent repo, if it moved.
+
+    Without this the cleanup just moves up a level: deer-flow goes clean and the
+    parent sits permanently at " M deer-flow" instead. Stages ONLY the submodule
+    path -- the parent holds hand-maintained files (deploy/, scripts/) and
+    sweeping those into an automated commit is not this job.
+    """
+    parent = REPO.parent
+    if not (parent / ".git").exists():
+        return None
+    op = _mid_operation(parent)
+    if op:
+        logger.warning("[selfedit-commit] parent %s in progress -- not bumping pointer", op)
+        return None
+    sub = REPO.name
+    status = _git_in(parent, "status", "--porcelain", "--", sub).stdout.strip()
+    # Uppercase M means the recorded commit moved. A lowercase m is only dirty
+    # content inside the submodule, which is not ours to record.
+    if not status or "M" not in status[:2]:
+        logger.info("[selfedit-commit] parent pointer unchanged")
+        return None
+    _git_in(parent, "add", "--", sub)
+    if not _git_in(parent, "diff", "--cached", "--name-only").stdout.strip():
+        return None
+    head = _git("rev-parse", "--short", "HEAD").stdout.strip()
+    subject = _git("log", "-1", "--format=%s").stdout.strip()
+    msg = NEWLINE.join([
+        f"chore: bump {sub} to {head}",
+        "",
+        "Pointer bump for self-edits committed inside the submodule.",
+        f"Submodule HEAD: {subject}",
+        "",
+        _TRAILER,
+        "",
+    ])
+    _git_in(parent, "commit", "-F", "-", stdin=msg)
+    sha = _git_in(parent, "rev-parse", "--short", "HEAD").stdout.strip()
+    logger.info("[selfedit-commit] bumped parent pointer as %s", sha)
+    return sha
+
 def _seconds_until_next_run() -> float:
     now = dt.datetime.now()
     today_run = now.replace(hour=COMMIT_HOUR_LOCAL, minute=COMMIT_MINUTE_LOCAL,
@@ -204,6 +258,7 @@ def run_loop() -> None:
         time.sleep(_seconds_until_next_run())
         try:
             commit_once()
+            bump_parent_pointer()
         except subprocess.CalledProcessError as e:
             logger.exception("[selfedit-commit] git failed")
             detail = (e.stderr or e.stdout or str(e))[-600:]
@@ -222,5 +277,7 @@ if __name__ == "__main__":
     if "--once" in sys.argv:
         result = commit_once()
         print(f"committed: {result}" if result else "nothing committed")
+        bumped = bump_parent_pointer()
+        print(f"parent bumped: {bumped}" if bumped else "parent pointer unchanged")
     else:
         run_loop()

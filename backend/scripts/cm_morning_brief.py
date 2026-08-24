@@ -188,6 +188,31 @@ def build_brief() -> str:
     return "\n".join(lines)
 
 
+def _spawn_dq30_reading() -> None:
+    """Fire the standalone daily DQ30 reading (Brian, 2026-08-19: "add a daily
+    measurement of this to the morning daily crons... a simple message that I can
+    forward internally").
+
+    Spawned DETACHED rather than run inline: report_scheduler_cron.run_morning_brief
+    gives this script a 60s subprocess budget, and a slow Redshift/Zscaler morning
+    must not cost us the brief itself. nb_dq30_daily.py posts its own failure
+    notice, so a silent skip is not possible.
+    """
+    import subprocess
+    script = Path(__file__).resolve().parent / "nb_dq30_daily.py"
+    if not script.exists():
+        log.error("nb_dq30_daily.py missing at %s — DQ30 reading skipped", script)
+        return
+    try:
+        subprocess.Popen(
+            [sys.executable, str(script)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        log.info("DQ30 daily reading spawned")
+    except Exception as e:
+        log.error("Could not spawn DQ30 reading: %s", e)
+
+
 def send_brief():
     msg = build_brief()
     log.info("Brief built (%d chars)", len(msg))
@@ -202,6 +227,7 @@ def send_brief():
         log.error("Slack send failed: %s", result.stderr[:300])
         return False
     log.info("Brief sent to Brian: %s", result.stdout.strip()[:100])
+    _spawn_dq30_reading()
     return True
 
 

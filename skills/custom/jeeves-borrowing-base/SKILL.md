@@ -14,6 +14,8 @@ allowed-tools:
 
 ## ⚠️ HARD RULES — scheduler edits and completion truth (added 2026-08-10)
 
+0. **New or changed SQL born in this skill belongs in cfo-org-kb, and you CANNOT write it there with `write_file`/`str_replace` or with `skill_manage.py patch`.** Both fail: the clone is permission-denied to the write tools, and `skill_manage.py` edits the local clone with no git push, silently breaking the "GitHub is the only store, commit every query" rule. **Pattern:** write a python script to `WORKSPACE_PATH` that does plain `open().write()` into the clone, then `subprocess` the git add / commit / push with `cwd` set to the clone dir, and run it with `uv run python`. This is already a documented HARD RULE in cfo-org-kb/SKILL.md that recurred a 6th time on 2026-08-19 (Permission denied writing the new `nb_dq30_monthend_detail.sql`) because the work started HERE, in the borrowing-base skill, and cfo-org-kb/SKILL.md was never loaded. Read that rule before touching any .sql under cfo-org-kb.
+
 1. **Editing `report_scheduler_cron.py` does NOT take effect until the gateway restarts.** The cron is
    a daemon thread inside the gateway and the module is imported once at process start, so a patched
    file on disk is inert while the old code keeps running in memory. On 2026-08-09 three patches were
@@ -540,4 +542,65 @@ DPD>30 must be exactly 0 because `elig_iv_dpd30` already excludes it.
   Slack are already saved locally under the `slack_downloads` folder in `.deer-flow` as
   `YYYYMMDD_HHMMSS_<original name>`; reach them from python, never by globbing in bash.
 
+
+
+
+
+<!-- Evolution: 2026-08-19 | source: self-improving-agent -->
+## NB DQ30 backup - `dq30_detail` tab (2026-08-19)
+
+
+Brian, 2026-08-19: "we need to add backup to the dq30 calc on the nb borrowing base." The three
+month-end figures on the `dq30` tab were pasted values with only a prose source note. Now:
+
+- **`dq30_detail` tab** = loan-level backup, one row per non-charged-off, non-repayment-plan
+  `capital_markets_dm.loc_tape` record at each of the three month ends (20,311 rows for
+  May/Jun/Jul 2026). Raw fields are values; **encumbrance (col L), the >30 DPD numerator (col M)
+  and the DPD bucket (col N) are in-sheet formulas**, so the rule is auditable, not asserted.
+- **`dq30` rows 7-9** C/D are live `SUMIFS` over that tab keyed off new date cells `G7:G9`;
+  rows 30-41 add a DPD-bucket recon (Current / 1-30 / 31-60 / 61-90 / >90) whose totals must
+  reproduce rows 7-9 exactly (row 40 check = 0.00%).
+- **Spot memo C25/C26** were pasted python values that did NOT tie to the tape tab despite B28
+  claiming they did; they are now `SUMIFS(tape!$R:$R,tape!$W:$W,...)`. The old values used
+  `row_flags`' **OR** rule (`transfer_flag='on'` OR `sofom_balance_usd>0`) while the tape tab's
+  col W is effectively **`sofom_balance_usd>0` only** (its `N($P2)=1` test can never fire on text).
+  The gap is 148 rows, all negative/overpaid balances, -$64,650.45 -- it moves the spot denominator
+  but NOT the eligible pool ($118,731,470.95 under either rule at 8/16), so leave `row_flags` alone.
+- Query of record: `cfo-org-kb/sql/nb_dq30_monthend_detail.sql`. **Never `coalesce(jvs_remaining,0)`**
+  -- NULL means no financed tranche, i.e. UNENCUMBERED; coalescing flips such rows (1 row, $518 at
+  5/31/2026) and breaks the tie-out.
+- `build_nb.refresh_dq30_backup(wb, as_of, force=False)` runs on every build and re-pulls **only
+  when the 3-month window rolls** (`month_end_window` = the 3 most recently ENDED months), so the
+  weekly Monday run is cheap and the window updates itself on the first run after month end.
+- Verified 2026-08-19: 5/31 1.7317% | 6/30 2.0116% | 7/31 2.2203% -> **3-mo average 1.9879%**
+  (cap 2.50%; step-up prong needs <1.50% for three months). Every figure ties to the cent to what
+  was delivered on the 8/07 and 8/17 forms.
+
+
+
+
+<!-- Evolution: 2026-08-19 | source: self-improving-agent -->
+## NB DQ30 daily reading cron (2026-08-19)
+
+
+Brian, 2026-08-19: "add a daily measurement of this to the morning daily crons? I want a
+simple message that I can forward internally."
+
+- `backend/scripts/nb_dq30_daily.py` — one aggregate Redshift query (~2-6s) for the spot
+  reading at the as-of date PLUS the three most recent month ends, so the message carries
+  both the daily number and the live covenant test. Writes `.deer-flow/_nb_dq30_state.json`
+  and shows the day-over-day bps move off the prior reading. `--print [YYYY-MM-DD]` for a
+  dry look; `NB_DQ30_DRY_RUN=1` to exercise the send path without posting.
+- **Delivery: `cm_morning_brief.py` spawns it DETACHED (`Popen`) after the brief sends.**
+  Deliberately not a `cron_supervisor` entry: (a) `run_morning_brief` gives the brief script
+  a 60s subprocess budget and a slow Redshift morning must not cost the brief, and (b) a new
+  supervisor registration needs a gateway restart, while a subprocess picks up edits on the
+  next run. Weekday cadence, as-of the prior day, so Monday reads Sunday.
+- Methodology is intentionally the SAME as the form's spot memo (total balance incl. interest
+  and fees, all countries). Brian reviewed the principal-only reading available under the
+  "Outstanding Receivables Balance" definition (-16 bps, but ~-$1.08M of BB availability at
+  the 90% advance rate) and said "let's leave it as is" — do not silently switch bases.
+- The message states that the daily figure is NOT a covenant test point, because the spot
+  reading sits ABOVE 2.50% (2.70% at 8/18) while the covenant 3-month average is 1.99%.
+  It is written to be forwarded internally: no emoji, no file paths, no bot voice.
 

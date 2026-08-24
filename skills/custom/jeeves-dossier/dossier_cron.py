@@ -380,8 +380,22 @@ def gather_prep_extras(emails, max_attendees=4):
     return extras
 
 
+# Brian 2026-08-20: "The pre meeting prep messages are too long and I never
+# read them." The push is now ONE plain message, one line per attendee, and is
+# SUPPRESSED ENTIRELY when no attendee has an open thread. Everything that used
+# to be pushed (relationship summary, coaching notes, Honcho theory-of-mind
+# brief, warm mutuals) still lives in the dossier JSON and is served on demand
+# when Brian replies "more" in the DM thread.
+MAX_ATTENDEE_LINES = 5
+OPEN_STATUSES = ('pending', 'open', 'blocked', 'waiting', 'in_progress')
+
+
 def format_prep_extras(ex):
-    """Render one attendee's prep extras as mrkdwn lines (pure, testable)."""
+    """Render one attendee's prep extras as mrkdwn lines (pure, testable).
+
+    No longer used in the push message; retained for the on-demand "more"
+    expansion and for existing tests.
+    """
     parts = []
     if ex.get('brief'):
         parts.append(f"\n:brain: *Read on them:* {ex['brief'][:800]}")
@@ -392,8 +406,66 @@ def format_prep_extras(ex):
     return ''.join(parts)
 
 
+def attendee_line(name, dossier):
+    """One compact line for one attendee. Returns (line, has_open_thread)."""
+    rel = dossier.get('relationship', {}) or {}
+    health = rel.get('health_score', '?')
+    trend = (rel.get('trend') or '').strip()
+    bits = f"{health}/10"
+    if trend and trend != '?':
+        bits += f" {trend}"
+
+    threads = [t for t in (dossier.get('open_threads') or [])
+               if str(t.get('status', '')).lower() in OPEN_STATUSES]
+    if not threads:
+        return f"\u2022 {name} \u2014 {bits}", False
+
+    topic = str(threads[0].get('topic', '') or '').strip()[:70]
+    extra = f" \u00b7 open: {topic}"
+    if len(threads) > 1:
+        extra += f" (+{len(threads) - 1})"
+    return f"\u2022 {name} \u2014 {bits}{extra}", True
+
+
+def build_briefing_text(event, dossiers):
+    """Compact briefing text, or None when the briefing should be suppressed."""
+    summary = (event.get('summary') or 'Meeting')[:60]
+    start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', '')) or ''
+    when = start[11:16] if len(start) >= 16 else start
+
+    scored = []
+    for email, dossier in dossiers.items():
+        if not dossier:
+            continue
+        line, has_open = attendee_line(dossier.get('name') or email, dossier)
+        scored.append((0 if has_open else 1, line, has_open))
+
+    if not scored or not any(s[2] for s in scored):
+        return None
+
+    scored.sort(key=lambda s: s[0])
+    lines = [s[1] for s in scored]
+    shown = lines[:MAX_ATTENDEE_LINES]
+    if len(lines) > MAX_ATTENDEE_LINES:
+        shown.append(f"\u2022 +{len(lines) - MAX_ATTENDEE_LINES} others")
+
+    head = f"Mtg prep \u00b7 {summary}"
+    if when:
+        head += f" \u00b7 {when}"
+    return "\n".join([head] + shown + ['reply "more" for full dossiers'])
+
+
 def post_briefing(event, dossiers, prep_extras=None):
-    """Post a pre-meeting briefing to Slack DM."""
+    """Post a compact pre-meeting briefing to Slack DM.
+
+    Returns True when posted OR deliberately suppressed (nothing open) \u2014
+    suppression must not count toward ALERT_FAILURE_THRESHOLD.
+    """
+    text = build_briefing_text(event, dossiers)
+    if text is None:
+        log.info(f"Briefing suppressed (no open threads): {event.get('summary', '')}")
+        return True
+
     bot_token = os.environ.get('SLACK_BOT_TOKEN')
     owner_id = os.environ.get('SLACK_OWNER_USER_ID')
 
@@ -410,69 +482,12 @@ def post_briefing(event, dossiers, prep_extras=None):
 
     client = WebClient(token=bot_token)
 
-    summary = event.get('summary', 'Meeting')
-    start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
-
-    blocks = [
-        {
-            "type": "header",
-            "text": {"type": "plain_text", "text": f"Meeting Prep: {summary[:75]}"}
-        },
-        {
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"Starts at {start}"}]
-        },
-        {"type": "divider"},
-    ]
-
-    for email, dossier in dossiers.items():
-        if not dossier:
-            continue
-        name = dossier.get('name', email)
-        rel = dossier.get('relationship', {})
-        health = rel.get('health_score', '?')
-        trend = rel.get('trend', '?')
-        summary_text = rel.get('summary', 'No summary available')
-
-        # Coaching notes
-        coaching = dossier.get('coaching_notes', [])
-        coaching_text = ''
-        if coaching:
-            latest = coaching[-1]
-            coaching_text = f"\n> :bulb: _{latest.get('suggestion', '')}_"
-
-        # Open threads
-        threads = dossier.get('open_threads', [])
-        threads_text = ''
-        if threads:
-            items = [f"- {t.get('topic', '?')} ({t.get('status', '?')})" for t in threads[:3]]
-            threads_text = '\n'.join(items)
-
-        section_text = f"*{name}* — Health: {health}/10 ({trend})\n{summary_text}"
-        if coaching_text:
-            section_text += coaching_text
-        if threads_text:
-            section_text += f"\n*Open threads:*\n{threads_text}"
-        if prep_extras and email in prep_extras:
-            section_text += format_prep_extras(prep_extras[email])
-
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": section_text[:3000]}
-        })
-        blocks.append({"type": "divider"})
-
     try:
-        # Open DM channel
         dm = client.conversations_open(users=[owner_id])
         channel_id = dm['channel']['id']
 
-        client.chat_postMessage(
-            channel=channel_id,
-            text=f"Meeting Prep: {event.get('summary', 'Meeting')}",
-            blocks=blocks,
-        )
-        log.info(f"Posted briefing to Slack for: {event.get('summary', '')}")
+        client.chat_postMessage(channel=channel_id, text=text)
+        log.info(f"Posted briefing ({len(text)} chars) for: {event.get('summary', '')}")
         return True
     except Exception as e:
         log.error(f"Slack post failed: {e}")

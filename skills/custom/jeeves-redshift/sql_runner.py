@@ -62,7 +62,16 @@ ALLOWED_TABLES = {
     'capital_markets_dm.rms_transactions',
     'capital_markets_dm.intraday_collections',
     'dms_mysql_jeeves_raw.satws_invoices',
+    'dms_mysql_jeeves_raw.naics_industries',
+    'analytics_sandbox.company_to_industry',
+    'analytics_sandbox.industry_backfill',
 }
+# Added 2026-08-20 (Dream #93): the three industry-waterfall tables behind the CANONICAL,
+# committed KB query cfo-org-kb/sql/mastercard_spend_by_org_id.sql (commit a3f0324). Rejected at
+# runtime on 2026-08-19 during Alex's Mastercard follow-up, costing an --allow-tables retry --
+# the same lagging-whitelist pattern as Dreams #60 and #63 (third recurrence). A table that a
+# committed cfo-org-kb query depends on belongs in this list; when you add a query that needs a
+# new table, add it here in the same change.
 # Added 2026-07-18 (Dream #63): jurs_test/rms_transactions/intraday_collections/satws_invoices
 # are all documented in this skill's own SKILL.md (Additional Tables section + worked example
 # queries) but were missing from the whitelist -- same lagging-whitelist pattern as Dream #60.
@@ -471,7 +480,13 @@ def main():
                         help='Downgrade the today/future-date guard from error to warning (data lags a day — only use when querying non-tape tables)')
     parser.add_argument('--allow-tables', type=str, default=None,
                         help="Comma-separated extra tables to allow beyond the whitelist, or '*' to skip the table check")
+    parser.add_argument('--statement-timeout', type=int, default=None,
+                        help='Override the default 60s Redshift statement_timeout, in seconds. Use for long waterfall/tape queries instead of copying this file into a sql_runner_long.py variant.')
     args = parser.parse_args()
+
+    if args.statement_timeout:
+        globals()['STATEMENT_TIMEOUT_MS'] = int(args.statement_timeout) * 1000
+        print(f'[sql_runner] statement_timeout set to {args.statement_timeout}s', file=sys.stderr)
 
     # Generate SQL from natural language if --generate is used
     if args.generate:

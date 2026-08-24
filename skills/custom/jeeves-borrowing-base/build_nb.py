@@ -320,18 +320,213 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None):
     d = _d(as_of)
     lbl = '{}/{}/{}'.format(d.month, d.day, d.year)
     dq['B25'] = 'Unencumbered Receivables >30 DPD at ' + lbl
-    dq['C25'] = unenc_dq30
+    dq['C25'] = '=SUMIFS(tape!$R:$R,tape!$W:$W,1,tape!$K:$K,">30")'
+    dq['C25'].number_format = '#,##0.00'
     dq['B26'] = 'Unencumbered Receivables — total at ' + lbl
-    dq['C26'] = unenc_total
+    dq['C26'] = '=SUMIFS(tape!$R:$R,tape!$W:$W,1)'
+    dq['C26'].number_format = '#,##0.00'
     dq['B27'] = 'Spot DQ30 at ' + lbl
     print('dq30 spot memo @ {}: {:,.2f} / {:,.2f} = {:.4%}'.format(
         lbl, unenc_dq30, unenc_total, unenc_dq30 / unenc_total if unenc_total else 0))
+
+    refresh_dq30_backup(wb, as_of)
 
     wb.save(out_path)
     print('saved:', out_path)
     return {'tape_rows': len(tape), 'obligor_groups': len(groups),
             'eligible_balance': sum(bal.values()),
             'unenc_total': unenc_total, 'unenc_dq30': unenc_dq30}
+
+
+DQ30_HDR = ['month_end', 'company_id', 'loan_id', 'name', 'country', 'currency_code',
+            'days_past_due', 'balance_usd', 'transfer_flag', 'jvs_remaining_local',
+            'sofom_financed_usd', 'unencumbered', 'dq30_numerator_usd', 'dpd_bucket']
+
+
+def month_end_window(as_of, n=3):
+    """The n most recently ENDED calendar month ends as of `as_of` (oldest first)."""
+    d = _d(as_of)
+    first = dt.date(d.year, d.month, 1)
+    ends = []
+    for _ in range(n):
+        end = first - dt.timedelta(days=1)
+        ends.append(end)
+        first = dt.date(end.year, end.month, 1)
+    return list(reversed(ends))
+
+
+def pull_dq30_detail(month_ends):
+    """Loan-level month-end backup behind the Section 7.01(b) DQ30 Rate."""
+    from redshift import connect
+    sql_path = os.path.join(SK, 'custom', 'cfo-org-kb', 'sql',
+                            'nb_dq30_monthend_detail.sql')
+    lits = ', '.join("date '{}'".format(d.isoformat()) for d in month_ends)
+    sql = open(sql_path, encoding='utf-8').read().replace('{}', lits)
+    cur = connect().cursor()
+    cur.execute(sql)
+    cols = [c[0] for c in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def refresh_dq30_backup(wb, as_of, force=False):
+    """(Re)build the dq30_detail backup tab and wire the dq30 tab to it.
+
+    The covenant is a 3-month rolling average measured at month ends, so the
+    backup only needs re-pulling when the 3-month window rolls (i.e. once a
+    month).  Everything on the dq30 tab is a live SUMIFS over this tab -- no
+    hard-coded numerator/denominator inputs  [SKILL rule 6: no frozen refs].
+    """
+    import openpyxl
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+
+    MONEY, PCT, DATEF, INT = '#,##0.00', '0.00%', 'm/d/yyyy', '#,##0'
+    dq = wb['dq30']
+    window = month_end_window(as_of)
+    have = [dq['G{}'.format(r)].value for r in (7, 8, 9)]
+    have = [v.date() if hasattr(v, 'date') else v for v in have]
+    if (not force and have == window and 'dq30_detail' in wb.sheetnames
+            and wb['dq30_detail'].max_row > 1):
+        print('dq30 backup: window {} unchanged, {} rows retained'.format(
+            [d.isoformat() for d in window], wb['dq30_detail'].max_row - 1))
+        return None
+
+    rows = pull_dq30_detail(window)
+    if 'dq30_detail' in wb.sheetnames:
+        del wb['dq30_detail']
+    ws = wb.create_sheet('dq30_detail', wb.sheetnames.index('dq30') + 1)
+    for i, h in enumerate(DQ30_HDR, start=1):
+        ws.cell(row=1, column=i, value=h).font = Font(bold=True)
+    for i, r in enumerate(rows):
+        rr = 2 + i
+        cc = _i(r['country_code'])
+        ws.cell(row=rr, column=1, value=_d(r['dt']).date()).number_format = DATEF
+        ws.cell(row=rr, column=2, value=_i(r['company_id']))
+        ws.cell(row=rr, column=3, value=_i(r['loan_id']))
+        ws.cell(row=rr, column=4, value=r['name'] or None)
+        ws.cell(row=rr, column=5, value=COUNTRY_NAMES.get(cc, str(cc)))
+        ws.cell(row=rr, column=6, value=_i(r['currency']))
+        ws.cell(row=rr, column=7, value=_i(r['days_past_due']))
+        ws.cell(row=rr, column=8, value=_f(r['balance_usd'])).number_format = MONEY
+        ws.cell(row=rr, column=9, value=r['transfer_flag'])
+        ws.cell(row=rr, column=10, value=_f(r['jvs_remaining'])).number_format = MONEY
+        ws.cell(row=rr, column=11,
+                value=_f(r['financed_balance_usd'])).number_format = MONEY
+        ws.cell(row=rr, column=12, value='=IF(AND($I{0}="on",N($K{0})>0),0,1)'.format(rr))
+        ws.cell(row=rr, column=13,
+                value='=IF(AND($L{0}=1,N($G{0})>30),$H{0},0)'.format(rr)
+                ).number_format = MONEY
+        ws.cell(row=rr, column=14,
+                value=('=IF(N($G{0})<=0,"Current",IF($G{0}<=30,"1-30",IF($G{0}<=60,'
+                       '"31-60",IF($G{0}<=90,"61-90",">90"))))').format(rr))
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = 'A1:N{}'.format(len(rows) + 1)
+    for col, w in zip('ABCDEFGHIJKLMN',
+                      [11, 11, 10, 30, 14, 13, 15, 15, 12, 17, 17, 13, 18, 11]):
+        ws.column_dimensions[col].width = w
+
+    # ── wire the covenant rows to the backup ──
+    tags = ['Month -2', 'Month -1', 'Current month-end']
+    dq['G6'] = 'Month-end (key)'
+    dq['G6'].font = Font(bold=True)
+    for i, d in enumerate(window):
+        r = 7 + i
+        dq['B{}'.format(r)] = '{} - {}'.format(tags[i], d.strftime('%B %d, %Y'))
+        dq['G{}'.format(r)] = d
+        dq['G{}'.format(r)].number_format = DATEF
+        dq['C{}'.format(r)] = ('=SUMIFS(dq30_detail!$H:$H,dq30_detail!$A:$A,$G{0},'
+                               'dq30_detail!$L:$L,1,dq30_detail!$G:$G,">30")').format(r)
+        dq['C{}'.format(r)].number_format = MONEY
+        dq['D{}'.format(r)] = ('=SUMIFS(dq30_detail!$H:$H,dq30_detail!$A:$A,$G{0},'
+                               'dq30_detail!$L:$L,1)').format(r)
+        dq['D{}'.format(r)].number_format = MONEY
+        dq['F{}'.format(r)] = ('Live SUMIFS over dq30_detail (capital_markets_dm.loc_tape '
+                               '@ month-end; unencumbered = not MX SOFOM-financed, '
+                               'ex charge-offs and repayment plans)')
+    dq['B22'] = ('Monthly figures are live SUMIFS over the dq30_detail backup tab; the '
+                 'covenant is measured as of the last day of each calendar month.')
+
+    # ── backup recon: unencumbered pool by DPD bucket ──
+    dq['B30'] = 'Backup - Unencumbered pool by DPD bucket (live SUMIFS over dq30_detail)'
+    dq['B30'].font = Font(bold=True)
+    dq['B31'] = 'DPD bucket'
+    dq['B31'].font = Font(bold=True)
+    for i in range(3):
+        col = get_column_letter(3 + i)
+        c = dq['{}31'.format(col)]
+        c.value = '=$G${}'.format(7 + i)
+        c.number_format = DATEF
+        c.font = Font(bold=True)
+    buckets = [('Current (0 or less DPD)', '"<=0"', None),
+               ('1 - 30 DPD', '">=1"', '"<=30"'),
+               ('31 - 60 DPD', '">=31"', '"<=60"'),
+               ('61 - 90 DPD', '">=61"', '"<=90"'),
+               ('Over 90 DPD', '">90"', None)]
+    for j, (lbl, c1, c2) in enumerate(buckets):
+        rr = 32 + j
+        dq['B{}'.format(rr)] = lbl
+        for i in range(3):
+            col = get_column_letter(3 + i)
+            crit = 'dq30_detail!$G:$G,{}'.format(c1)
+            if c2:
+                crit += ',dq30_detail!$G:$G,{}'.format(c2)
+            cell = dq['{}{}'.format(col, rr)]
+            cell.value = ('=SUMIFS(dq30_detail!$H:$H,dq30_detail!$A:$A,{c}$31,'
+                          'dq30_detail!$L:$L,1,{cr})').format(c=col, cr=crit)
+            cell.number_format = MONEY
+    for rr, lbl in [(37, 'Total Unencumbered Receivables (b)'),
+                    (38, 'Unencumbered Receivables more than 30 DPD (a)'),
+                    (39, 'Monthly DQ30 (a)/(b)'),
+                    (40, 'Check vs rows 7-9 (must be 0.00%)'),
+                    (41, 'Loan records in the month-end pool')]:
+        dq['B{}'.format(rr)] = lbl
+        if rr in (37, 38, 39):
+            dq['B{}'.format(rr)].font = Font(bold=True)
+    for i in range(3):
+        col = get_column_letter(3 + i)
+        dq['{}37'.format(col)] = ('=SUMIFS(dq30_detail!$H:$H,dq30_detail!$A:$A,{c}$31,'
+                                  'dq30_detail!$L:$L,1)').format(c=col)
+        dq['{}37'.format(col)].number_format = MONEY
+        dq['{}38'.format(col)] = '=SUM({c}34:{c}36)'.format(c=col)
+        dq['{}38'.format(col)].number_format = MONEY
+        dq['{}39'.format(col)] = '=IF({c}37=0,"",{c}38/{c}37)'.format(c=col)
+        dq['{}39'.format(col)].number_format = PCT
+        dq['{}40'.format(col)] = '={c}39-E{r}'.format(c=col, r=7 + i)
+        dq['{}40'.format(col)].number_format = PCT
+        dq['{}41'.format(col)] = ('=SUMPRODUCT((dq30_detail!$A$2:$A${n}={c}$31)*'
+                                  '(dq30_detail!$L$2:$L${n}=1))').format(
+                                      n=len(rows) + 1, c=col)
+        dq['{}41'.format(col)].number_format = INT
+    dq['B43'] = ('Backup: dq30_detail carries every non-charged-off, non-repayment-plan '
+                 'loan record on capital_markets_dm.loc_tape at each of the three month '
+                 'ends ({} records). Encumbrance (col L) and the >30 DPD numerator '
+                 '(col M) are in-sheet formulas off the raw fields, so rows 7-9 tie to '
+                 'the detail with no hard-coded inputs.'.format(len(rows)))
+    dq['B43'].alignment = Alignment(wrap_text=True, vertical='top')
+
+    # replicate the sheet math for the console (no Excel on this box)
+    agg = {}
+    for r in rows:
+        d = _d(r['dt']).date()
+        agg.setdefault(d, [0.0, 0.0, 0])
+        if _i(r['unencumbered']) == 1:
+            bal = _f(r['balance_usd']) or 0.0
+            agg[d][1] += bal
+            agg[d][2] += 1
+            if (_f(r['days_past_due']) or 0) > 30:
+                agg[d][0] += bal
+    rates = []
+    for d in sorted(agg):
+        a, b, n = agg[d]
+        rate = a / b if b else 0
+        rates.append(rate)
+        print('dq30 backup {}: {:,.2f} / {:,.2f} = {:.4%} ({:,} unencumbered rows)'
+              .format(d.isoformat(), a, b, rate, n))
+    avg = sum(rates) / len(rates) if rates else 0
+    print('dq30 backup: 3-month rolling average {:.4%} (cap 2.50%, step-up <1.50%)'
+          .format(avg))
+    return {'window': [d.isoformat() for d in window], 'detail_rows': len(rows),
+            'monthly': rates, 'rolling_avg': avg}
 
 
 def main():

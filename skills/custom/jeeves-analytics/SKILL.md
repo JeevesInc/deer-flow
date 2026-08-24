@@ -84,6 +84,14 @@ GROUP BY product, sub_product
 ORDER BY total_revenue DESC
 ```
 
+## Forecasting / predictive-model asks — HARD RULES (added 2026-08-19 from the Jeeves Pay spend model, thread e405278b)
+
+1. **Never report "no predictive value" or "too noisy" until calendar features are exhausted.** `dow` + `dom` + crude first/last-week flags are NOT calendar features. Test ordinal/compound ones before any negative conclusion: **last-weekday-of-month, nth-weekday (e.g. last Friday), business-day-of-month, days-to-month-end, payday proximity, holiday adjacency**. Brian pushed back twice on exactly this ("did you look at day of week? like the last friday of every month", "I dont believe that theres no predictive value here") and the features were in fact material.
+2. **Validate at the ENTITY level, not the portfolio level.** "i care about a name by name basis, not portfolio" (2026-08-18). The default deliverable for any spend/receivables forecast is **top-50 names, forecast vs actual, with charts** — scatter, sorted per-name error bars, and per-name time series. A portfolio-aggregate WAPE answers a question he did not ask.
+3. **Pick the metric that matches the decision.** On a panel that is ~98% zeros, amount-error metrics (WAPE/MAPE) are dominated by noise and hide real skill; score **ranking and dollar concentration** (top-decile share of actual dollars, hit rate) alongside amounts, and say which metric drives the decision (T-1 cash movement = ranking + magnitude bands, not point accuracy).
+4. **Always show out-of-sample walk-forward** with the calibration fitted only on pre-cutoff data, and state the cutoffs explicitly. Brian asks for validation every single time ("yes, and well need to see a validation") — build it into the first delivery.
+5. **Compute budget: a modeling run that will exceed ~15 minutes must be chunked.** The harness cancels a task at 20 minutes and the finished write-up is lost (happened 2026-08-18 14:51). Persist each stages output (Excel/notebook/JSON) to disk as it completes, then report from the artifact. Do NOT post an interim "building..." line — a bare `?` from Brian is the cost of that.
+
 ## Rules
 
 - Always state the snapshot date in the response

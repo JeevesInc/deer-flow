@@ -83,7 +83,11 @@ The runner **rejects**: non-SELECT statements, multi-statement input, tables out
 python .../sql_runner.py "SELECT ..." --allow-tables "some_schema.new_table"
 # Intentionally reference today (non-tape tables only)
 python .../sql_runner.py "SELECT ..." --allow-today
+# Long-running query (default statement_timeout is 60s)
+python .../sql_runner.py --file big_waterfall.sql --statement-timeout 900 -o out.xlsx
 ```
+
+**HARD RULE - never build a "long" copy of the runner.** When a query exceeds the 60s statement timeout, pass `--statement-timeout <seconds>`. Copying or regenerating sql_runner.py into a sql_runner_long.py variant is prohibited: on 2026-08-20 (AIG loc_tape rebuild, thread 6fcba15a) that detour burned two failed tool calls - the bash path guard rejected the bare script path, then the copy script crashed reading its source - before a single row came back.
 
 The runner automatically:
 - **Echoes the full SQL** being executed (always visible to the user)
@@ -472,6 +476,13 @@ Raw MySQL replication of the Jeeves production database via AWS DMS. **209 table
 | Table | Cols | Description |
 |-------|------|-------------|
 | `company_statements` | 52 | Monthly billing statements — month/year, invoicedamount, endingbalance, duedate, autodebit, settlementdatetime |
+
+> **DEFECT — `company_statements.usdcurrencyexchangerate` IS NOT A MARKET RATE (DEN-277, raised to the org 2026-08-18).** Every USD figure on a statement is `platforminvoicedamount x usdcurrencyexchangerate = usdinvoicedamount` (ties to the cent), and that rate is off-market or frozen on most non-USD statements. Latest statement per company across 2,319 non-USD companies: only **13.4% within 2% of `capital_markets_dm.loc_tape.spot_rate`** on the same date; USD as booked $226.03M vs $246.19M at spot = **$20.16M (8.2%) understated**. Worst first: COP 640 cos / 4 clean / median 32% below spot / -$11.50M; MXN 1,012 / 17% clean / -$5.97M; BRL 386 / 32% clean / -$2.24M (rates stored as 1.99+ where USDBRL is ~0.19); GBP 174 / 1 clean / -$0.34M; EUR 92 / 4 clean / -$0.12M; CAD overstated $6.6K. 33,404 of 37,211 statements affected.
+> **SCOPE OF THE BAN - read this before you widen it. Only the two USD-derived columns are banned: `usdinvoicedamount` and `usdcurrencyexchangerate`. `company_statements` itself is NOT banned and its LOCAL-currency fields stay authoritative.** Specifically, **`platforminvoicedamount` is the invoiced amount of record - it is what Jeeves showed the customer on the statement**, and for the AIG/TEX claims file "invoiced" is defined as *statement invoiced (local) less any prior-invoice carry-forward*, then converted once at the end with `loc_tape.spot_rate` (Brian, 2026-08-21: *"we already discovered that usdinvoicedamount is wrong, that's the only problem"* / *"the invoiced amount is what we showed them on the statement. that's in company statements."*). Over-reading a **column** ban as a **table** ban cost four corrections in 80 minutes on 2026-08-21 and forced the AIG file to be rebuilt from v4 through v6.
+> **Corollaries settled in the same rebuild:** `loc_tape.balance` is the **true daily local outstanding** - `platformendingbalanceamount` is a gross invoice figure, NOT a balance, and must never be used as one (this broke v4); and `loc_tape.payment_amount` **cannot split cash between the prior and the current cycle**, so prior-invoice carry-forward has to be proxied - the v6 proxy is 95.0% exact and -1.04% conservative, which Brian accepted. Do not re-derive carry-forward from scratch when the basis changes; **port the logic that already worked** ("the carry forward amounts were solved before, why is this a new issue?", 2026-08-21).
+>
+> **Rule: never convert a statement to USD with `usdcurrencyexchangerate`. Join to `loc_tape.spot_rate` on the invoice date** (lineage: Airflow `v2_automation` DAG -> dbt `lt_loc_base_tape` -> `daily_forex` from `exchange_rate_logs`). This feeds the AIG/TEX insurance file, so any AIG tie-out must be rebuilt on spot. Also note `usdinvoicedamount` is NOT an aggregation of `statement_transactions` at settlement rates — on zero-carry-forward statements the transaction sums differ several-fold (369143 MXN: txns $7.31M vs $2.32M booked; 361236 COP: $1.75M vs $167.7K).
+> `dms_mysql_jeeves_raw.statement_transactions` was **not** in `sql_runner.py`s `ALLOWED_TABLES` as of 2026-08-18 and blocked this analysis mid-flight — check the allowlist before promising a statement-level cut.
 | `company_billing_configurations` | 14 | Billing day, due date interval, billing interval per company |
 | `company_bank_accounts` | 61 | Linked bank accounts — ACH/Plaid details, autodebit status, verification status |
 | `bank_accounts` | 21 | Internal credit line ledger — cl (credit limit), ab (available balance), tb (total balance), bb (billing balance) |

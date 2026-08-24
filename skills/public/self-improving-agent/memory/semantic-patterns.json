@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 142,
+      "applications": 163,
       "created": "2026-04-07",
-      "last_applied": "2026-08-18T09:08:10.705327+00:00",
+      "last_applied": "2026-08-22T09:06:23.931698+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3646,6 +3646,102 @@
       "solution": "",
       "target_skills": [
         "jeeves-redshift"
+      ]
+    },
+    "pat-2026-08-18-229": {
+      "id": "pat-2026-08-18-229",
+      "name": "Two compounding errors: (1) violated the no-progress-narrati",
+      "source": "ep-2026-08-18-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-18",
+      "last_applied": "2026-08-18T20:31:38.682866+00:00",
+      "category": "general",
+      "pattern": "Two compounding errors: (1) violated the no-progress-narration rule in SOUL.md - an interim Building... message is worse than silence because it sets an expectation with no ETA; (2) long background compute (nohup + sleep with 600s bash timeouts) can outlive the run and the final message gets lost. For any analysis needing >10 min of compute: do NOT announce it, keep all work inside one uninterrupted stretch of tool calls, and make the FINAL tool call cheap so the run reliably reaches the text-publish step. If a long background job is unavoidable, deliver a complete interim result (numbers already computed), never a status line.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-08-19-230": {
+      "id": "pat-2026-08-19-230",
+      "name": "gmail_tool.py parses argv positionally with no argparse: cmd",
+      "source": "ep-2026-08-19-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-19",
+      "last_applied": "2026-08-19T09:07:18.907177+00:00",
+      "category": "general",
+      "pattern": "gmail_tool.py parses argv positionally with no argparse: cmd_search(sys.argv[2], int(sys.argv[3])). Passing --max 25 raises ValueError: invalid literal for int(). The fix is search \"<query>\" 25. This is the same class of defect as the draft/draft-new body-vs---body-file trap: every flag-looking token in a positional slot is either misparsed or silently swallowed. When a gmail_tool traceback is truncated to main(), assume argv misparse first and re-run with positional args before theorizing about the API.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-08-19-231": {
+      "id": "pat-2026-08-19-231",
+      "name": "A NULL in a SQL comparison is load-bearing: coalesce(jvs_rem",
+      "source": "ep-2026-08-19-016",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-19",
+      "last_applied": "2026-08-19T17:01:04.201293+00:00",
+      "category": "general",
+      "pattern": "A NULL in a SQL comparison is load-bearing: coalesce(jvs_remaining,0) flipped 1 unencumbered row to encumbered and broke an exact tie-out. Export NULLs as blanks so the in-sheet formula reproduces the SQL. Also: when replacing pasted values with live formulas, check whether the python rule and the sheet rule actually agree first (OR vs AND encumbrance test, -$64,650 gap, no BB impact).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-19-232": {
+      "id": "pat-2026-08-19-232",
+      "name": "Never turn an internal flag/setting name into a counterparty",
+      "source": "ep-2026-08-19-018",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-19",
+      "last_applied": "2026-08-19T17:40:22.191742+00:00",
+      "category": "general",
+      "pattern": "Never turn an internal flag/setting name into a counterparty or facility name in outward-facing text. Processor names (JPMorgan in SOFOM_JPMORGAN_ENABLED) are not facilities; the encumbrance is the MX SOFOM facility (Monex F/12340 borrower, JVS Mexico SOFOM guarantor, CELF/Community EM agent).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-08-20-233": {
+      "id": "pat-2026-08-20-233",
+      "name": "A specific instance in Brian's ask is the ENTRY POINT to a s",
+      "source": "ep-2026-08-20-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-20",
+      "last_applied": "2026-08-20T09:06:33.363831+00:00",
+      "category": "general",
+      "pattern": "A specific instance in Brian's ask is the ENTRY POINT to a systemic problem, never the scope of the answer -- and his phrasing describes the recipient, not the mechanism. Sweep the population and thread the reply before he has to ask for either.",
+      "problem": "2026-08-19, AIG/TEX thread 09bce107. Brian asked: 'draft an email to christian, cc pablo, explaining how these invoices aren't in any recent files we've provided, so they should've been wiped when he reset the system.' The agent produced a standalone new email arguing the single trigger company, ADR WORK SAS (26730). Brian rejected it on TWO independent grounds in one message: 'no I want this replying to a previous thread where he said he reset the environment. I don't [want] it limited to just this company, because it likely exists in other cases.'",
+      "solution": "Before drafting anything outbound: (a) search the counterparty for a live thread on the topic (search 'from:<their email> <topic word>' plus in:sent) and default to draft <message_id> inside it, using draft-new only when the search returns nothing and saying so in the report; (b) run the query that sizes the full affected population and lead the draft with count / dollars / entity count, using the named case as the illustrating example. Both rules written into gmail/SKILL.md 2026-08-20.",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-08-20-234": {
+      "id": "pat-2026-08-20-234",
+      "name": "Pre-meeting Slack briefings must be ONE plain message, one l",
+      "source": "ep-2026-08-20-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-20",
+      "last_applied": "2026-08-20T16:29:05.554215+00:00",
+      "category": "general",
+      "pattern": "Pre-meeting Slack briefings must be ONE plain message, one line per attendee, no block kit, no relationship-summary paragraph / coaching note / Honcho brief / mutuals in the push (~250-400 chars total, was ~4000 for 3 attendees). Suppress the message entirely when no attendee has an open thread - a briefing with no signal is noise. Depth stays available on demand ('reply more').",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
       ]
     }
   }

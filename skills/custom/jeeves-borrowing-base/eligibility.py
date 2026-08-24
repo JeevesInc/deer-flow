@@ -83,11 +83,36 @@ def calculate_eligibility_fields_sofom(df):
     result = _add_common_elig_fields(result)
     result['elig_ff'] = ((result['card_balance_usd'] + result['jp_principal_balance_usd']) <= (1.05 * result['credit_limit_usd'])).astype(int)
 
+    # ---- First Amendment to the MX SPV Loan Agreement (July 14, 2026), Schedule B (dd) ----
+    # "Named Account Debtors shall have a credit limit equal to the lesser of (i) $7,000,000
+    # and (ii) 10% of the aggregate Receivable Balance of Eligible Receivables."
+    # Named Account Debtor = an Account Debtor with an AIG-approved coverage amount, which
+    # arrives on the tape as insured_limit_usd (dms_mysql_jeeves_raw.insurance_guarantee_records).
+    # The 10% cap is measured against the eligible pool BEFORE (dd) is applied, per day.
+    # NOTE: as drafted the criterion addresses Named Account Debtors only, so non-Named
+    # debtors carry no credit-limit eligibility test. Confirm with Agent before changing.
+    _pre_cols = [c for c in result.columns if c.startswith('elig_')]
+    _pre_elig = result[_pre_cols].min(axis=1)
+    if 'insured_limit_usd' in result.columns:
+        _insured = result['insured_limit_usd'].fillna(0)
+    else:
+        _insured = pd.Series(0.0, index=result.index)
+    _pool = (result['sofom_balance_usd'].fillna(0) * _pre_elig).groupby(result['dt']).transform('sum')
+    _cap = np.minimum(7_000_000.0, 0.10 * _pool)
+    result['elig_dd'] = np.where(_insured > 0, (result['credit_limit_usd'].fillna(0) <= _cap), True).astype(int)
+
     elig_cols = [c for c in result.columns if c.startswith('elig_')]
     result['elig'] = result[elig_cols].min(axis=1)
     result['eligible_balance_usd'] = result['sofom_balance_usd'] * result['elig']
     if 'sofom_balance' in result.columns:
         result['eligible_balance'] = result['sofom_balance'] * result['elig']
+
+    # insured_limit_usd MUST be the LAST column (tape!EI). Every concentration formula in
+    # the SOFOM master workbook addresses the tape by column letter, so inserting the new
+    # field anywhere before the elig_* block would shift EF/CM/CH and silently break the
+    # whole Exhibit A/B block. Keep it pinned to the end.
+    if 'insured_limit_usd' in result.columns:
+        result = result[[c for c in result.columns if c != 'insured_limit_usd'] + ['insured_limit_usd']]
     return result
 
 

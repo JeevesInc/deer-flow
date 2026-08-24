@@ -157,6 +157,7 @@ select
     , coalesce(c.naicsindustryid, 9999) as naics_industry_id
     , case when td.company_type = 'Startup' then 1 else 0 end as is_startup
     , cr.total_collateral_amount_usd
+    , coalesce(igr.coverageamountusd, 0) as insured_limit_usd
 from
     capital_markets_dm.loc_tape lt
 left join
@@ -171,6 +172,17 @@ left join
 left join
     collateral_totals cr
     on cr.companyid = lt.company_id
+left join
+    (
+        select
+            companyid
+            , coverageamountusd
+            , row_number() over (partition by companyid order by updatedat desc) as rn
+        from
+            dms_mysql_jeeves_raw.insurance_guarantee_records
+    ) igr
+    on igr.companyid = lt.company_id
+    and igr.rn = 1
 left join
     master_customer_dm.companies_dm cdm
     on cdm.company_id = lt.company_id

@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 163,
+      "applications": 166,
       "created": "2026-04-07",
-      "last_applied": "2026-08-22T09:06:23.931698+00:00",
+      "last_applied": "2026-08-25T09:12:15.102845+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3742,6 +3742,38 @@
       "solution": "",
       "target_skills": [
         "jeeves-dossier"
+      ]
+    },
+    "pat-2026-08-25-235": {
+      "id": "pat-2026-08-25-235",
+      "name": "In Python NEVER hard-code a /mnt literal, not even for skill",
+      "source": "ep-2026-08-25-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-25",
+      "last_applied": "2026-08-25T09:15:36.583967+00:00",
+      "category": "general",
+      "pattern": "In Python NEVER hard-code a /mnt literal, not even for skills. Use os.environ['SKILLS_PATH'|'WORKSPACE_PATH'|'OUTPUTS_PATH'], or hard-code the real host root: skills = C:/Jeeves/redshift-bot/deer-flow/skills, per-thread user-data = C:/Jeeves/redshift-bot/deer-flow/backend/.deer-flow/threads/<id>/user-data. After any python-side write into a skill or kb directory, verify from bash with ls or git status before believing it landed. A tool-guard refusal is not permission to swap in the same path inside a script.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-08-25-236": {
+      "id": "pat-2026-08-25-236",
+      "name": "When Brian supplies a specific competing mechanism, test HIS",
+      "source": "ep-2026-08-25-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-25",
+      "last_applied": "2026-08-25T09:15:36.655963+00:00",
+      "category": "general",
+      "pattern": "When Brian supplies a specific competing mechanism, test HIS mechanism first and open the answer with the verdict on it. For any column-mapping suspicion, prove it by MAGNITUDE against an independent source-of-record table for the same period and currency -- never by reasoning about column names. Identical sums across two columns mean one column under two names (a labelling defect), not double counting; never tell a counterparty a report double counts without showing one row hitting a total twice.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
       ]
     }
   }

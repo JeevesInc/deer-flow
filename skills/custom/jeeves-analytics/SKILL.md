@@ -92,6 +92,13 @@ ORDER BY total_revenue DESC
 4. **Always show out-of-sample walk-forward** with the calibration fitted only on pre-cutoff data, and state the cutoffs explicitly. Brian asks for validation every single time ("yes, and well need to see a validation") — build it into the first delivery.
 5. **Compute budget: a modeling run that will exceed ~15 minutes must be chunked.** The harness cancels a task at 20 minutes and the finished write-up is lost (happened 2026-08-18 14:51). Persist each stages output (Excel/notebook/JSON) to disk as it completes, then report from the artifact. Do NOT post an interim "building..." line — a bare `?` from Brian is the cost of that.
 
+## When Brian disputes your root cause — HARD RULES (added 2026-08-25 from the MX MSR column investigation, thread 7ed6747d)
+
+1. **Test HIS hypothesis first, explicitly, and lead the answer with the verdict on it.** Brian does not push back vaguely — he supplies a specific mechanism ("we added the fee column and just didn't update the index", "it's just a naming artifact"). That is a testable claim. Run the test for HIS mechanism before defending yours, and open with "your theory holds / does not hold, here is the query". On 2026-08-24 he was right, and it took him two rounds and "I really don't believe you" to get there because the answer kept re-arguing the original position.
+2. **Prove a column-mapping claim by magnitude against an independent source table, not by reasoning about names.** Sum the suspect columns for one period, sum the corresponding fields in the upstream/system-of-record table for the same period and currency, and match by order of magnitude. Two `SUM()` queries settled a 69-turn argument.
+3. **"Duplicate columns" is a labelling hypothesis until proven a data hypothesis.** Identical sums mean one column under two names — that is a naming defect and nothing is double counted. Never tell a lender or a counterparty that a report double counts until you have shown the same row contributing twice to one total.
+4. **"Can you look at <person>'s email about <report>" is never a request for a summary.** He has read it. He wants the underlying data question answered and a reply he can send. Answering with a recap earns "why would I just want you to summarize it?" (2026-08-24 08:07 PT).
+
 ## Rules
 
 - Always state the snapshot date in the response

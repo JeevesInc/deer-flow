@@ -14,6 +14,10 @@ allowed-tools:
 
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
+**CRITICAL — `capital_markets_dm.loc_tape` Jeeves Pay columns are MIS-LABELLED. `jp_fee` holds Jeeves Pay DISBURSEMENT volume and `jp_disbursement` holds the FEE; `fee_amount` is a byte-identical duplicate of `jp_disbursement`.** Verified 2026-08-25 for MX (`country_code = 484`) July 2026 over 95,091 rows: `fee_amount` = 27,090,673.18, `jp_disbursement` = 27,090,673.18, `jp_fee` = 1,269,733,513.79 — cross-checked to the Jeeves Pay source of truth `master_transactions_dm.loc_jeevespay_transactions_dm` for the same month and currency (`send_amount` = 1,304,113,069.41, `total_fees_send_amount` = 25,223,004.17). The names were shifted when the fee column was added and the index was not updated — Brian's own diagnosis, confirmed. **Never read `jp_fee` as a fee or `jp_disbursement` as a disbursement, and never report a `fee_amount`/`jp_disbursement` pair as double counting** — it is one column under two names, not duplicated data. When you need real Jeeves Pay volume or fees, go to `loc_jeevespay_transactions_dm` (not on the runner whitelist: pass `--allow-tables master_transactions_dm.loc_jeevespay_transactions_dm`).
+
+**CRITICAL: `loc_tape` publishes the day's partition BEFORE the balances land**, so `max(dt)` is NOT the latest usable date. On 2026-08-24 the 8/24 partition existed with every balance NULL while 8/23 was the latest complete day. Always select the latest `dt` with non-null balances and state which date you used in the answer.
+
 CRITICAL: dms_mysql_jeeves_raw country_lookup, currency_lookup, and state_lookup do NOT exist as tables -- recurring guess, rejected by the allowlist every time (recurred 2026-07-21 during AIG reconciliation, 4 days after first documented 2026-07-17). For currency code lookups use master_dimensions.currency_lookup_dim (join cur.numeric_code equals rms_transactions.local_currency). For state names use dms_mysql_jeeves_raw.states (id -> statename), confirmed 2026-08-04 and now on the allowlist -- join states.id = company_addresses.stateid, sibling of the already-known .cities. There is no country table: map ISO 3166-1 numeric companies.countrycode with an inline CTE (see sql/aig_invoice_data.sql in cfo-org-kb for the canonical 20-code version).
 
 ## Workflow: Always Check the KB First
@@ -72,6 +76,16 @@ expression is rejected before it ever reaches Redshift. This burned turns three 
 `$WORKSPACE_PATH` and run it with `--file`. Never retry variants of an inline command the guard
 rejected — move it to a file on the FIRST failure. Same rule for any Python you would otherwise
 pass with `-c`.
+
+**The same guard rejects NON-SQL content too — it does not know what kind of string it is reading.** Confirmed rejections: `x / NULLIF(y,0)` and `amount / 1e6` (division), `/tmp` (a real path), Excel number formats such as `#,##0` rendered as `/#####`, and Excel formula fragments such as `/B17=Payment`. So **anything that builds a workbook, a number format or a formula string belongs in a `write_file` script too** — never in a bash heredoc or `-c`.
+
+**HARD RULE — do NOT hand-roll a Redshift connection script when `sql_runner.py` will do.** On 2026-08-24 (MX MSR investigation, thread 7ed6747d) a chain of ad-hoc `pandas.read_sql(..., connect())` scripts produced BOTH a `ModuleNotFoundError: redshift_util` AND three separate path-guard rejections in one thread. `sql_runner.py` needs no imports, echoes the SQL, validates it and formats the output. Reach for a hand-written script only when you genuinely need post-processing in pandas — and then the first statement must be
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', 'jeeves-borrowing-base'))
+from redshift_util import connect
+```
+`redshift_util` lives in `jeeves-borrowing-base` and exports `connect()`. Nothing else.
 
 
 ### Enforced guards (errors, not warnings)

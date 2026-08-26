@@ -63,14 +63,52 @@ def _load_allowlist() -> dict:
         return {BRIAN_USER_ID: {'name': 'Brian Mauck'}}
 
 
-def _notify_gated_message(client, brian_dm: str, sender_name: str, sender_id: str, message: dict) -> None:
-    """Tell Brian a non-allowlisted person DM'd the bot. No reply is sent to the sender."""
+ACK_COOLDOWN_HOURS = int(os.environ.get('SLACK_GATED_ACK_COOLDOWN_HOURS', '24'))
+
+GATED_ACK_TEXT = (
+    "Hi {first} -- I'm Brian Mauck's analyst assistant.\n\n"
+    "You're not on my approved-sender list yet, so I won't answer this one directly. "
+    "I've passed your message to Brian and he'll come back to you."
+)
+
+
+def _ack_gated_sender(client, channel_id: str, sender_name: str, state: dict) -> bool:
+    """Send a new-sender holding reply. Throttled to once per ACK_COOLDOWN_HOURS per DM channel.
+
+    Returns True if a reply was actually posted.
+    """
+    acked = state.setdefault('acked', {})
+    last = acked.get(channel_id)
+    if last:
+        try:
+            if datetime.now() - datetime.fromisoformat(last) < timedelta(hours=ACK_COOLDOWN_HOURS):
+                return False
+        except Exception:
+            pass
+    parts = (sender_name or '').split()
+    first = parts[0] if parts else 'there'
+    try:
+        client.chat_postMessage(channel=channel_id, text=GATED_ACK_TEXT.format(first=first))
+        acked[channel_id] = datetime.now().isoformat()
+        log.info("Sent new-sender holding reply to %s (%s)", sender_name, channel_id)
+        return True
+    except Exception as e:
+        log.error("Failed to send holding reply to %s: %s", sender_name, e)
+        return False
+
+
+def _notify_gated_message(client, brian_dm: str, sender_name: str, sender_id: str, message: dict,
+                          acked: bool = False) -> None:
+    """Tell Brian a non-allowlisted person DM'd the bot. Only a holding reply goes to the sender."""
     text = message.get('text', '')
     ts = message.get('ts', '')
     dt = datetime.fromtimestamp(float(ts)).strftime('%I:%M %p') if ts else 'unknown time'
+    tail = ("I replied that they're new to me and I'd run it by you. No other action taken."
+            if acked else
+            "I did not respond or take any action (holding reply already sent recently).")
     try:
         notify_lines = [
-            ":lock: *{0}* ({1}) DM'd me at {2} but is *not on the allowlist* -- I did not respond or take any action.".format(sender_name, sender_id, dt),
+            ":lock: *{0}* ({1}) DM'd me at {2} but is *not on the allowlist* -- {3}".format(sender_name, sender_id, dt, tail),
             "> " + text[:400],
             'Reply "allow {0}" if you want me to add them and respond.'.format(sender_name),
         ]
@@ -245,7 +283,8 @@ def run_loop():
                     if other_user not in allowlist:
                         # Not authorized: no agent dispatch, no reply. Notify Brian, mark seen.
                         for msg in new_msgs:
-                            _notify_gated_message(client, brian_dm, sender_name, other_user, msg)
+                            acked = _ack_gated_sender(client, channel_id, sender_name, state)
+                            _notify_gated_message(client, brian_dm, sender_name, other_user, msg, acked)
                             state.setdefault('gated', []).append({
                                 'sender_name': sender_name,
                                 'sender_id': other_user,

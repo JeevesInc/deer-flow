@@ -61,7 +61,7 @@ Sends **as Brian's own identity** (user token), not the bot. This is how the ana
 
 ## Inbound DM allowlist (who gets responses)
 
-The DM monitor only responds to senders on the allowlist (`backend/.deer-flow/_slack_dm_allowlist.json`).
+The DM monitor only does real work for senders on the allowlist (`backend/.deer-flow/_slack_dm_allowlist.json`). A non-allowlisted sender gets one short holding reply -- they're new, the message is going to Brian -- throttled to once per 24h per sender (`SLACK_GATED_ACK_COOLDOWN_HOURS`); Brian still gets the :lock: notification.
 Anyone NOT on the list gets **no reply and no agent dispatch** — Brian gets a Slack notification instead
 and decides whether to allow them. The loader fails closed (owner-only) if the file is unreadable.
 

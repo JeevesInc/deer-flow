@@ -14,6 +14,28 @@ allowed-tools:
 
 Ad-hoc analytical questions about the Jeeves credit portfolio.
 
+## HARD RULES - Metabase / self-serve dashboards (added 2026-08-26, Dream #99)
+
+1. **NEVER curl the Metabase API from bash.** The bash path guard reads URL path fragments as filesystem
+   paths and rejects them (`Unsafe absolute paths in command: /api/collection`, `/api, /card/`, `/=`) - four of the six tool
+   errors in the 2026-08-25 dashboard build were this, not real path problems. Write a python script with
+   `requests`, the full `https://` URL as a string and `METABASE_API_KEY` from env, then run it with
+   `$PYTHON_PATH`. The same rule exists in cfo-org-kb/SKILL.md and was violated anyway because that skill is
+   not loaded for a dashboard task - it now lives here too, where the work happens. **This also applies to the
+   patch scripts you write about this rule**: a bash heredoc containing those tokens is itself rejected.
+2. **Host is `https://jeeves.metabaseapp.com` and it sits behind Zscaler like Redshift.** An
+   `SSLError / Max retries exceeded` against that host is a VPN symptom: run `zscaler-reauth/reauth.py`, then
+   retry once, before suspecting the API or the token.
+3. **Dashboard of record for borrowing-base self-serve is 10919** - "Capital Markets - Borrowing Base
+   Reporting" in the Finance collection, built 2026-08-25 for **Axel Orendain and William Filho** (cash
+   reporting). Two sections, NB and CIM; as-of-any-date **eligible vs ineligible receivables by country**
+   (**Mexico is excluded from NB; only Mexico is eligible in CIM**) plus an MTD rollforward. It ties to the NB
+   workbook to the cent (eligible $118,731,471 at 2026-08-16) - tie out any new card the same way before
+   announcing it. Queries belong in cfo-org-kb.
+4. **Announcing a dashboard: the bot must JOIN the Slack channel first** - `chat_postMessage` to a channel
+   deerflow_analyst is not a member of fails (hit on **#ops-mx-spv**, 2026-08-25). Join, post, then quote the
+   returned `ts` as proof.
+
 ## Examples
 
 - "What's our 90+ DPD rate in Mexico vs last month?"

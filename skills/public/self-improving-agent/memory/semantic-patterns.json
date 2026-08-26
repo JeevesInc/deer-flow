@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 166,
+      "applications": 174,
       "created": "2026-04-07",
-      "last_applied": "2026-08-25T09:12:15.102845+00:00",
+      "last_applied": "2026-08-26T09:14:42.667254+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3774,6 +3774,38 @@
       "solution": "",
       "target_skills": [
         "jeeves-analytics"
+      ]
+    },
+    "pat-2026-08-25-237": {
+      "id": "pat-2026-08-25-237",
+      "name": "Two inbound Slack paths exist: app/channels/slack.py (_notif",
+      "source": "ep-2026-08-25-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-25",
+      "last_applied": "2026-08-25T16:05:23.037529+00:00",
+      "category": "general",
+      "pattern": "Two inbound Slack paths exist: app/channels/slack.py (_notify_owner_of_inbound sends the :eyes: notice; its allowed_users config is empty = allow-all) and skills/custom/slack-search/slack_dm_monitor_cron.py, which is the ONLY place the _slack_dm_allowlist.json gate is enforced (fail-closed, gated senders got silence). Patch sender-facing DM behavior there. cron_supervisor._load_and_start exec_modules each cron once at gateway start and runs run_loop in a supervised thread, so any cron patch is inert until the gateway restarts - always tell Brian the change is staged, not live.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-08-26-238": {
+      "id": "pat-2026-08-26-238",
+      "name": "When Brian says a recurring job 'didn't run', he means the D",
+      "source": "ep-2026-08-26-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-26",
+      "last_applied": "2026-08-26T09:16:50.900606+00:00",
+      "category": "general",
+      "pattern": "When Brian says a recurring job 'didn't run', he means the DELIVERY, not the build. The 2026-08-24 run built and uploaded the workbook cleanly (gateway log 09:22:20-09:27:34, Drive id 1rkjOCGxIVC5v_Qr-4FiL0X2NN-RjKV0t, state 'completed'); what never happened was the email to NB and Wilmington Trust, because run_nb_bb has no email step at all. Two rules follow. (1) Never diagnose a 'didn't run' from a state marker or a green Slack post - reproduce the delivery: Gmail in:sent for that week's thread, or the artifact in Drive. (2) When Brian says 'that should automatically happen every <period>', the deliverable is CODE IN THE CRON, not a config file plus a hand-made draft. Verify by grepping the cron module for the config filename before reporting done: on 2026-08-25 a 42-turn session produced nb_bb_distribution.json and one manual draft, while report_scheduler_cron.py stayed untouched since 2026-08-17 16:22 and contains zero references to it - so the same complaint would have recurred on 2026-08-31.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

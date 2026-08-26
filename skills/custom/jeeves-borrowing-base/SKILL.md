@@ -32,7 +32,22 @@ allowed-tools:
    Downstream gates (`_wait_for_bb_pipeline`, morning brief, CICO dashboard) treat a bare `<today>`
    value as "data is ready", so a false completion silently serves stale numbers.
 
-3. **State value semantics:** `<today>` = completed, `<today>_running` = in flight, `<today>_failed` =
+3. **"The NB borrowing base didn't run" from Brian means the EMAIL, not the build — and `run_nb_bb` has no
+   email step (verified in source 2026-08-26; `report_scheduler_cron.py` unchanged since 2026-08-17 16:22).**
+   The job does build → upload → `_post_slack` → done. On 2026-08-24 it succeeded end-to-end at 09:22-09:27 PT
+   (Drive id `1rkjOCGxIVC5v_Qr-4FiL0X2NN-RjKV0t`, state `2026-08-24` completed) and Brian still reported it as
+   not run, because NB and Wilmington Trust received nothing. **Never answer a "did it run?" question from the
+   state marker or the green Slack post — check Gmail `in:sent` for that week's thread.** Distribution config
+   of record is `.deer-flow/nb_bb_distribution.json` (To: Max Fernandez, Jay Berger, Varun Surapaneni, Joseph
+   Feil, J'Lynn Drennon; Cc: NBSF_Ops, NBSF_Finance, NB_ABC_Finance; **new thread every week**, subject
+   `Jeeves Weekly Borrowing Base - As of {prior Sunday}`) — it is CONFIG ONLY, nothing reads it yet.
+   Also: the uploaded workbook keeps the template's prefix (`Jeeves NB Borrowing Base - Form - {stamp}.xlsx`),
+   not the `Jeeves NB Borrowing Base - {YYYYMMDD}.xlsx` name of record — rename before sending externally.
+
+4. **The scheduler polls hourly, so a "08:30 PT" job fires at whatever tick follows** — 2026-08-24 fired at
+   09:22:20. Do not tell Brian a job "didn't fire at 8:30"; find the tick in `deerflow-gateway.err.log` first.
+
+5. **State value semantics:** `<today>` = completed, `<today>_running` = in flight, `<today>_failed` =
    fired and errored (stays failed until re-run by hand). `_state_completed_today` blocks re-fire on
    all three, so a stuck `_running` or `_failed` value must be cleared by hand to re-run same-day.
 

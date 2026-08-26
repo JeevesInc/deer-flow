@@ -159,9 +159,13 @@ def cmd_send(recipient, message):
         except Exception as e:
             print(f"ERROR: couldn't look up {recipient}: {e}", file=sys.stderr)
             sys.exit(1)
-    elif not (user_id.startswith('U') or user_id.startswith('W')):
-        print(f"ERROR: recipient must be a Slack user_id (UXXX/WXXX) or an email; got: {recipient}", file=sys.stderr)
+    elif not (user_id.startswith('U') or user_id.startswith('W')
+              or user_id.startswith('C') or user_id.startswith('G')):
+        print(f"ERROR: recipient must be a Slack user_id (UXXX/WXXX), a channel id (CXXX/GXXX) or an email; got: {recipient}", file=sys.stderr)
         sys.exit(1)
+
+    # A channel id posts in-channel as the bot; anything else is a DM.
+    is_channel = user_id.startswith('C') or user_id.startswith('G')
 
     # Resolve display name for the audit log (best-effort).
     recipient_name = user_id
@@ -172,13 +176,16 @@ def cmd_send(recipient, message):
     except Exception:
         pass
 
-    # Open the DM channel.
-    try:
-        dm = bot.conversations_open(users=[user_id])
-        channel_id = dm['channel']['id']
-    except Exception as e:
-        print(f"ERROR: couldn't open DM with {user_id} ({recipient_name}): {e}", file=sys.stderr)
-        sys.exit(1)
+    # Resolve the target conversation.
+    if is_channel:
+        channel_id = user_id
+    else:
+        try:
+            dm = bot.conversations_open(users=[user_id])
+            channel_id = dm['channel']['id']
+        except Exception as e:
+            print(f"ERROR: couldn't open DM with {user_id} ({recipient_name}): {e}", file=sys.stderr)
+            sys.exit(1)
 
     # Send.
     try:

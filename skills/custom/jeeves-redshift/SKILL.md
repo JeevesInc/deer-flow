@@ -244,7 +244,7 @@ Daily LOC portfolio tape. One row per company per day. Use for **balances, disbu
 - `jeeves_pay_disbursement_amount_usd` (numeric): Jeeves Pay spend
 - `fee_amount` / `fee_amount_usd` (numeric): Fee amounts
 - `payment_amount_usd` (numeric): Payments received
-- `days_past_due` (integer): Days overdue (0 = current)
+- `days_past_due` (integer): Days overdue (0 = current). **There is NO `max_dpd` column on `loc_tape`** — `column "max_dpd" does not exist in loc_tape` was hit on 2026-08-19 AND again on 2026-08-25. `max_dpd` exists only as an output alias of the `max_dq` CTE in cfo-org-kb `sql/data_tape.sql`; against the raw tape compute `max(days_past_due)` grouped by `company_id` yourself. Current DPD is always `days_past_due`.
 - `dq_bucket` (varchar): Delinquency bucket (current, 1-30, 31-60, 61-90, 90+)
 - `dq_bucket_daily` (varchar): Daily DQ bucket
 - `dq_bucket_monthly` (varchar): Monthly DQ bucket

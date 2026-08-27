@@ -223,6 +223,12 @@ def start_crons() -> None:
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
     _load_and_start("weekly-open-items", skills_dir / "gmail" / "weekly_open_items_cron.py")
     _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
+    # classifier-eval: weekly scoring of the email classifier against the golden
+    # set (skills/custom/jeeves-eval). Feeds the jeeves_eval_* gauges and the
+    # "Jeeves Agent Quality" dashboard. Every other cron here answers "is it
+    # running"; this one is the only one that answers "is it still any good".
+    # Silent unless a metric drops materially. EVAL_CRON_DISABLE=1 to idle.
+    _load_and_start("classifier-eval", skills_dir / "jeeves-eval" / "eval_cron.py")
     _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
     _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
     # linear-mention-monitor: watches for Linear @mentions of Brian via Gmail

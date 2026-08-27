@@ -257,6 +257,49 @@ g_cm_cron_last_ts = Gauge(
 )
 
 
+# --- Evaluation ------------------------------------------------------------
+# Fed by skills/custom/jeeves-eval/run_eval.py via .deer-flow/_eval_state.json.
+# These are the only gauges here that measure whether the agent is any GOOD, as
+# opposed to whether it is up. A silent quality regression after a prompt or
+# model change looks identical to a healthy system on every other panel.
+g_eval_score = Gauge(
+    "jeeves_eval_score",
+    "Classifier eval score by metric (accuracy/precision/recall/f1). NaN when no eval has run.",
+    labelnames=("metric",),
+    registry=registry,
+)
+g_eval_confusion = Gauge(
+    "jeeves_eval_confusion",
+    "Classifier eval confusion-matrix cell counts (tp/fp/fn/tn).",
+    labelnames=("cell",),
+    registry=registry,
+)
+g_eval_action_score = Gauge(
+    "jeeves_eval_action_score",
+    "Mean LLM-judge score (0-2) on proposed_action quality.",
+    registry=registry,
+)
+g_eval_action_judged = Gauge(
+    "jeeves_eval_action_judged_cases",
+    "How many cases the action judge actually scored — a mean over 2 cases is noise.",
+    registry=registry,
+)
+g_eval_set_size = Gauge(
+    "jeeves_eval_golden_set_size",
+    "Number of cases in the golden set the last run scored.",
+    registry=registry,
+)
+g_eval_age_days = Gauge(
+    "jeeves_eval_days_since_run",
+    "Days since the last eval run. Alert on this: a stale eval is an unmeasured agent.",
+    registry=registry,
+)
+g_eval_latency = Gauge(
+    "jeeves_eval_classifier_latency_p50_ms",
+    "p50 classifier latency observed during the last eval run.",
+    registry=registry,
+)
+
 g_store_size_bytes = Gauge(
     "deerflow_store_size_bytes",
     "On-disk size of each DeerFlow data store (P2-7: growth is monotonic "
@@ -754,6 +797,74 @@ def _refresh_cap_markets() -> None:
                     pass
 
 
+def _refresh_eval() -> None:
+    """Project the last eval run onto the jeeves_eval_* gauges.
+
+    Absent or unreadable state publishes NaN rather than 0: a 0.0 accuracy panel
+    reads as "the classifier is broken", when the truth is "nobody has run the
+    eval". The one gauge that stays numeric is days_since_run, which is the
+    signal you actually want to alert on.
+    """
+    import math
+
+    state_file = _state_dir() / "_eval_state.json"
+    metric_names = ("accuracy", "precision", "recall", "f1")
+    confusion_map = {
+        "tp": "true_positives",
+        "fp": "false_positives",
+        "fn": "false_negatives",
+        "tn": "true_negatives",
+    }
+
+    def _publish_unknown() -> None:
+        for name in metric_names:
+            g_eval_score.labels(metric=name).set(math.nan)
+        for cell in confusion_map:
+            g_eval_confusion.labels(cell=cell).set(math.nan)
+        g_eval_action_score.set(math.nan)
+        g_eval_action_judged.set(0)
+        g_eval_set_size.set(0)
+        g_eval_latency.set(math.nan)
+        # Deliberately large, not NaN — "never run" must trip the staleness
+        # alert exactly like "ran once, months ago".
+        g_eval_age_days.set(9999)
+
+    if not state_file.exists():
+        _publish_unknown()
+        return
+    try:
+        latest = json.loads(state_file.read_text(encoding="utf-8")).get("latest") or {}
+    except (OSError, ValueError):
+        _publish_unknown()
+        return
+    if not latest:
+        _publish_unknown()
+        return
+
+    def _set(gauge, value):
+        try:
+            gauge.set(float(value))
+        except (TypeError, ValueError):
+            gauge.set(math.nan)
+
+    for name in metric_names:
+        _set(g_eval_score.labels(metric=name), latest.get(name))
+    for cell, key in confusion_map.items():
+        _set(g_eval_confusion.labels(cell=cell), latest.get(key))
+
+    action_mean = latest.get("action_score_mean")
+    g_eval_action_score.set(math.nan if action_mean is None else float(action_mean))
+    _set(g_eval_action_judged, latest.get("action_score_n") or 0)
+    _set(g_eval_set_size, latest.get("golden_set_size") or 0)
+    _set(g_eval_latency, latest.get("latency_p50_ms"))
+
+    ran_at = latest.get("unix_ts")
+    if isinstance(ran_at, (int, float)) and ran_at > 0:
+        g_eval_age_days.set(max(0.0, (time.time() - float(ran_at)) / 86400.0))
+    else:
+        g_eval_age_days.set(9999)
+
+
 def _refresh_crons() -> None:
     """Per-cron liveness gauges, read from the supervisor registry.
 
@@ -788,5 +899,6 @@ def refresh_all(langgraph_url: str = "http://localhost:2024") -> None:
     _refresh_thread_map()
     _refresh_langgraph_threads(langgraph_url)
     _refresh_cap_markets()
+    _refresh_eval()
     _refresh_crons()
     g_scrape_seconds.set(time.monotonic() - started)

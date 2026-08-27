@@ -17,6 +17,7 @@ from deerflow.agents.middlewares.subagent_limit_middleware import SubagentLimitM
 from deerflow.agents.middlewares.title_middleware import TitleMiddleware
 from deerflow.agents.middlewares.todo_middleware import TodoMiddleware
 from deerflow.agents.middlewares.token_usage_middleware import TokenUsageMiddleware
+from deerflow.agents.middlewares.trace_middleware import TraceMiddleware
 from deerflow.agents.middlewares.tool_error_handling_middleware import build_lead_runtime_middlewares
 from deerflow.agents.middlewares.view_image_middleware import ViewImageMiddleware
 from deerflow.agents.thread_state import ThreadState
@@ -330,6 +331,12 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
     # (says "now let me X" but emits no tool call). Sits outside the retry layer so a
     # transient API error during the re-invocation gets retried, not re-detected.
     middlewares.append(ContinuationMiddleware())
+
+    # TraceMiddleware — persist one record per model call to .deer-flow/traces/.
+    # Deliberately OUTSIDE AnthropicRetryMiddleware: one logical model call
+    # should produce one trace record with retry cost folded into its latency,
+    # not N records that overstate how much work the run did.
+    middlewares.append(TraceMiddleware(agent_name=agent_name))
 
     # AnthropicRetryMiddleware — retry transient API errors (500/502/503/504/529, connection, timeout, rate-limit).
     # Added last (before ClarificationMiddleware) so it sits closest to the model call; outer middlewares'

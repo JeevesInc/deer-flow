@@ -13,7 +13,10 @@ Pipeline:
   1. Read proposal_log.jsonl entries posted ≥24h ago and not yet in
      proposal_outcomes.jsonl.
   2. For each: pull the Slack thread via conversations.replies(ts=...).
-  3. Haiku labels the outcome (approved/redirected/ignored/rejected).
+  3. Label the outcome. A Slack reply is labeled by the LLM
+     (approved/redirected/rejected). No Slack reply falls through to a
+     read-only Gmail probe (gmail_disposition.py) which separates
+     handled_elsewhere / dismissed / ignored — see that module for why.
   4. Append labeled pair to proposal_outcomes.jsonl.
   5. Sonnet reads the day's labeled pairs and produces 1-5 patterns.
   6. Each pattern is written to mem0.
@@ -50,6 +53,20 @@ try:
     load_env()
 except Exception:
     pass
+
+# Sibling import. This module is loaded BY FILE PATH from eod_review_cron under
+# the gateway's cron supervisor, so its own directory is not on sys.path — the
+# insert has to happen at module level, not inside a function, or the import
+# below fails silently at cron start (same trap that killed honcho-sync).
+if str(_HERE.parent) not in sys.path:
+    sys.path.insert(0, str(_HERE.parent))
+try:
+    from gmail_disposition import outcome_for_disposition, probe_disposition
+except Exception:  # pragma: no cover - degrade to the pre-probe behavior
+    probe_disposition = None
+
+    def outcome_for_disposition(_disposition: str) -> str:
+        return 'ignored'
 
 logging.basicConfig(
     level=logging.INFO,
@@ -206,6 +223,53 @@ def _summarize_thread_for_labeler(messages: list[dict]) -> tuple[str, str, str, 
 
 
 # ---------------------------------------------------------------------------
+# Gmail-side disposition — did Brian act on the email outside Slack?
+# ---------------------------------------------------------------------------
+
+_gmail_service = None
+_gmail_service_failed = False
+
+
+def _get_gmail_service():
+    """Build the Gmail client once per process and reuse it.
+
+    A batch relabel probes hundreds of threads; rebuilding the discovery client
+    per call is the difference between a minute and a quarter of an hour. One
+    failed build is remembered so we do not retry auth on every proposal.
+    """
+    global _gmail_service, _gmail_service_failed
+    if _gmail_service is not None or _gmail_service_failed:
+        return _gmail_service
+    try:
+        from gmail_disposition import _service
+        _gmail_service = _service()
+    except Exception as e:
+        log.warning('Gmail disposition probe disabled (auth/build failed): %s', e)
+        _gmail_service_failed = True
+    return _gmail_service
+
+
+def _gmail_disposition(proposal: dict) -> dict:
+    """Probe Gmail for what happened to this proposal's thread.
+
+    Always returns a dict; a failed probe yields `unknown`, which maps back to
+    the pre-2026-08 `ignored` behavior so this can never make labeling worse.
+    """
+    fallback = {'disposition': 'unknown', 'evidence': 'Gmail probe unavailable.'}
+    if probe_disposition is None:
+        return fallback
+    try:
+        return probe_disposition(
+            proposal.get('gmail_msg_id', ''),
+            posted_at=proposal.get('posted_at', ''),
+            service=_get_gmail_service(),
+        )
+    except Exception as e:
+        log.warning('Gmail disposition probe failed for %s: %s', proposal.get('gmail_msg_id'), e)
+        return dict(fallback, evidence=f'Gmail probe error: {e}')
+
+
+# ---------------------------------------------------------------------------
 # Labeling — Haiku call per proposal
 # ---------------------------------------------------------------------------
 
@@ -216,17 +280,25 @@ def label_outcome(proposal: dict, thread_messages: list[dict]) -> dict:
     """
     rendered_thread, brian_reply, brian_reply_ts, lag = _summarize_thread_for_labeler(thread_messages)
 
-    # If thread has ONLY the parent (no replies), it's ignored — skip the LLM call.
+    # No replies in the Slack thread. That is NOT the same as "ignored" — Brian
+    # routinely reads the email and answers in Gmail without ever touching the
+    # Slack proposal. Ask Gmail what actually happened before labeling, because
+    # the synthesizer mines IGNORED cases for "the classifier got it wrong": a
+    # correct proposal that Brian acted on in Gmail would otherwise train the
+    # classifier to stop surfacing exactly the emails it got right.
     if len(thread_messages) <= 1:
+        disp = _gmail_disposition(proposal)
+        outcome = outcome_for_disposition(disp['disposition'])
         return {
             'proposal_slack_ts': proposal.get('slack_ts'),
             'labeled_at': datetime.now(timezone.utc).isoformat(),
-            'outcome': 'ignored',
+            'outcome': outcome,
             'brian_reply': '',
             'brian_reply_ts': '',
             'agent_response': '',
             'lag_seconds': 0,
-            'label_reasoning': 'No replies in thread.',
+            'gmail_disposition': disp['disposition'],
+            'label_reasoning': f"No replies in Slack thread. Gmail: {disp['evidence']}",
         }
 
     if not ANTHROPIC_API_KEY:
@@ -238,6 +310,7 @@ def label_outcome(proposal: dict, thread_messages: list[dict]) -> dict:
             'brian_reply_ts': brian_reply_ts,
             'agent_response': '',
             'lag_seconds': lag,
+            'gmail_disposition': 'not_probed',
             'label_reasoning': 'No ANTHROPIC_API_KEY configured.',
         }
 
@@ -303,6 +376,7 @@ Respond with ONLY valid JSON in this exact format:
             'brian_reply_ts': brian_reply_ts,
             'agent_response': labeled.get('agent_response', ''),
             'lag_seconds': lag,
+            'gmail_disposition': 'not_probed',
             'label_reasoning': labeled.get('label_reasoning', ''),
         }
     except Exception as e:
@@ -315,6 +389,7 @@ Respond with ONLY valid JSON in this exact format:
             'brian_reply_ts': brian_reply_ts,
             'agent_response': '',
             'lag_seconds': lag,
+            'gmail_disposition': 'not_probed',
             'label_reasoning': f'Labeler error: {e}',
         }
 
@@ -394,6 +469,17 @@ def synthesize_patterns(pairs: list[dict]) -> list[str]:
         )
     cases = '\n\n'.join(rendered)
 
+    # Only mine cases where Brian pushed back. HANDLED_ELSEWHERE means the
+    # proposal was right and he acted on it in Gmail, so feeding it to a prompt
+    # that asks "where did the classifier go wrong" inverts the lesson.
+    negatives = sum(
+        1 for p in pairs
+        if p['outcome'].get('outcome') in ('rejected', 'redirected', 'ignored', 'dismissed')
+    )
+    if not negatives:
+        log.info('Synthesizer skipped: all %d cases were positive outcomes.', len(pairs))
+        return []
+
     prompt = f"""You are refining the classifier that proposes actions on Brian Mauck's
 inbound email. Here are recent labeled outcomes — what the classifier
 proposed vs what Brian actually wanted.
@@ -402,9 +488,24 @@ proposed vs what Brian actually wanted.
 
 ---
 
-Focus on REJECTED, REDIRECTED, and IGNORED cases. They tell you where the
-classifier got it wrong. Extract at most {MAX_PATTERNS_PER_DAY} concrete patterns
-to apply next time.
+Outcome labels mean:
+  APPROVED          — Brian told the agent to go ahead.
+  HANDLED_ELSEWHERE — Brian never replied in Slack, but Gmail shows the thread
+                      was answered. The proposal was CORRECT. Use these only as
+                      counter-examples — never write a pattern that would
+                      suppress this kind of email.
+  REDIRECTED        — right to surface, wrong action proposed.
+  REJECTED          — Brian explicitly declined.
+  DISMISSED         — no reply, but Brian archived the thread out of his inbox.
+                      A real but softer "not actionable" signal than REJECTED.
+  IGNORED           — no reply anywhere and the mail is still sitting unread or
+                      unactioned in the inbox. Weakest signal of the set: it may
+                      mean noise, or just a busy week. Never write a pattern
+                      supported ONLY by IGNORED cases.
+
+Focus on REJECTED and REDIRECTED cases, with DISMISSED as supporting evidence.
+They tell you where the classifier got it wrong. Extract at most
+{MAX_PATTERNS_PER_DAY} concrete patterns to apply next time.
 
 CRITICAL — patterns must bind the EMAIL CONTEXT (topic, content type, what's
 being asked), not just the sender. A pattern that says "ignore emails from X"
@@ -597,6 +698,78 @@ def run_backfill(dry_run: bool = False, batch_size: int = 12) -> dict:
     return summary
 
 
+def run_relabel(dry_run: bool = False, limit: int = 0) -> dict:
+    """Re-probe historical `ignored` outcomes against Gmail and rewrite them.
+
+    Every outcome labeled before 2026-08-26 that had no Slack reply was labeled
+    `ignored` unconditionally — 487 of 523 rows. Those rows are the training
+    input for the pattern synthesizer AND the ground truth any eval set would be
+    built from, so they have to be corrected before either can be trusted.
+
+    Rewrites proposal_outcomes.jsonl in place (backup first). Only rows whose
+    outcome is `ignored` AND that were labeled by the old no-reply shortcut are
+    touched; LLM-labeled rows and reaction-sourced rows from the approval queue
+    are left alone.
+    """
+    summary = {'candidates': 0, 'reprobed': 0, 'changed': 0, 'by_outcome': {}, 'errors': []}
+
+    outcomes = _read_jsonl(OUTCOMES_LOG_PATH)
+    proposals = {p.get('slack_ts'): p for p in _read_jsonl(PROPOSAL_LOG_PATH) if p.get('slack_ts')}
+
+    def _is_stale_ignored(o: dict) -> bool:
+        # The old shortcut wrote this exact reasoning string and no disposition.
+        return (
+            o.get('outcome') == 'ignored'
+            and 'gmail_disposition' not in o
+            and o.get('label_reasoning', '').startswith('No replies in thread')
+        )
+
+    candidates = [o for o in outcomes if _is_stale_ignored(o)]
+    summary['candidates'] = len(candidates)
+    if limit:
+        candidates = candidates[:limit]
+    log.info('Relabel: %d stale `ignored` rows (%d in this run)',
+             summary['candidates'], len(candidates))
+
+    patched: dict[str, dict] = {}
+    for o in candidates:
+        ts = o.get('proposal_slack_ts')
+        prop = proposals.get(ts)
+        if not prop:
+            summary['errors'].append(f'no proposal row for ts={ts}')
+            continue
+        disp = _gmail_disposition(prop)
+        summary['reprobed'] += 1
+        new_outcome = outcome_for_disposition(disp['disposition'])
+        summary['by_outcome'][new_outcome] = summary['by_outcome'].get(new_outcome, 0) + 1
+        updated = dict(o)
+        updated['gmail_disposition'] = disp['disposition']
+        updated['label_reasoning'] = f"No replies in Slack thread. Gmail: {disp['evidence']}"
+        updated['relabeled_at'] = datetime.now(timezone.utc).isoformat()
+        if new_outcome != o.get('outcome'):
+            updated['outcome'] = new_outcome
+            updated['prior_outcome'] = o.get('outcome')
+            summary['changed'] += 1
+        patched[ts] = updated
+        time.sleep(0.05)  # stay well under the Gmail per-user rate limit
+
+    if not dry_run and patched:
+        backup = OUTCOMES_LOG_PATH.with_suffix(
+            f'.jsonl.bak-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}')
+        backup.write_text(OUTCOMES_LOG_PATH.read_text(encoding='utf-8'), encoding='utf-8')
+        log.info('Backed up outcomes to %s', backup.name)
+        tmp = OUTCOMES_LOG_PATH.with_suffix('.jsonl.tmp')
+        with tmp.open('w', encoding='utf-8') as f:
+            for o in outcomes:
+                row = patched.get(o.get('proposal_slack_ts'), o) if _is_stale_ignored(o) else o
+                f.write(json.dumps(row) + '\n')
+        tmp.replace(OUTCOMES_LOG_PATH)
+        log.info('Rewrote %s', OUTCOMES_LOG_PATH.name)
+
+    log.info('Relabel summary: %s', summary)
+    return summary
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -611,8 +784,16 @@ if __name__ == '__main__':
                         help='One-shot: synthesize patterns from ALL historical labeled outcomes '
                              '(proposal_outcomes.jsonl), not just today\'s batch. Seeds an empty '
                              'proposal-patterns namespace.')
+    parser.add_argument('--relabel-ignored', action='store_true',
+                        help='One-shot: re-probe historical `ignored` outcomes against Gmail '
+                             'and rewrite proposal_outcomes.jsonl (backup taken first). Run '
+                             'this before trusting any eval built on the outcome labels.')
+    parser.add_argument('--limit', type=int, default=0,
+                        help='Cap how many rows --relabel-ignored touches (0 = all).')
     args = parser.parse_args()
-    if args.backfill:
+    if args.relabel_ignored:
+        run_relabel(dry_run=args.dry_run, limit=args.limit)
+    elif args.backfill:
         run_backfill(dry_run=args.dry_run)
     else:
         run_daily(dry_run=args.dry_run)

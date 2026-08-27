@@ -476,7 +476,7 @@ Section 6.18 ACA scope, Jeeves Intermediate Holdco). With every row set to `No` 
 form shipped — the clause (i) cash pool AND Section 7.01(a) Liquidity both compute to $0, which
 reads as a covenant failure that isn't real. Never deliver an NB form with zero cash without
 first checking the flags against the perfection scope in
-`.deer-flow\wiki\deals\nb_facility_closing.md`. Colombian/Mexican **trust** liquidity lines
+`.deer-flow/wiki/deals/nb_facility_closing.md`. Colombian/Mexican **trust** liquidity lines
 (liquidity!E8/E9) stay $0 — "there would be no trust in colombia or mex yet."
 
 **No LibreOffice on this box**, so the saved workbook carries no cached values. Compute the

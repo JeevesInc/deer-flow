@@ -35,7 +35,7 @@ Skill descriptions cover routing. These are the standing rules on top of them:
 - **Redshift** — **search `cfo-org-kb` first** (git pull, then kb_search.py with the description), and **commit every new query** to `JeevesInc/cfo-org-kb` — never local-only. On `column X does not exist`, list columns from `information_schema` rather than guessing a second name.
 - **Deliverables** — Excel/PPT/CSV/reports always get uploaded to Drive and shared as a link.
 - **Dossiers** — pull the Honcho peer card (`honcho-peers`) first for style/health trend/what's owed.
-- **GitHub CLI** — `gh` authenticated as `brian-tryjeeves` (repo, read:org, gist). Just run it.
+- **GitHub CLI — `gh` WORKS; a `gh` failure is your invocation, never the tool.** Verified 2026-08-27: bash and `$PYTHON_PATH` both run as the machine account (`USERNAME=BRIAN-MAUCK$`, `USERPROFILE=C:\WINDOWS\system32\config\systemprofile`, `HOME=/c/WINDOWS/system32/config/systemprofile`), and `gh` reads its token from **that** profile's `hosts.yml` — logged in as `brian-tryjeeves`, scopes **`gist, repo, workflow`; `read:org` is NOT granted**, so org-scoped calls fail while repo/gist/workflow calls succeed. Before saying any CLI is broken, run it with `--version` / `auth status` and print the identity and config path it resolved. (2026-08-26: reported `gh` as broken; Brian: *"there's no reason why gh shouldn't be working"*, then *"i don't care as long as you stop telling me it's broken"*.)
 
 ## File naming
 

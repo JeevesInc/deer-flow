@@ -3807,6 +3807,22 @@
       "target_skills": [
         "jeeves-borrowing-base"
       ]
+    },
+    "pat-2026-08-26-239": {
+      "id": "pat-2026-08-26-239",
+      "name": "Do NOT self-join Slack channels. chat_postMessage to a non-m",
+      "source": "ep-2026-08-26-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-26",
+      "last_applied": "2026-08-26T18:55:55.100338+00:00",
+      "category": "general",
+      "pattern": "Do NOT self-join Slack channels. chat_postMessage to a non-member channel fails, but the remedy is to ASK Brian to post it or to invite the bot - never conversations.join on your own. Channel membership is Brians call.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
     }
   }
 }

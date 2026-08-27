@@ -168,6 +168,25 @@ def sync_sll_lessons() -> bool:
         return False
 
 
+def prune_traces() -> int:
+    """Drop run-trace day-files past the retention window.
+
+    The trace sink writes one file per day under .deer-flow/traces/ and does not
+    clean up after itself — every other unbounded writer in .deer-flow got a
+    janitor entry for exactly this reason (P2-7), so this one gets one on day
+    zero rather than after it fills the disk.
+    """
+    try:
+        from deerflow.agents.tracing import prune
+        removed = prune()
+        if removed:
+            log.info("traces: removed %d day-file(s) past retention", removed)
+        return removed
+    except Exception as e:
+        log.warning("trace prune failed: %s", e)
+        return 0
+
+
 def run_once(now: datetime | None = None) -> dict:
     now = now or datetime.now()
     state = load_json_state(STATE_PATH, {})
@@ -179,6 +198,7 @@ def run_once(now: datetime | None = None) -> dict:
     summary.update(intel_deleted=intel_n, intel_bytes=intel_b,
                    scratch_deleted=scratch_n, scratch_bytes=scratch_b,
                    audit_rotated=rotated,
+                   traces_pruned=prune_traces(),
                    sll_synced=sync_sll_lessons())
 
     month = now.strftime("%Y-%m")

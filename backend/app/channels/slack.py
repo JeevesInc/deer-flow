@@ -60,6 +60,21 @@ class SlackChannel(Channel):
         # "Working on it..." message so we can edit it in-place with updates.
         # Entries are TTL-pruned after 10 minutes to prevent leaks.
         self._progress_message_ts: dict[str, tuple[str, float]] = {}
+        # Channel threads the analyst has been pulled into by an @mention.
+        # Replies inside one of these keep reaching the agent so a conversation
+        # does not need the bot re-mentioned on every turn. In-memory on
+        # purpose: after a restart the thread goes quiet until someone mentions
+        # again, which is the safe direction to fail.
+        self._engaged_threads: dict[str, float] = {}  # thread_ts -> monotonic
+        self._ENGAGED_THREAD_TTL = 24 * 3600.0
+        # In channels and group DMs the analyst only responds when addressed.
+        # Without this it treats every message in the room as a task — which is
+        # why it had to be kicked from a channel on 2026-08-26. 1:1 DMs are
+        # unaffected: there, every message is for it by definition.
+        self._require_mention_in_channels = (
+            os.environ.get("SLACK_REQUIRE_MENTION_IN_CHANNELS", "1").strip().lower()
+            not in ("0", "false", "no", "off")
+        )
         self._PROGRESS_TTL = 600  # seconds
         # Approval queue (P3-2: logic lives in approval_queue.py; the channel
         # injects the Slack write + message-bus dispatch callbacks).
@@ -748,6 +763,72 @@ class SlackChannel(Channel):
         "me_message", "group_join", "group_leave",
     }
 
+    def _is_addressed_to_us(self, event: dict) -> bool:
+        """True when the analyst should treat this message as directed at it.
+
+        1:1 DMs: always. Every message in a DM is for the analyst by definition.
+
+        Channels, private channels and group DMs: only when explicitly
+        addressed — an @mention, an `app_mention` event, or a reply inside a
+        thread it was already mentioned into. Before this gate the analyst
+        treated every message in a shared room as a task, which made it
+        unusable in any channel with other people talking in it.
+
+        Read the RAW event text, never the cleaned text: `clean_slack_text`
+        strips `<@Uxxx>` mentions, so checking after cleaning always says no.
+        """
+        if not self._require_mention_in_channels:
+            return True
+
+        # `app_mention` only fires when we are mentioned — no further checks.
+        if event.get("type") == "app_mention":
+            return True
+
+        channel_type = event.get("channel_type", "")
+        # "im" is a 1:1 DM. "mpim" (group DM), "channel" and "group" (private
+        # channel) are shared rooms and all require being addressed.
+        if channel_type == "im":
+            return True
+
+        thread_ts = event.get("thread_ts") or ""
+        # Slack's assistant container is 1:1 by construction even though its
+        # channel_type is not "im".
+        if thread_ts and self._is_assistant_thread(thread_ts):
+            return True
+
+        if self._own_user_id and f"<@{self._own_user_id}>" in (event.get("text") or ""):
+            if thread_ts:
+                self._remember_engaged_thread(thread_ts)
+            # A top-level mention starts a thread rooted at this message.
+            self._remember_engaged_thread(event.get("ts", ""))
+            return True
+
+        if thread_ts and self._is_engaged_thread(thread_ts):
+            return True
+
+        return False
+
+    def _remember_engaged_thread(self, thread_ts: str) -> None:
+        if not thread_ts:
+            return
+        now = time.monotonic()
+        self._engaged_threads[thread_ts] = now
+        # Bound the map; a long-lived gateway sees a lot of threads.
+        if len(self._engaged_threads) > 500:
+            self._engaged_threads = {
+                ts: t for ts, t in self._engaged_threads.items()
+                if now - t < self._ENGAGED_THREAD_TTL
+            }
+
+    def _is_engaged_thread(self, thread_ts: str) -> bool:
+        seen = self._engaged_threads.get(thread_ts)
+        if seen is None:
+            return False
+        if time.monotonic() - seen >= self._ENGAGED_THREAD_TTL:
+            self._engaged_threads.pop(thread_ts, None)
+            return False
+        return True
+
     def _handle_message_event(self, event: dict) -> None:
         # Ignore our own messages (loop prevention)
         msg_bot_id = event.get("bot_id")
@@ -786,6 +867,16 @@ class SlackChannel(Channel):
         # Ignore non-message subtypes (edits, joins, etc.) but allow bot_message subtype
         subtype = event.get("subtype", "")
         if subtype in self._IGNORED_SUBTYPES:
+            return
+
+        # Addressing gate. Must sit before dedup: dedup records the ts as seen,
+        # so gating after it would let the first of Slack's duplicate
+        # message/app_mention pair burn the ts and silently drop the other.
+        if not self._is_addressed_to_us(event):
+            logger.debug(
+                "[Slack] Not addressed to us — ignoring (channel_type=%s, thread_ts=%s)",
+                event.get("channel_type", "(none)"), event.get("thread_ts", "(none)"),
+            )
             return
 
         # Dedup: Slack sends both 'message' and 'app_mention' for @mentions in channels.

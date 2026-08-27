@@ -187,11 +187,30 @@ he is on the thread for visibility, not as the addressee.
 - Automated notifications, receipts, SaaS alerts
 - Internal Jeeves emails that aren't from leadership
 - Newsletters, marketing, LinkedIn, recruiter emails
+- **No-op actions.** A message is NOT actionable when the only thing to "do" is
+  acknowledge receipt, confirm a document arrived, say thanks, file/record
+  something, or send a courtesy reply that carries no new information or
+  decision. Proof-of-payment confirmations, executed-document deliveries,
+  comprobantes, receipts and "here is the file you asked for" messages all land
+  here. Being ABLE to draft a polite reply does not make an email actionable —
+  if the reply would add nothing the counterparty needs, there is no action.
+  If your own summary says there is no open question and no deadline, the
+  answer is actionable=false. Do not then invent an acknowledgment to justify
+  a card.
 
 ## Decision framework
-Ask: "Is there something specific here Brian would want flagged, or that an agent
-can do on his behalf?"
-- If yes → actionable
+Two questions, and BOTH must pass. Agent capability alone is not a reason to
+surface something — the agent can always draft a polite reply, so "an agent
+could do it" makes everything actionable if you let it.
+1. **Is there a real ask or obligation here?** Someone is waiting on Brian, a
+   deadline names him, a decision needs his input, or something is owed. If the
+   message only reports, confirms, delivers or informs → not actionable.
+2. **Is the response substantive?** Would the reply carry information, a
+   decision, or work the counterparty is actually waiting for? A courtesy
+   acknowledgment is not substantive.
+
+- Both yes → actionable
+- Either no → not actionable
 - If it's just FYI / outbound / automated → not actionable
 - If ambiguous → not actionable (avoid noise)
 
@@ -317,16 +336,31 @@ Be decisive. Outbound legal work from Jeeves' counsel and calendar/Zoom invites 
     try:
         response = client.messages.create(
             model=CLASSIFIER_MODEL,
-            max_tokens=512,
+            # Was 512. The summary + proposed_action + reasoning fields together
+            # routinely run past that on a substantive counterparty email, and
+            # the response then stops mid-string. json.loads raises, we fall
+            # through to _default_classification, and the email is silently
+            # dropped as non-actionable — an actionable-email loss with no error
+            # anywhere except one log line. Found by the classifier eval
+            # (skills/custom/jeeves-eval) on 2026-08-26. Same failure the
+            # proposal synthesizer hit at 1500 tokens.
+            max_tokens=2000,
             messages=[{'role': 'user', 'content': prompt}],
         )
         text = text_from_response(response).strip()
         # Strip markdown code fences if present
         if text.startswith('```'):
-            text = text.split('```')[1]
-            if text.startswith('json'):
-                text = text[4:]
-        result = json.loads(text.strip())
+            text = re.sub(r'^```[a-zA-Z]*\n?', '', text)
+            text = re.sub(r'\n?```$', '', text).strip()
+        try:
+            result = json.loads(text.strip())
+        except json.JSONDecodeError:
+            # Trailing prose after the object is the common miss; fall back to
+            # the outermost {...} slice before giving up and dropping the email.
+            m = re.search(r'\{.*\}', text, re.DOTALL)
+            if not m:
+                raise
+            result = json.loads(m.group(0))
         log.info('LLM classification: actionable=%s | priority=%s | category=%s | %s',
                  result.get('actionable'), result.get('priority'),
                  result.get('category', ''), result.get('reasoning', '')[:80])

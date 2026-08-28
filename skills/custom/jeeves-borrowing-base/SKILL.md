@@ -277,6 +277,19 @@ stock, not a flow; flag it rather than assuming a query bug.
 Brian's standing fills (2026-08-10): bank balances = 0, no draws in a month with no new draw rows,
 hedge MTM and collection-account available amount are his; he wants the FX spot filled by the agent.
 
+### Cash balance — show BOTH dates (Alejandra Granados, CIM, 2026-08-27)
+
+Aleja on the July 2026 MX MSR: *"Could you please confirm the cash balance as of July 31st? The
+current report includes the cash as of the payment date. In future reports, please include the cash
+balance for **both dates**, as both are needed for different purposes."*
+
+**Standing requirement for every MX servicer report from August 2026 forward: two labelled cash
+lines — cash as of PERIOD END (last calendar day of the reporting month) and cash as of the
+PAYMENT DATE.** Never one or the other. The `bank_accts` tab is populated from the CICO email
+closest to the target date, so this means sourcing TWO CICO snapshots per report, not one; pick the
+CICO file closest to each date and label which file fed which line. If the two dates coincide, still
+show both rows with the same figure rather than collapsing them.
+
 ### Format rule (confirmed 2026-07-10)
 
 Output must be **in the same form as previous months** with **all formulas persisting** —
@@ -497,6 +510,14 @@ points at the newer file - tell Brian).
 
 ## `max_dpd` is NOT current delinquency (diagnosed 2026-08-07)
 
+**And it is not a column of `loc_tape` at all.** 2026-08-27 a portfolio-balance/DPD query
+failed with `column "max_dpd" does not exist in loc_tape`. `max_dpd` is a DERIVED column that
+`sql/data_tape.sql` adds via its `max_dq` CTE — it exists on the *generated tape*, never on the
+raw table. Querying the warehouse directly, the only delinquency column is `days_past_due`.
+Standing rule (SOUL, re-stated here because it keeps firing): on any `column X does not exist`,
+do NOT guess a second name — list the real ones:
+`select column_name, data_type from information_schema.columns where table_name = 'loc_tape' order by ordinal_position;`
+
 The tape carries `days_past_due` (row-level, current as of `dt`) AND `max_dpd` right next to it.
 `max_dpd` comes from the `max_dq` CTE in `sql/data_tape.sql`, which is `max(days_past_due)`
 grouped by company_id with **no date filter** (`where 1=1`) - the worst DPD that obligor has EVER
@@ -526,6 +547,32 @@ DPD>30 must be exactly 0 because `elig_iv_dpd30` already excludes it.
   ```
 
   Enumerate `ws.merged_cells.ranges` once up front and target anchors only.
+
+- **HARD RULE — after ANY programmatic edit to a lender workbook, OPEN IT AND VALIDATE IT
+  before saying it is done (Brian, 2026-08-27, July MX servicer report).** His words:
+  *"when you made changes historically you've created some circular references. Have you
+  opened the file and looked for any Excel errors?"* Writing cells with openpyxl does not
+  recalculate anything and does not tell you what you broke: a formula whose range you
+  shifted can now point at itself, at a deleted row, or at a blank. The edit is not the
+  deliverable — the validated workbook is. Run this sweep over EVERY sheet, every time,
+  and report the counts in the completion message:
+
+  1. **Error literals** — scan all cached values (`data_only=True` load) and all formula
+     strings for `#REF!`, `#VALUE!`, `#DIV/0!`, `#NAME?`, `#N/A`, `#NULL!`, `#NUM!`.
+  2. **Circular references** — for each formula cell, parse the referenced ranges and
+     assert the cell's own coordinate is not inside its own dependency closure. A one-hop
+     self-reference (`H12 = SUM(H10:H14)`) is the common openpyxl-induced case.
+  3. **Dangling / out-of-bounds refs** — references past `ws.max_row`/`ws.max_column`, or
+     to a sheet name that no longer exists in `wb.sheetnames`.
+  4. **Zero/blank regression** — compare the edited totals against the prior period's file.
+     A line that was non-zero last month and is now blank or 0 is a broken formula until
+     proven otherwise, not a real movement.
+
+  There is no Excel on this host, so `data_only=True` returns the values Excel last cached —
+  a cell edited this run has `None` there. That is expected; what is NOT acceptable is
+  skipping the check because of it. Validate the formula strings even when the cached
+  values are unavailable, and say in the report which of the four checks you actually ran.
+
 
 - **Any workspace script importing a skill module needs the path insert as its first
   statement.** Hit twice on 2026-08-04 (`find_parent_bb.py` and the Vista funds-flow

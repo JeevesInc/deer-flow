@@ -67,6 +67,10 @@ class SlackChannel(Channel):
         # again, which is the safe direction to fail.
         self._engaged_threads: dict[str, float] = {}  # thread_ts -> monotonic
         self._ENGAGED_THREAD_TTL = 24 * 3600.0
+        # thread_ts -> whether the thread's parent message is one of ours.
+        # Cached both ways; a busy channel would otherwise cost a
+        # conversations.replies call for every unaddressed message.
+        self._thread_root_is_ours: dict[str, bool] = {}
         # In channels and group DMs the analyst only responds when addressed.
         # Without this it treats every message in the room as a task — which is
         # why it had to be kicked from a channel on 2026-08-26. 1:1 DMs are
@@ -806,7 +810,49 @@ class SlackChannel(Channel):
         if thread_ts and self._is_engaged_thread(thread_ts):
             return True
 
+        # A reply in a thread rooted at OUR OWN message is addressed to us, even
+        # with no @mention. The analyst posts into shared channels from other
+        # processes — email proposals go to ANALYST_QUEUE_CHANNEL_ID from
+        # webhook_receiver, digests from crons — so `_engaged_threads` (gateway
+        # memory only) knows nothing about them. Without this check the mention
+        # gate silently swallowed every reply to a proposal, which is exactly
+        # how someone replies to a proposal and nothing happens (2026-08-27).
+        if thread_ts and self._is_our_thread_root(event.get("channel", ""), thread_ts):
+            self._remember_engaged_thread(thread_ts)
+            return True
+
         return False
+
+    def _is_our_thread_root(self, channel: str, thread_ts: str) -> bool:
+        """True when the thread's parent message was posted by this bot.
+
+        Cached both ways — a busy channel would otherwise cost one
+        conversations.replies call per unaddressed message.
+        """
+        if not channel or not thread_ts or not self._web_client:
+            return False
+        cached = self._thread_root_is_ours.get(thread_ts)
+        if cached is not None:
+            return cached
+        try:
+            resp = self._web_client.conversations_replies(channel=channel, ts=thread_ts, limit=1)
+            parent = (resp.get("messages") or [{}])[0]
+            ours = bool(
+                (self._own_bot_id and parent.get("bot_id") == self._own_bot_id)
+                or (self._own_user_id and parent.get("user") == self._own_user_id)
+            )
+        except Exception:
+            # Fail CLOSED: an unreadable parent must not turn the gate back into
+            # "respond to everything". Logged loudly because the cost is silence.
+            logger.warning(
+                "[Slack] could not resolve thread root %s in %s — treating as not ours",
+                thread_ts, channel, exc_info=True,
+            )
+            return False
+        if len(self._thread_root_is_ours) > 1000:
+            self._thread_root_is_ours.clear()
+        self._thread_root_is_ours[thread_ts] = ours
+        return ours
 
     def _remember_engaged_thread(self, thread_ts: str) -> None:
         if not thread_ts:

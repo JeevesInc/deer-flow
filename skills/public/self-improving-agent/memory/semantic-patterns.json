@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 174,
+      "applications": 175,
       "created": "2026-04-07",
-      "last_applied": "2026-08-26T09:14:42.667254+00:00",
+      "last_applied": "2026-08-27T17:43:20.969227+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3822,6 +3822,22 @@
       "solution": "",
       "target_skills": [
         "slack-search"
+      ]
+    },
+    "pat-2026-08-28-240": {
+      "id": "pat-2026-08-28-240",
+      "name": "Structuring models need a pinned assumptions block echoing B",
+      "source": "ep-2026-08-28-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-28",
+      "last_applied": "2026-08-28T09:06:37.290484+00:00",
+      "category": "general",
+      "pattern": "Structuring models need a pinned assumptions block echoing Brians verbal overrides, a one-sentence instrument-mechanic confirmation before building, a driver-sensitivity sweep proving every non-zero input moves every output, one scenario axis unless told otherwise, a breakeven as the headline, and a clause-by-clause re-read of the original instruction before reporting done",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
       ]
     }
   }

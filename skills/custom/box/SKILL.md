@@ -35,6 +35,19 @@ No allowed-origin/CORS or redirect URI is needed for CCG (server-side).
   collaborated to the service account.
 - Set exactly ONE of the two. Env vars override `box_secrets.json`.
 
+### Box Sign — NOT AVAILABLE on the current token (verified 2026-08-27)
+`box_client` exposes `sign_requests` (the SDK attribute is present, `has sign_requests: True`), but
+BOTH `sign_requests.get_sign_requests()` and `create_sign_request()` return `BoxAPIError` — the app
+lacks the Sign scopes. The SDK attribute existing is NOT evidence of permission; do not report a Sign
+capability as working until a live LIST call returns 200. This blocked the Kroll third-party access
+letter on 2026-08-27: the prefilled PDF uploaded fine (`file_id 2431260908588`) and only the signature
+request failed. **Workaround until the scope is granted:** upload the prefilled PDF to Box, then ask
+the signer (Brandon McGathy, GC) to run Box Sign from the Box UI, or route via a channel that works —
+do not burn turns retrying `create_sign_request`. **Fix (Brian / IT):** Box Admin Console → Apps →
+Custom Apps Manager → the Capital-Markets-Analyst app → enable the **"Manage Signature Requests"**
+application scope, then **re-authorize** the app (scope changes require re-authorization; the existing
+client credentials keep working).
+
 ## One-time setup (Brian / IT, in Box Developer Console)
 1. Create a Custom App -> Authentication Method = Client Credentials Grant.
 2. App Access Level = App + Enterprise Access.

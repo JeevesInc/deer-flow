@@ -359,9 +359,15 @@ def run_review() -> None:
     state['last_run'] = datetime.now().isoformat()
     save_state(state)
 
-    # H4: relationship-health digest rides the same weekly cadence.
-    # Best-effort and posts only when there's signal.
-    run_relationship_digest()
+    # H4 relationship-health digest DISABLED 2026-08-27 at Brian's request
+    # ("kill it"). Selection ranked external peers by raw 90-day email
+    # volume, so it surfaced ops/admin contacts (Monex, CXC, Goodwin
+    # associates) and structurally excluded the principals that matter.
+    # It also posted model answers of "NONE" as flags because the filter
+    # was an exact-match check. Helper functions kept below for reference;
+    # nothing calls them. Re-enable only with an explicit counterparty
+    # allowlist and a fixed NONE filter.
+    # run_relationship_digest()
 
 
 def run_loop() -> None:

@@ -401,7 +401,26 @@ class TestClassifyErrorText:
         from app.channels.manager import classify_error_text
 
         text = classify_error_text(TimeoutError("Run timed out after 20 minutes"))
-        assert "too long" in text.lower()
+        assert "cancelled" in text.lower()
+        assert "continue" in text.lower()
+
+    def test_stalled_run_reports_the_real_reason(self):
+        """Runs are no longer cancelled for taking a while, so the message must
+        say the run went quiet — not that it "took too long", which would now
+        be a lie and would push the user to needlessly split up healthy work."""
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("run on thread t1 made no progress for 15.0 minutes"))
+        assert "stalled" in text.lower()
+        assert "no progress" in text.lower()
+        assert "too long" not in text.lower()
+
+    def test_absolute_cap_message(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("run on thread t1 exceeded the 6.0h absolute cap"))
+        assert "stalled" in text.lower()
+        assert "continue" in text.lower()
 
     def test_generic_fallback(self):
         from app.channels.manager import classify_error_text
@@ -428,7 +447,6 @@ def _make_mock_langgraph_client(thread_id="test-thread-123", run_result=None):
     # threads.search() returns empty list (no zombie runs)
     mock_client.threads.search = AsyncMock(return_value=[])
 
-    # runs.wait() returns the final state with messages
     if run_result is None:
         run_result = {
             "messages": [
@@ -436,7 +454,15 @@ def _make_mock_langgraph_client(thread_id="test-thread-123", run_result=None):
                 {"type": "ai", "content": "Hello from agent!"},
             ]
         }
-    mock_client.runs.wait = AsyncMock(return_value=run_result)
+    # The manager creates a run, then joins THAT run id, so a queued sibling
+    # cannot resolve its wait with a mid-flight snapshot (2026-08-27).
+    mock_client.runs.create = AsyncMock(return_value={"run_id": "run-test-1"})
+    mock_client.runs.join = AsyncMock(return_value=run_result)
+    mock_client.runs.get = AsyncMock(return_value={"run_id": "run-test-1", "status": "success"})
+    mock_client.runs.cancel = AsyncMock(return_value=None)
+    # Retained so any test still asserting on the old surface fails loudly
+    # rather than silently passing against a call the manager no longer makes.
+    mock_client.runs.wait = AsyncMock(side_effect=AssertionError("manager must use runs.create + runs.join"))
 
     return mock_client
 
@@ -487,8 +513,8 @@ class TestChannelManager:
             assert thread_id == "test-thread-123"
 
             # runs.wait should be called with the thread_id
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][0] == "test-thread-123"  # thread_id
             assert call_args[0][1] == "lead_agent"  # assistant_id
             assert call_args[1]["input"]["messages"][0]["content"].endswith("hi")
@@ -536,8 +562,8 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][1] == "mobile_agent"
             assert call_args[1]["config"]["recursion_limit"] == 55
             assert call_args[1]["context"]["thinking_enabled"] is False
@@ -594,8 +620,8 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][1] == "vip_agent"
             assert call_args[1]["config"]["recursion_limit"] == 77
             assert call_args[1]["context"]["thinking_enabled"] is True
@@ -842,15 +868,15 @@ class TestChannelManager:
                         topic_id=f"topic-{i}",
                     )
                 )
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called twice (different topics)
             assert mock_client.threads.create.call_count == 2
 
             # runs.wait should be called twice with different thread_ids
-            assert mock_client.runs.wait.call_count == 2
-            wait_thread_ids = [c[0][0] for c in mock_client.runs.wait.call_args_list]
+            assert mock_client.runs.create.call_count == 2
+            wait_thread_ids = [c[0][0] for c in mock_client.runs.create.call_args_list]
             assert "thread-1" in wait_thread_ids
             assert "thread-2" in wait_thread_ids
 
@@ -887,15 +913,15 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called only ONCE (second message reuses the thread)
             mock_client.threads.create.assert_called_once()
 
             # Both runs.wait calls should use the same thread_id
-            assert mock_client.runs.wait.call_count == 2
-            for call in mock_client.runs.wait.call_args_list:
+            assert mock_client.runs.create.call_count == 2
+            for call in mock_client.runs.create.call_args_list:
                 assert call[0][0] == "topic-thread-1"
 
         _run(go())
@@ -931,15 +957,15 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called only ONCE (second message reuses the thread)
             mock_client.threads.create.assert_called_once()
 
             # Both runs.wait calls should use the same thread_id
-            assert mock_client.runs.wait.call_count == 2
-            for call in mock_client.runs.wait.call_args_list:
+            assert mock_client.runs.create.call_count == 2
+            for call in mock_client.runs.create.call_args_list:
                 assert call[0][0] == "private-thread-1"
 
         _run(go())
@@ -976,14 +1002,14 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create called twice (different topics)
             assert mock_client.threads.create.call_count == 2
 
             # runs.wait used different thread_ids
-            wait_thread_ids = [c[0][0] for c in mock_client.runs.wait.call_args_list]
+            wait_thread_ids = [c[0][0] for c in mock_client.runs.create.call_args_list]
             assert set(wait_thread_ids) == {"thread-A", "thread-B"}
 
         _run(go())
@@ -1021,8 +1047,8 @@ class TestChannelManager:
             await manager.stop()
 
             # Should go through the chat path (runs.wait), not the command reply path
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
 
             # The text sent to the agent should be the part after /bootstrap
             assert call_args[1]["input"]["messages"][0]["content"].endswith("setup my workspace")
@@ -1070,8 +1096,8 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
 
             # Default text should be used when no text is provided
             assert call_args[1]["input"]["messages"][0]["content"].endswith("Initialize workspace")
@@ -1460,7 +1486,7 @@ class TestHandleChatWithArtifacts:
             }
 
             mock_client = _make_mock_langgraph_client(thread_id="thread-dup-test")
-            mock_client.runs.wait = AsyncMock(side_effect=[turn1_result, turn2_result])
+            mock_client.runs.join = AsyncMock(side_effect=[turn1_result, turn2_result])
             manager._client = mock_client
 
             outbound_received = []

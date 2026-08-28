@@ -458,15 +458,27 @@ def draft_reply(sender: str, subject: str, body: str, summary: str,
 
 You are drafting a reply ON BEHALF OF Brian Mauck to the message below.
 
-Only draft a reply if a written response FROM BRIAN is genuinely the right next step
-(i.e. the proposed action is to reply / respond / confirm / answer / acknowledge). If the
-right next step is something else — pull data, review a document internally, schedule,
-forward to counsel, or nothing — respond with exactly: NONE
+Only draft a reply when you can write the SUBSTANTIVE answer RIGHT NOW from the
+message and the context above. Respond with exactly NONE when any of these hold:
+
+  - The proposed action requires getting something first — pull, search, look up,
+    reconcile, verify, prep. The answer is not in hand, so anything you write is a
+    promise to follow up. Brian does not need approval to promise a follow-up, and
+    sending one closes the thread without the work being done. The action stands
+    on its own; running it is what produces the real reply.
+  - A written reply from Brian is not the right next step at all (review
+    internally, schedule, forward to counsel, or nothing).
+  - You would need a bracketed placeholder for any material fact — an account
+    number, an amount, a date, a name. A draft full of [confirm X] is a holding
+    reply wearing a costume.
+
+NEVER write a holding reply. Phrases like "let me pull that", "pulling the details
+now", "I'll get you the numbers by [date]", "I'll come back today with" mean you
+should have returned NONE.
 
 Write in Brian's voice: concise, professional, warm but direct, no filler. {channel_hint}
 Do NOT invent facts, numbers, dates, or commitments not supported by the message/context.
-Where you'd need info Brian hasn't given, leave a clearly bracketed placeholder like
-[confirm Aforo amount]. Keep it tight.
+Keep it tight.
 
 ## Message being replied to
 From: {sender}
@@ -486,10 +498,47 @@ Respond with ONLY the draft reply text, or exactly NONE."""
         text = text_from_response(resp).strip()
         if not text or text.upper().startswith('NONE') or len(text) < 5:
             return ''
+        if is_holding_reply(text):
+            # Backstop, not paranoia: told not to produce no-op actions earlier
+            # today, the model reworded the action to sound substantive and kept
+            # the same behavior. A prompt rule alone is not a control.
+            log.info('draft suppressed — holding reply / placeholders: %r', text[:120])
+            return ''
         return text
     except Exception as e:
         log.warning('draft_reply failed: %s', e)
         return ''
+
+
+# Markers of a reply that promises work instead of doing it. Brian, 2026-08-27:
+# "I don't need a proposal to send an email that says I'll get the info you need."
+_HOLDING_PATTERNS = re.compile(
+    r"\b("
+    r"let me (pull|check|confirm|dig|look|get|grab|verify)"
+    r"|i'?ll (pull|check|confirm|revert|come back|get you|send (you )?(the|those)|follow up|circle back)"
+    r"|pulling (the|our|those)\b"
+    r"|checking (on )?(the|our|those)\b"
+    r"|will (revert|follow up|come back|confirm) (with|on|shortly|today|tomorrow)"
+    r"|come back to you (with|on|shortly|today)"
+    r"|once i (have|pull|confirm|check)"
+    r")",
+    re.I,
+)
+# A bracketed blank standing in for a material fact. Excludes [date]-free prose
+# by requiring the bracket to contain a word, not punctuation.
+_PLACEHOLDER = re.compile(r"\[[^\]]*\b(confirm|tbd|insert|date|amount|number|account|agência|agencia|conta|name|xx+)\b[^\]]*\]", re.I)
+
+
+def is_holding_reply(text: str) -> bool:
+    """True when a draft promises follow-up rather than delivering the answer.
+
+    Approving one of these sends a promise and triggers no work — the thread
+    looks handled while nothing has happened. Better to show the action alone
+    and let running it produce a real reply.
+    """
+    if not text:
+        return False
+    return bool(_HOLDING_PATTERNS.search(text) or _PLACEHOLDER.search(text))
 
 
 # ---------------------------------------------------------------------------
@@ -847,6 +896,11 @@ def _post_action_proposal(from_header: str, subject: str, classification: dict,
     lines.append("")
     if draft:
         lines.append("_Reply in thread to direct me — *send it* to send as-is, or paste your edits. (:+1:/:-1: also work once enabled.)_")
+    elif proposed_action:
+        # No draft means the answer isn't in hand yet, so the useful thing to
+        # approve is the WORK, not a promise. Say that plainly — the old generic
+        # prompt made a no-draft card look like a dead end.
+        lines.append("_No draft yet — the answer isn't in hand. Reply *go* and I'll run the action above, then come back with the reply filled in._")
     else:
         lines.append("_Reply in thread to direct me (e.g. \"go\", \"draft a reply\", \"not now\")._")
     if gmail_msg_id:

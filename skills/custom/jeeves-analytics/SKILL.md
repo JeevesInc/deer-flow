@@ -114,6 +114,50 @@ ORDER BY total_revenue DESC
 4. **Always show out-of-sample walk-forward** with the calibration fitted only on pre-cutoff data, and state the cutoffs explicitly. Brian asks for validation every single time ("yes, and well need to see a validation") — build it into the first delivery.
 5. **Compute budget: a modeling run that will exceed ~15 minutes must be chunked.** The harness cancels a task at 20 minutes and the finished write-up is lost (happened 2026-08-18 14:51). Persist each stages output (Excel/notebook/JSON) to disk as it completes, then report from the artifact. Do NOT post an interim "building..." line — a bare `?` from Brian is the cost of that.
 
+## Structuring & scenario models (collateral, SBLC, carve-out) — HARD RULES (added 2026-08-28, Dream #101, from the Mastercard Brazil collateral model, thread 6c24477e)
+
+Ten corrections in one thread, tone escalating to *"dude stfu"* and *"this is not good work"*.
+Every one was avoidable. Before building any structuring model:
+
+1. **Open the workbook and this reply with a PINNED ASSUMPTIONS block, and never re-raise a
+   constraint Brian has removed.** He said the facility size was not a constraint — *"We will
+   upsize. I told you that is not a constraint"* — and the model kept re-deriving a $150MM ceiling
+   anyway. When he overrides an assumption, write it into the model as a named input with his words
+   next to it, restate it at the top of the next reply, and stop testing against the old world. A
+   constraint he has explicitly waived reappearing in your output reads as not listening.
+2. **Confirm the INSTRUMENT MECHANIC in one sentence before you build, not after he corrects it.**
+   Three of the ten corrections were structural, not numerical: the requirement is 100% of Brazil
+   card receivables (not a deficit figure); an SBLC **substitutes for** a stated % of the collateral
+   MC requires (it is not an advance against the collateral); and with an SBLC the receivables
+   **stay in the borrowing base** (no carve-out haircut). Get the one-line mechanic agreed first —
+   "so: SBLC covers X% of the required collateral, receivables stay in the BB, aforo applies to the
+   SBLC's own cash cover — correct?" — then model.
+3. **Every non-zero driver MUST propagate to every output. Run a driver-sensitivity check before
+   delivering.** *"how is the equity required for the SBLC 0 when the aforo is non 0? this is not
+   good work."* A driver wired into one branch and dropped in the other is the single most damaging
+   defect, because it makes the whole comparison worthless. Mechanical check: perturb each input
+   ±10% one at a time and assert every dependent output moves; any output that does not move is an
+   unwired driver until proven a genuine zero. Do this before the workbook leaves your hands.
+4. **Answer the comparative question in the SHAPE he asked for — a breakeven, not a table.**
+   *"Is an SBLC better than a carve out? If so, at what aforo levels, and if not, what percentage of
+   Brazil card spend needs to stay on short cycle."* That is a request for two numbers (the aforo
+   crossover, and the short-cycle % that closes the gap), each with the direction of the inequality.
+   Lead with them; the table is supporting evidence underneath.
+5. **Do not add scenario dimensions he did not ask for.** *"we don't need any of this 'current size'
+   vs 'upsize' — I'm asking for the raw impact."* Every extra axis doubles the tabs and halves the
+   signal. One axis unless he names a second.
+6. **A model question is a MATH question.** *"I'm asking about a model, that has nothing to do with
+   contracts."* When the ask is "is A better than B and at what level", do not answer with document
+   language, consent mechanics or legal feasibility. If a contractual fact genuinely bounds the math,
+   state it in one clause as an assumption and keep going.
+7. **Default deliverable is ONE tab: the answer.** *"the workbook is too complicated now. Put this
+   summary into a single tab workbook."* Drivers at the top as labelled live inputs, the comparison
+   in the middle, the breakeven at the bottom. Working tabs stay on disk unless he asks for them.
+8. **A multi-part ask is not done until the LAST part is done.** The instruction ended "...then reply
+   with a very simple summary paragraph to Alex's email"; the workbook shipped, the draft did not, and
+   the next message was *"you didn't draft the email"*. Re-read the original instruction verbatim
+   before reporting, enumerate its clauses, and confirm each one produced an artifact.
+
 ## When Brian disputes your root cause — HARD RULES (added 2026-08-25 from the MX MSR column investigation, thread 7ed6747d)
 
 1. **Test HIS hypothesis first, explicitly, and lead the answer with the verdict on it.** Brian does not push back vaguely — he supplies a specific mechanism ("we added the fee column and just didn't update the index", "it's just a naming artifact"). That is a testable claim. Run the test for HIS mechanism before defending yours, and open with "your theory holds / does not hold, here is the query". On 2026-08-24 he was right, and it took him two rounds and "I really don't believe you" to get there because the answer kept re-arguing the original position.

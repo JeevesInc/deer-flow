@@ -142,6 +142,22 @@ python action_learner.py --consolidate --force
   and put the count, dollars and entity count in the first paragraph.** This is a standing preference of Brian's, not an AIG-specific one -- any
   "draft an email about <specific instance>" ask means "sweep for every instance, then write". If you genuinely cannot size the population, say so in the
   draft rather than silently narrowing it to the one case.
+- **HARD RULE — a draft create is NOT idempotent; LIST THE THREAD'S DRAFTS BEFORE CREATING ONE
+  (Brian, 2026-08-27).** The 20-minute harness cancellation kills the turn but NOT the work already
+  done, so a retried run happily creates a second draft on the same thread. Brian found two on the
+  Mexico servicer-report thread: *"You created both because you timed out. Figure out which one we
+  should send."* Cleaning that up is his time, not yours. Before every `draft` / `draft-new`:
+  (a) `drafts().list()` and match on `threadId` (for a reply) or on recipient+subject (for a new
+  email); (b) if a draft already exists, UPDATE it (`drafts().update()`) or delete-then-recreate —
+  never create alongside; (c) also re-check `in:sent` for that thread, because Brian sends drafts
+  himself and a sent reply means the draft is superseded, not pending. After creating, print the
+  draft ID **and** the total draft count on that thread, and if it is >1 resolve it in the same turn
+  rather than asking him which to keep.
+- **"I'm telling you to do it" — an instruction to draft/build/send-to-drafts is not a request for a
+  proposal (Brian, 2026-08-27).** *"I'm not asking you to draft an email, I'm telling you to do it."*
+  When the ask is imperative, produce the artifact in that turn; the verbatim text still goes in the
+  reply message, but as a record of what was created, not as a plan awaiting approval. Confirmation
+  is owed only for SENDING, deleting, or anything outward-facing.
 - ALWAYS search first to find the relevant email before reading or replying
 - NEVER send emails directly -- only create drafts for the user to review
 - ALWAYS reply-all by default unless Brian explicitly says otherwise

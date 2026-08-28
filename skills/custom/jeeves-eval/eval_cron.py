@@ -82,6 +82,23 @@ def _alert(text: str) -> None:
         log.warning("Slack alert failed: %s", e)
 
 
+def _last_run_local_iso(latest: dict) -> str | None:
+    """Naive-local ISO string for the last eval run, or None if never run.
+
+    `cron_schedule.weekly_run_due` builds its comparison from a naive local
+    `now`, so anything tz-aware blows up the comparison. Returning None on a
+    missing/unparseable timestamp is safe: the helper then falls back to
+    "fire on the scheduled weekday once the hour has passed".
+    """
+    ts = latest.get("unix_ts")
+    if not ts:
+        return None
+    try:
+        return datetime.fromtimestamp(float(ts)).isoformat()
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def run_eval_once() -> dict | None:
     """Score the golden set and alert on a material regression."""
     import run_eval
@@ -148,7 +165,13 @@ def run_loop() -> None:
             latest = run_eval._load_state().get("latest") or {}
             # Catch-up semantics: a week missed to downtime fires on the next
             # tick rather than silently skipping (GW-F10).
-            if weekly_run_due(latest.get("ts"), datetime.now(), EVAL_WEEKDAY, EVAL_HOUR):
+            #
+            # weekly_run_due compares against a NAIVE LOCAL `now`, so it must be
+            # given a naive local timestamp. `latest["ts"]` is tz-aware UTC, and
+            # passing it raised "can't compare offset-naive and offset-aware
+            # datetimes" on every tick — which meant the weekly eval would never
+            # have fired at all. Derive from unix_ts, which has no ambiguity.
+            if weekly_run_due(_last_run_local_iso(latest), datetime.now(), EVAL_WEEKDAY, EVAL_HOUR):
                 run_eval_once()
         except Exception as e:
             log.error("Eval loop error: %s", e)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -43,9 +44,147 @@ def _build_human_content(stamped_text: str, msg: InboundMessage) -> str | list[d
         return stamped_text
     return [{"type": "text", "text": stamped_text}, *image_blocks]
 
-# Maximum wall-clock time (seconds) a single runs.wait() call may block
-# before the gateway cancels the run and returns an error to the user.
-RUN_TIMEOUT_SECONDS = 20 * 60  # 20 minutes
+# Run supervision is LIVENESS-based, not wall-clock based.
+#
+# A 20-minute wall-clock cap used to kill runs here. It killed healthy work:
+# deep analysis tasks (tape rebuilds, multi-step diligence, borrowing-base
+# reconciliation) legitimately run past 20 minutes, and two were cut off and had
+# to be manually continued on 2026-08-26. The stuck-run monitor below already
+# learned this lesson on 2026-06-10 and switched to checkpoint freshness; the
+# wall-clock path never did. Same rule now applies in both places:
+#
+#   a run is unhealthy when it STOPS MAKING PROGRESS, not when it takes a while.
+#
+# Progress means a new stream event (streaming path) or a new checkpoint write
+# (runs.wait path). Either resets the idle clock.
+RUN_IDLE_TIMEOUT_SECONDS = int(os.environ.get("RUN_IDLE_TIMEOUT_SECONDS", 15 * 60))
+
+# Absolute backstop so a pathological run that keeps emitting events without
+# converging cannot occupy a worker forever. Deliberately far above any real
+# task; if this fires, something is wrong that the idle check cannot see.
+RUN_MAX_SECONDS = int(os.environ.get("RUN_MAX_SECONDS", 6 * 60 * 60))
+
+# How often the liveness watchdog re-checks. The streaming path checks an
+# in-process timestamp (cheap); the runs.wait path issues a threads.get_state
+# call, so it polls on the slower cadence.
+RUN_LIVENESS_POLL_SECONDS = 15
+RUN_CHECKPOINT_POLL_SECONDS = 30
+
+# Retained for the HTTP read timeout and for callers/tests that still reference
+# it. No longer used to cancel a healthy run.
+RUN_TIMEOUT_SECONDS = RUN_MAX_SECONDS
+
+
+def describe_empty_response(run_status: str | None) -> str:
+    """Explain an empty response honestly, based on what the run actually did.
+
+    "(No response from agent)" was reported for every empty result. It is wrong
+    in the common case: a tool-calling turn carries no text, so a result read
+    before the agent's final message extracts as "" even though the run is fine
+    and still working. Saying "no response" there tells the user their work was
+    lost when it was not, and invites them to re-ask — which piles another run
+    onto a thread that is already busy.
+    """
+    if run_status in ("pending", "running"):
+        return (
+            "I'm still working on this one — the reply will land here when it finishes. "
+            "You don't need to re-send."
+        )
+    if run_status == "interrupted":
+        return (
+            "That run was interrupted before it finished. "
+            "Reply **continue** and I'll pick it back up."
+        )
+    if run_status == "error":
+        return "That run failed before producing an answer. Say **retry** and I'll run it again."
+    if run_status == "success":
+        # Genuinely finished with nothing to say — rare, but real (e.g. the
+        # last turn was a silent tool action).
+        return "(Finished with no message to return.)"
+    return "(No response from agent)"
+
+
+def _record_checkpoint(fut, slot: dict) -> None:
+    """Stamp progress when a threads.get_state poll returns a fresh checkpoint.
+
+    Only ever moves the timestamp FORWARD. A failed or unparseable poll leaves
+    the previous value alone rather than implying the run went quiet.
+    """
+    try:
+        state = fut.result()
+    except Exception:  # noqa: BLE001 — an unreadable state is not a stall
+        return
+    age = checkpoint_age_seconds(state, datetime.now(timezone.utc))
+    if age is None:
+        return
+    stamped = time.monotonic() - max(0.0, age)
+    if stamped > slot["at"]:
+        slot["at"] = stamped
+
+
+class RunStalledError(TimeoutError):
+    """A run stopped making progress. Distinct from "a run took a long time",
+    which is not an error condition here."""
+
+
+async def await_with_liveness(
+    coro,
+    *,
+    last_progress: "callable",
+    idle_timeout: float = RUN_IDLE_TIMEOUT_SECONDS,
+    max_total: float = RUN_MAX_SECONDS,
+    poll: float = RUN_LIVENESS_POLL_SECONDS,
+    label: str = "run",
+):
+    """Await ``coro``, cancelling it only when it stops making progress.
+
+    ``last_progress()`` returns the monotonic timestamp of the most recent
+    observed progress, or None if that cannot be determined right now (a failed
+    state poll, say). **None is treated as "keep waiting", never as "stalled"** —
+    an unobservable run is not a stuck run, and guessing the other way is what
+    killed healthy work under the old wall-clock cap.
+
+    Raises RunStalledError when the run goes quiet for ``idle_timeout``, or when
+    it exceeds the ``max_total`` backstop.
+    """
+    task = asyncio.ensure_future(coro)
+    started = time.monotonic()
+    try:
+        while True:
+            done, _ = await asyncio.wait({task}, timeout=poll)
+            if done:
+                return task.result()
+
+            now = time.monotonic()
+            if now - started > max_total:
+                raise RunStalledError(
+                    f"{label} exceeded the {max_total / 3600:.1f}h absolute cap"
+                )
+
+            try:
+                progressed_at = last_progress()
+            except Exception:  # noqa: BLE001 — an unreadable probe is not a stall
+                logger.debug("[Manager] liveness probe failed for %s; assuming alive", label, exc_info=True)
+                continue
+            if progressed_at is None:
+                continue
+
+            idle = now - progressed_at
+            if idle > idle_timeout:
+                raise RunStalledError(
+                    f"{label} made no progress for {idle / 60:.1f} minutes"
+                )
+            logger.debug(
+                "[Manager] %s alive: %.0fs elapsed, %.0fs since last progress", label,
+                now - started, idle,
+            )
+    finally:
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
 
 
 def classify_error_text(exc: BaseException) -> str:
@@ -57,12 +196,18 @@ def classify_error_text(exc: BaseException) -> str:
     import httpx
 
     err_str = str(exc).lower()
+    if isinstance(exc, TimeoutError) and ("no progress" in err_str or "absolute cap" in err_str):
+        # Report the real reason. Runs are no longer cancelled for taking a
+        # while, so "took too long" would now be a lie — this fires because the
+        # run went quiet.
+        return (
+            f"I stopped this task because it stalled — {exc}. "
+            "Reply **continue** to pick up where I left off."
+        )
     if isinstance(exc, TimeoutError) and "timed out" in err_str:
         return (
-            "This task took too long and was cancelled after "
-            f"{RUN_TIMEOUT_SECONDS // 60} minutes. "
-            "Try breaking it into smaller steps, or reply **continue** "
-            "to pick up where I left off."
+            "This task was cancelled after timing out. "
+            "Reply **continue** to pick up where I left off."
         )
     if isinstance(exc, (httpx.ReadTimeout, httpx.WriteTimeout, httpx.PoolTimeout)):
         return "The agent is still working but the connection timed out. The task may complete in the background — check back shortly."
@@ -188,9 +333,9 @@ class ChannelManager:
             import httpx
             from langgraph_sdk import get_client
 
-            # Agent runs can take 10-20+ minutes for complex analysis tasks.
-            # Read timeout must exceed RUN_TIMEOUT_SECONDS so that our
-            # asyncio.wait_for() fires before the HTTP timeout does.
+            # Agent runs are supervised by liveness, not wall clock, so the HTTP
+            # read timeout must sit above the absolute backstop — otherwise
+            # httpx kills a healthy long run before our watchdog ever judges it.
             self._client = get_client(
                 url=self._langgraph_url,
                 timeout=httpx.Timeout(connect=5, read=RUN_TIMEOUT_SECONDS + 120, write=300, pool=5),
@@ -496,28 +641,67 @@ class ChannelManager:
         human_content = _build_human_content(stamped_text, msg)
         n_images = len(msg.metadata.get("image_blocks", [])) if msg.metadata else 0
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text=%r, images=%d)", thread_id, msg.text[:100], n_images)
+        # runs.wait() emits nothing until it finishes, so liveness comes from
+        # checkpoint freshness — the same signal the stuck-run monitor uses.
+        # Cached so the watchdog's fast poll doesn't hammer threads.get_state.
+        _ckpt = {"at": time.monotonic(), "checked": 0.0}
+
+        def _checkpoint_progress() -> float | None:
+            now = time.monotonic()
+            if now - _ckpt["checked"] < RUN_CHECKPOINT_POLL_SECONDS:
+                return _ckpt["at"]
+            _ckpt["checked"] = now
+            fut = asyncio.ensure_future(client.threads.get_state(thread_id))
+            fut.add_done_callback(lambda f: _record_checkpoint(f, _ckpt))
+            return _ckpt["at"]
+
+        # Create the run explicitly, then join THAT run id.
+        #
+        # runs.wait() creates-and-waits in one opaque call, and with
+        # multitask_strategy=enqueue a thread can hold several queued runs. A
+        # wait that is not bound to a specific run can resolve on a sibling's
+        # completion and hand back a mid-flight snapshot of ours. That is what
+        # produced "(No response from agent)" on 2026-08-27 while run
+        # 01a0443b went on to finish successfully three minutes later — the
+        # real answer was computed and never delivered. Binding to run_id also
+        # gives us an id to log and to cancel precisely.
+        run = await client.runs.create(
+            thread_id,
+            assistant_id,
+            input={"messages": [{"role": "human", "content": human_content}]},
+            config=run_config,
+            context=run_context,
+        )
+        run_id = run.get("run_id") if isinstance(run, Mapping) else None
+        logger.info("[Manager] run created: thread_id=%s run_id=%s", thread_id, run_id)
+
         try:
-            result = await asyncio.wait_for(
-                client.runs.wait(
-                    thread_id,
-                    assistant_id,
-                    input={"messages": [{"role": "human", "content": human_content}]},
-                    config=run_config,
-                    context=run_context,
-                ),
-                timeout=RUN_TIMEOUT_SECONDS,
+            result = await await_with_liveness(
+                client.runs.join(thread_id, run_id),
+                last_progress=_checkpoint_progress,
+                poll=RUN_LIVENESS_POLL_SECONDS,
+                label=f"run {run_id} on thread {thread_id}",
             )
-        except (asyncio.TimeoutError, TimeoutError):
-            logger.error("[Manager] run timed out after %ds on thread %s — cancelling", RUN_TIMEOUT_SECONDS, thread_id)
-            await self._cancel_active_runs(client, thread_id)
-            raise TimeoutError(f"Run timed out after {RUN_TIMEOUT_SECONDS // 60} minutes")
+        except RunStalledError as exc:
+            logger.error("[Manager] %s — cancelling", exc)
+            # Cancel only OUR run. _cancel_active_runs would also kill queued
+            # siblings that are perfectly healthy.
+            await self._cancel_run(client, thread_id, run_id)
+            raise TimeoutError(str(exc)) from exc
 
         response_text = extract_response_text(result)
         artifacts = extract_artifacts(result)
 
+        # An empty response is ambiguous on its own: a tool-calling turn carries
+        # no text, so a snapshot taken mid-loop extracts as "". Ask the server
+        # what actually happened before telling the user anything.
+        run_status = await self._run_status(client, thread_id, run_id) if not response_text else "success"
+
         logger.info(
-            "[Manager] agent response received: thread_id=%s, response_len=%d, artifacts=%d",
+            "[Manager] agent response received: thread_id=%s, run_id=%s, status=%s, response_len=%d, artifacts=%d",
             thread_id,
+            run_id,
+            run_status,
             len(response_text) if response_text else 0,
             len(artifacts),
         )
@@ -528,7 +712,7 @@ class ChannelManager:
             if attachments:
                 response_text = format_artifact_text([a.virtual_path for a in attachments])
             else:
-                response_text = "(No response from agent)"
+                response_text = describe_empty_response(run_status)
 
         outbound = OutboundMessage(
             channel_name=msg.channel_name,
@@ -603,6 +787,8 @@ class ChannelManager:
 
         heartbeat_task = asyncio.create_task(_heartbeat_loop())
 
+        stream_progress = {"at": time.monotonic()}
+
         async def _stream_iteration() -> None:
             nonlocal last_values, current_message_id, latest_text, active_tool, tool_start_at
             async for chunk in client.runs.stream(
@@ -615,6 +801,11 @@ class ChannelManager:
             ):
                 event = getattr(chunk, "event", "")
                 data = getattr(chunk, "data", None)
+
+                # Any event at all is proof of life — token deltas, tool calls,
+                # state snapshots. This is what lets a legitimately long run
+                # keep going as long as it is still doing something.
+                stream_progress["at"] = time.monotonic()
 
                 if event == "messages-tuple":
                     tool_name = extract_tool_call_name(data)
@@ -641,10 +832,14 @@ class ChannelManager:
                     await _publish_progress(latest_text)
 
         try:
-            await asyncio.wait_for(_stream_iteration(), timeout=RUN_TIMEOUT_SECONDS)
-        except (asyncio.TimeoutError, TimeoutError):
-            stream_error = TimeoutError(f"Streaming run timed out after {RUN_TIMEOUT_SECONDS // 60} minutes")
-            logger.error("[Manager] streaming run timed out after %ds on thread %s — cancelling", RUN_TIMEOUT_SECONDS, thread_id)
+            await await_with_liveness(
+                _stream_iteration(),
+                last_progress=lambda: stream_progress["at"],
+                label=f"streaming run on thread {thread_id}",
+            )
+        except RunStalledError as exc:
+            stream_error = TimeoutError(str(exc))
+            logger.error("[Manager] %s — cancelling", exc)
             await self._cancel_active_runs(client, thread_id)
         except Exception as exc:
             stream_error = exc
@@ -917,6 +1112,28 @@ class ChannelManager:
         return "\n".join(lines)
 
     # -- run lifecycle helpers ------------------------------------------------
+
+    async def _run_status(self, client, thread_id: str, run_id: str | None) -> str | None:
+        """Ask the server what a run's real status is. None when unknowable."""
+        if not run_id:
+            return None
+        try:
+            run = await client.runs.get(thread_id, run_id)
+            return run.get("status") if isinstance(run, Mapping) else None
+        except Exception:  # noqa: BLE001 — a status probe must never fail a reply
+            logger.warning("[Manager] could not read status for run %s", run_id, exc_info=True)
+            return None
+
+    async def _cancel_run(self, client, thread_id: str, run_id: str | None) -> None:
+        """Cancel one specific run, leaving queued siblings alone."""
+        if not run_id:
+            await self._cancel_active_runs(client, thread_id)
+            return
+        try:
+            await client.runs.cancel(thread_id, run_id)
+            logger.info("[Manager] cancelled run %s on thread %s", run_id, thread_id)
+        except Exception:
+            logger.warning("[Manager] failed to cancel run %s on thread %s", run_id, thread_id, exc_info=True)
 
     async def _cancel_active_runs(self, client, thread_id: str) -> None:
         """Cancel all active (running/pending) runs on a thread."""

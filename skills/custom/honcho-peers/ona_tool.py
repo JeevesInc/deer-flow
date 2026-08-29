@@ -649,6 +649,15 @@ def cmd_export_postgres(per_node: int = 4, max_nodes: int = 120):
 # ---------------------------------------------------------------------------
 
 def main():
+    # Owner-gated capability (2026-08-28). Non-owner Slack users may ask
+    # data questions and work with files, but never touch Brian's private
+    # surfaces. See skills/custom/_shared/actor_guard.py.
+    import os as _og_os, sys as _og_sys
+    _og_sys.path.insert(0, _og_os.path.join(_og_os.path.dirname(
+        _og_os.path.dirname(_og_os.path.abspath(__file__))), '_shared'))
+    from actor_guard import require_owner as _require_owner
+    _require_owner('org network analysis')
+
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     if len(sys.argv) < 2:

@@ -93,10 +93,9 @@ def run_review() -> None:
     state = load_state()
     run_number = state.get('run_count', 0) + 1
     prompt = _build_prompt(run_number)
-    notification = (
-        "Latent-learning review starting -- analysing task history for recurring "
-        "domains and drafting specialist agents. Summary to follow."
-    )
+    # No start ping: interim progress lines are banned, and latent-learning
+    # posts its own short summary when it finishes.
+    notification = None
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
         # Plain dispatch, NOT enqueue_or_dispatch: run_loop retries every tick
@@ -107,6 +106,7 @@ def run_review() -> None:
         dispatched = dispatch(
             prompt,
             notification=notification,
+            report_result=False,
             category="Latent Learning",
             source_id="latent-learning-" + datetime.now().strftime('%Y%m%d'),
             source_metadata={"run_number": run_number},

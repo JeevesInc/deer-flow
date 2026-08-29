@@ -307,6 +307,7 @@ def run_eod_review() -> None:
         dispatched = dispatch(
             prompt,
             notification=notification,
+            report_result=False,
             category="EOD Review",
             source_id=f"eod-{datetime.now().strftime('%Y%m%d')}",
             source_metadata={"review_number": review_number},

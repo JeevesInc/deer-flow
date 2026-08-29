@@ -607,6 +607,7 @@ def run_dream() -> None:
         dispatched = dispatch(
             prompt,
             notification=None,
+            report_result=False,
             category="Dream",
             source_id=f"dream-{datetime.now().strftime('%Y%m%d-%H%M')}",
             source_metadata={"dream_number": state.get('dream_count', 0) + 1},

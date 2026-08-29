@@ -73,6 +73,7 @@ def dispatch(
     category: str = "general",
     source_id: str | None = None,
     source_metadata: dict[str, Any] | None = None,
+    report_result: bool = True,
 ) -> bool:
     """Submit work to the agent in a background thread.
 
@@ -116,7 +117,7 @@ def dispatch(
 
     t = threading.Thread(
         target=_run_and_report,
-        args=(prompt, notification, category, source_id),
+        args=(prompt, notification, category, source_id, report_result),
         daemon=True,
         name=f"dispatch-{category.lower().replace(' ', '-')}",
     )
@@ -134,7 +135,7 @@ def active_run_count() -> int:
 # ---------------------------------------------------------------------------
 
 
-def _run_and_report(prompt: str, notification: str, category: str, source_id: str | None) -> None:
+def _run_and_report(prompt: str, notification: str, category: str, source_id: str | None, report_result: bool = True) -> None:
     global _active_runs
     thread_id: str | None = None
     try:
@@ -185,13 +186,18 @@ def _run_and_report(prompt: str, notification: str, category: str, source_id: st
 
         # 3. Extract response and post to Slack
         response = _extract_response(result)
-        if response:
-            summary = response[:3000]
-            if len(response) > 3000:
-                summary += "\n\n_(truncated)_"
-            _post_slack(f"*{category} — completed:*\n\n{summary}")
-        else:
-            _post_slack(f"*{category} — completed* (no visible output produced).")
+        # report_result=False: the dispatched agent posts its own output
+        # (dreams, latent-learning, EOD review). Re-posting the final answer
+        # here is the duplicate noise Brian stopped reading.
+        # Failures are ALWAYS reported regardless of this flag.
+        if report_result:
+            if response:
+                summary = response[:3000]
+                if len(response) > 3000:
+                    summary += "\n\n_(truncated)_"
+                _post_slack(f"*{category} — completed:*\n\n{summary}")
+            else:
+                _post_slack(f"*{category} — completed* (no visible output produced).")
 
         log.info("[Dispatch] %s completed on thread %s", category, thread_id)
         _audit(

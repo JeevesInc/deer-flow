@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 175,
+      "applications": 179,
       "created": "2026-04-07",
-      "last_applied": "2026-08-27T17:43:20.969227+00:00",
+      "last_applied": "2026-08-29T09:13:42.933768+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3838,6 +3838,38 @@
       "solution": "",
       "target_skills": [
         "jeeves-analytics"
+      ]
+    },
+    "pat-2026-08-29-241": {
+      "id": "pat-2026-08-29-241",
+      "name": "When Brian's message already contains the decision AND the w",
+      "source": "ep-2026-08-29-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-29",
+      "last_applied": "2026-08-29T09:16:33.682002+00:00",
+      "category": "general",
+      "pattern": "When Brian's message already contains the decision AND the wording, there is nothing left to confirm -- send it and report the send. Reserve confirmation for destructive or outward-facing steps he did NOT specify. A confirmation question about an already-decided instruction reads to him as not listening, and it is the fastest route from a normal thread to a bare '?'.",
+      "problem": "Brian gave a complete instruction with both the action and the reason -- 'Just tell them you aren't connected to their email so you can't help them with that. Don't whitelist her.' The agent came back for confirmation instead of executing. Brian: 'Yes obviously', then a bare '?' three minutes later.",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-08-29-242": {
+      "id": "pat-2026-08-29-242",
+      "name": "Never restart the gateway while Brian is mid-thread. The gat",
+      "source": "ep-2026-08-29-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-29",
+      "last_applied": "2026-08-29T09:16:33.759029+00:00",
+      "category": "general",
+      "pattern": "Never restart the gateway while Brian is mid-thread. The gateway owns the Slack inbound path, so a restart can swallow the message he just sent and turns a working conversation into silence -- which he answers with '?'. Deploy after the thread closes, or tell him the restart is happening in the same message.",
+      "problem": "The inbound-DM sender gate was deployed by restarting the DeerFlow Gateway service in the middle of an active Slack thread with Brian. The tool output shows 'WARNING: Waiting for service DeerFlow Gateway (:8001) to stop'. Brian's next message was a bare '?'.",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
       ]
     }
   }

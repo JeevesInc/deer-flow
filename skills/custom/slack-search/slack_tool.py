@@ -408,6 +408,17 @@ def main():
 
     command = sys.argv[1]
 
+    # Owner-gated subcommands (2026-08-28): searching Slack runs under
+    # Brian's user token (his DMs), sending reaches third parties, and
+    # allowlist edits change who may talk to the analyst at all. Only
+    # 'lookup' is safe for a non-owner run.
+    if command in ('search', 'send', 'send-as-owner', 'allowlist'):
+        import os as _og_os, sys as _og_sys
+        _og_sys.path.insert(0, _og_os.path.join(_og_os.path.dirname(
+            _og_os.path.dirname(_og_os.path.abspath(__file__))), '_shared'))
+        from actor_guard import require_owner as _require_owner
+        _require_owner('Slack ' + command + ' (Brian-only)')
+
     if command == 'search':
         if len(sys.argv) < 3:
             print('Usage: python slack_tool.py search "query" [--days 30] [--count 20]', file=sys.stderr)

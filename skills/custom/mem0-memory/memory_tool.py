@@ -84,6 +84,13 @@ def update_memory(memory_id, new_text):
 
 
 if __name__ == "__main__":
+    # Owner-gated: mem0 holds Brian's private facts. Non-owner runs are
+    # blocked here (see skills/custom/_shared/actor_guard.py).
+    import os as _og_os, sys as _og_sys
+    _og_sys.path.insert(0, _og_os.path.join(_og_os.path.dirname(
+        _og_os.path.dirname(_og_os.path.abspath(__file__))), '_shared'))
+    from actor_guard import require_owner as _require_owner
+    _require_owner("the agent's long-term memory (mem0)")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

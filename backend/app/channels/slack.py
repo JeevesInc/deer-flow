@@ -101,6 +101,12 @@ class SlackChannel(Channel):
         self._assistant_threads: set[str] = self._load_assistant_threads()
         self._assistant_context: dict[str, str] = {}  # thread_ts -> viewing channel_id
         self._root_context_injected: set[str] = set()  # thread_ts values where root msg already injected
+        # Inbound DM allowlist (Chan-H3). Single source of truth, shared with
+        # skills/custom/slack-search/slack_dm_monitor_cron.py. Non-approved DM
+        # senders are gated in _handle_message_event before any agent run.
+        self._dm_allowlist_path = Path(__file__).resolve().parent.parent.parent / ".deer-flow" / "_slack_dm_allowlist.json"
+        self._dm_allowlist: set[str] = set()
+        self._dm_allowlist_mtime: float = -1.0
 
     def _load_assistant_threads(self) -> set[str]:
         """Load persisted assistant thread_ts values from disk."""
@@ -405,6 +411,31 @@ class SlackChannel(Channel):
         result = (name, title)
         self._user_name_cache[user_id] = result
         return result
+
+    def _is_dm_sender_allowed(self, user_id: str) -> bool:
+        """True if ``user_id`` may trigger an agent run from a DM.
+
+        Reads ``.deer-flow/_slack_dm_allowlist.json`` (managed by
+        ``slack_tool.py allowlist add|remove|list``) and re-reads it whenever the
+        file mtime changes, so allowlist edits take effect without a restart.
+        Fails CLOSED: if the file is missing or unreadable only the owner passes.
+        """
+        if not user_id:
+            return False
+        if self._owner_user_id and user_id == self._owner_user_id:
+            return True
+        try:
+            import json as _json
+            mtime = self._dm_allowlist_path.stat().st_mtime
+            if mtime != self._dm_allowlist_mtime:
+                data = _json.loads(self._dm_allowlist_path.read_text(encoding="utf-8"))
+                self._dm_allowlist = set(data.get("allowed", {}).keys())
+                self._dm_allowlist_mtime = mtime
+                logger.info("[Slack] DM allowlist loaded: %d sender(s)", len(self._dm_allowlist))
+        except Exception as exc:
+            logger.warning("[Slack] DM allowlist unreadable (%s) — failing closed", exc)
+            return False
+        return user_id in self._dm_allowlist
 
     def _notify_owner_of_inbound(self, user_id: str, channel_id: str,
                                  thread_ts: str, text: str) -> None:
@@ -947,6 +978,22 @@ class SlackChannel(Channel):
         # Check allowed users (bot-forwarded messages bypass this check)
         if self._allowed_users and user_id not in self._allowed_users and not msg_bot_id:
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
+            return
+
+        # DM allowlist gate (Chan-H3, incident 2026-08-28). A non-allowlisted
+        # sender asked "any important emails I should know about?" and this path
+        # ran a full agent turn and posted the owner's inbox summary back to her.
+        # The allowlist lived only in slack_dm_monitor_cron.py, which can gate its
+        # own replies but cannot stop this one. Gate here — before the
+        # "Working on it..." reply and the bus publish. The DM monitor still sends
+        # the new-sender holding note and notifies the owner.
+        if (not msg_bot_id
+                and event.get("channel_type", "") == "im"
+                and not self._is_dm_sender_allowed(user_id)):
+            logger.warning(
+                "[Slack] Gated DM from non-allowlisted user_id=%s channel=%s — no agent run (text=%r)",
+                user_id, event.get("channel", ""), (event.get("text") or "")[:120],
+            )
             return
 
         # Debug: log raw event structure for diagnosing forwarded message/email issues

@@ -292,10 +292,11 @@ def run_eod_review() -> None:
     prompt = _build_eod_prompt(review_number)
 
     today = datetime.now().strftime('%B %d')
-    notification = (
-        f"📋 *EOD Review #{review_number} starting* — "
-        f"scanning today's ({today}) unhandled items. I'll post a full briefing shortly."
-    )
+    # Start ping suppressed 2026-08-30 (Dream #103): SOUL bans interim-progress
+    # narration, and the EOD agent posts its own briefing ~5 min later. Brian was
+    # getting three DMs per review (start ping + briefing + harness echo).
+    # Failures are still reported by autonomous_dispatch regardless of this value.
+    notification = None
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))

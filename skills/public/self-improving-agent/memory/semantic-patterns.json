@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 179,
+      "applications": 180,
       "created": "2026-04-07",
-      "last_applied": "2026-08-29T09:13:42.933768+00:00",
+      "last_applied": "2026-08-30T09:08:41.992163+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3870,6 +3870,22 @@
       "solution": "",
       "target_skills": [
         "slack-search"
+      ]
+    },
+    "pat-2026-08-30-243": {
+      "id": "pat-2026-08-30-243",
+      "name": "A code patch to a skill module used by a cron is NOT live un",
+      "source": "ep-2026-08-30-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-30",
+      "last_applied": "2026-08-30T09:09:07.210027+00:00",
+      "category": "general",
+      "pattern": "A code patch to a skill module used by a cron is NOT live until the gateway restarts. Before recording any cron defect as fixed, verify the gateway process start time (grep [CronSupervisor] started in deerflow-gateway.err.log) is LATER than the file mtime, and verify the behavior in Slack. Otherwise the next dream will read FIXED in memory while Brian keeps getting the broken behavior.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
       ]
     }
   }

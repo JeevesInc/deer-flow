@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 180,
+      "applications": 181,
       "created": "2026-04-07",
-      "last_applied": "2026-08-30T09:08:41.992163+00:00",
+      "last_applied": "2026-08-31T09:05:19.861588+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3886,6 +3886,22 @@
       "solution": "",
       "target_skills": [
         "gmail"
+      ]
+    },
+    "pat-2026-08-31-244": {
+      "id": "pat-2026-08-31-244",
+      "name": "When deriving a FILENAME from an externally-supplied entity ",
+      "source": "ep-2026-08-31-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-08-31",
+      "last_applied": "2026-08-31T09:05:55.860259+00:00",
+      "category": "general",
+      "pattern": "When deriving a FILENAME from an externally-supplied entity name (counterparty, lender, vendor, meeting title), sanitise the WHOLE string to filename-safe characters, never just spaces. Slashes, colons and backslashes become path separators and raise FileNotFoundError. Corollary: a per-item failure inside a cron loop must not kill the whole cycle - one malformed name should skip one item, not abort the run.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "knowledge-crawler"
       ]
     }
   }

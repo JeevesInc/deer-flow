@@ -751,7 +751,13 @@ def write_intelligence(synthesis: str, drive_files: list, email_threads: dict, s
     # evergreen wiki page (merged narrative, grep-able, no size limit).
     all_cp_names = set(list(email_threads.keys()) + list({f["folder"].split("/")[0] for f in drive_files if "/" in f.get("folder", "")}))
     for cp_name in all_cp_names:
-        cp_safe = cp_name.lower().replace(" ", "_")
+        # Sanitise the whole name, not just spaces: a counterparty containing a
+        # slash ("Citibank/Citigroup") turned into a nested path and raised
+        # FileNotFoundError, which aborted the ENTIRE crawl cycle (4x on
+        # 2026-08-30). Keep only filename-safe characters.
+        cp_safe = "".join(
+            ch if (ch.isalnum() or ch in "._-") else "_" for ch in cp_name.lower()
+        ).strip("_") or "unknown"
         cp_path = KNOWLEDGE_DIR / f"counterparty_{cp_safe}.json"
         existing = {}
         if cp_path.exists():

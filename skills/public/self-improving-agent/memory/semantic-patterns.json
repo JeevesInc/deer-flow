@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 181,
+      "applications": 183,
       "created": "2026-04-07",
-      "last_applied": "2026-08-31T09:05:19.861588+00:00",
+      "last_applied": "2026-09-01T09:06:12.965243+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3902,6 +3902,22 @@
       "solution": "",
       "target_skills": [
         "knowledge-crawler"
+      ]
+    },
+    "pat-2026-09-01-245": {
+      "id": "pat-2026-09-01-245",
+      "name": "When a correction repeats despite the lesson already being i",
+      "source": "ep-2026-09-01-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-01",
+      "last_applied": "2026-09-01T09:06:58.415303+00:00",
+      "category": "general",
+      "pattern": "When a correction repeats despite the lesson already being in memory, look for a GENERATOR that re-injects the bad input (cron prompt, template, saved query) instead of logging the lesson again. Fix the generator. Corollary: never hardcode counterparty names into recurring cron prompts -- derive the live list from STRATEGIC_CONTEXT.md Current Priorities at run time, and read the CLOSED block first.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
       ]
     }
   }

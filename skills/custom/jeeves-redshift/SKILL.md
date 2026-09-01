@@ -14,6 +14,16 @@ allowed-tools:
 
 **CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
 
+**Write it this way every time — do not hand-type today's date.** The runner rejects a bare `CURRENT_DATE`/`GETDATE()` AND a literal today-dated string, and that rejection burned three turns in one day on 2026-08-31 (two literal `'2026-08-31'` filters, one bare `CURRENT_DATE`). Start every dated query from an as-of CTE and reference it everywhere, so there is exactly one date expression to get right:
+
+```sql
+WITH asof AS (SELECT CURRENT_DATE - 1 AS d)          -- latest date with data
+SELECT ...
+FROM   capital_markets_dm.loc_tape t, asof
+WHERE  t.dt = asof.d
+```
+For month-to-date/'so far this month' asks the window is `date_trunc('month', CURRENT_DATE)` through `CURRENT_DATE - 1`, never through today. When Brian says "today" or "as of now", run as of yesterday and SAY which date you used in the answer — do not use `--allow-today` to force it; that flag is for non-tape tables only.
+
 **CRITICAL — `capital_markets_dm.loc_tape` Jeeves Pay columns are MIS-LABELLED. `jp_fee` holds Jeeves Pay DISBURSEMENT volume and `jp_disbursement` holds the FEE; `fee_amount` is a byte-identical duplicate of `jp_disbursement`.** Verified 2026-08-25 for MX (`country_code = 484`) July 2026 over 95,091 rows: `fee_amount` = 27,090,673.18, `jp_disbursement` = 27,090,673.18, `jp_fee` = 1,269,733,513.79 — cross-checked to the Jeeves Pay source of truth `master_transactions_dm.loc_jeevespay_transactions_dm` for the same month and currency (`send_amount` = 1,304,113,069.41, `total_fees_send_amount` = 25,223,004.17). The names were shifted when the fee column was added and the index was not updated — Brian's own diagnosis, confirmed. **Never read `jp_fee` as a fee or `jp_disbursement` as a disbursement, and never report a `fee_amount`/`jp_disbursement` pair as double counting** — it is one column under two names, not duplicated data. When you need real Jeeves Pay volume or fees, go to `loc_jeevespay_transactions_dm` (not on the runner whitelist: pass `--allow-tables master_transactions_dm.loc_jeevespay_transactions_dm`).
 
 **CRITICAL: `loc_tape` publishes the day's partition BEFORE the balances land**, so `max(dt)` is NOT the latest usable date. On 2026-08-24 the 8/24 partition existed with every balance NULL while 8/23 was the latest complete day. Always select the latest `dt` with non-null balances and state which date you used in the answer.

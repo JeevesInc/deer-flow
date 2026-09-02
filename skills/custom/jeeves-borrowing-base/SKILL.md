@@ -153,6 +153,39 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Portfol
 
 Remind user to **open in Excel** to recalculate formulas.
 
+### Step 2b (MANDATORY): the builder's MoM shift is a NO-OP — write col N yourself
+
+`_shift_summary_mom_with_values` copies **cached** col-L values into col N. The templates on
+Drive were written by openpyxl and never opened in Excel, so `Summary` has **0 cached col-L
+values** (only `Summary (2)` has 4). Verified on the 20260801 AND 20260804 templates,
+2026-09-01. Consequence if you ignore it: col N (prior period) silently keeps the
+month-BEFORE-last's numbers, and worse, **`Summary!N4` drives the whole period header** —
+`L4 = EOMONTH(N4,0)+1`, `L5 = EOMONTH(L4,0)` — so a stale N4 labels the report with the wrong
+month and mis-filters rows 22-25 and 69. The builder never touches N4/N5.
+
+After running `build_portfolio_report.py`, always:
+1. Set `Summary!N4` = first day of the PRIOR period, `N5` = its month end (for the 20260901
+   report: 2026-07-01 / 2026-07-31).
+2. Recompute the prior period's col-L values in Python **from the template workbook's own
+   loc / rollforward / mods tabs** and hard-code them into col N: rows 9-15 (Country F4:F9
+   buckets off `loc`: `balance_usd>0`, `charge_off_flag=FALSE`, `is_in_repayment=FALSE`,
+   `country_code` 484 MX / 170 CO / 76 BR, `days_past_due` buckets 0 / 1-30 / 30-60 / 60-90 /
+   90-120 / 120+), 17, 21-25 (`loans`), 30-56 (`rollforward`), 53-55 (country totals),
+   60 and 62-69 (`mods`; CY=balance_usd, DU=uninvoiced_interest_usd, DV=uninvoiced_vat_fee_tax_usd,
+   EE=dq_bucket_daily, EK=charge_off_dt, EL=charge_off_flag, ER=is_out_of_policy_repayment).
+3. **Two tie-outs must both hold before upload** — `SUM(rollforward!T:T) - L50 = 0.00` (L56) and
+   the `loc` DQ-bucket total = `L52` (EOP excl. negative balances) **to the cent**. Both held
+   for August 2026 at $224,219,947.93.
+
+Known, pre-existing and NOT introduced by the build: 6 error literals on `Summary (2)`
+(`L5 =loc!#REF!` plus five `ARRAY_CONSTRAIN`/`ARRAYFORMULA` Google-Sheets leftovers). `Summary`
+itself is clean. Also: **the builder does NOT refresh the `loans` tab** (nor `Sheet1`) — it
+carries the prior month's rows, which is why Summary rows 21-25 read 0.00 every month.
+
+`Portfolio Reporting/202609/` folder id `1x4_CJ566Lx8ntLIPZTp9ymJ8ZmThkLZb` (created 2026-09-01).
+Template of record for the September build (August period) is now
+`Portfolio Report - 20260901.xlsx`, id `1ys-RpbS9XwoKPB725ZxZRliY7_mTG5dl`.
+
 ---
 
 ## CIM Monthly Tested Portfolio Report (due the 15th, covers prior month)

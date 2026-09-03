@@ -97,6 +97,26 @@ from redshift_util import connect
 ```
 `redshift_util` lives in `jeeves-borrowing-base` and exports `connect()`. Nothing else.
 
+**`sql_runner.py` IS A CLI, NOT A LIBRARY — it exports no query function.** On 2026-09-02
+(thread e59a194a) a script did `from sql_runner import run_query` and got
+`ImportError: cannot import name 'run_query' from 'sql_runner'`, burning a turn. There is no
+`run_query`, no `query`, no `run` — the only module-level names are private helpers
+(`_connect`, `_format_inline`, `validate_sql`, `main`). Never import from `sql_runner`.
+Two legal ways to get rows inside Python, in preference order:
+
+```python
+# A. shared module (preferred for scripts) - has ZPA-deauth detection and auto-reauth request
+import os, sys
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', '_shared'))
+from redshift import query, connect      # query(sql, params=None) -> (columns, rows)
+
+# B. borrowing-base helper (connect() only, you manage the cursor)
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', 'jeeves-borrowing-base'))
+from redshift_util import connect
+```
+`_shared/redshift.py` is the better choice when connectivity is flaky: it recognises ZPA deauth
+signatures and files a reauth request itself instead of surfacing a bare TCP timeout.
+
 
 ### Enforced guards (errors, not warnings)
 

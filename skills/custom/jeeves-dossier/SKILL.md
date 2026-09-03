@@ -125,7 +125,7 @@ When creating or updating a dossier, produce JSON in this format:
 
 ## Known failure mode — verify before claiming "no direct communication"
 
-The automated dossier_cron.py synthesis (Claude call) has been observed to gather 30 Slack items for a contact (including real DMs) and then still write "No direct 1:1 communication observed" in the summary — the LLM synthesis step silently dropped the slack data. **Before ever writing or repeating a "no direct 1:1 contact" / "structural only" claim, cross-check it**: run  and  directly. If DMs exist, the claim is wrong — do not trust the synthesized dossier text at face value when the gathered data (visible in the  output's  count) shows items but the written summary claims otherwise. When Brian pushes back on a dossier claim ("how is this even true"), always re-verify against raw Slack/Gmail search before defending or repeating the claim.
+The automated dossier_cron.py synthesis (Claude call) has been observed to gather 30 Slack items for a contact (including real DMs) and then still write "No direct 1:1 communication observed" in the summary — the LLM synthesis step silently dropped the slack data. **Before ever writing or repeating a "no direct 1:1 contact" or "structural only" claim, cross-check it**: run `slack_tool.py history <user-id>` and `slack_tool.py search "<name>"` directly (the code-fenced tool names in this paragraph were previously stripped to empty backticks, which made the rule unactionable). If DMs exist, the claim is wrong — do not trust the synthesized dossier text at face value when the gathered data (the item count printed by `dossier_tool.py gather`) shows items but the written summary claims otherwise. When Brian pushes back on a dossier claim ("how is this even true"), always re-verify against raw Slack/Gmail search before defending or repeating the claim.
 
 ## Synthesis Instructions
 
@@ -157,6 +157,26 @@ When synthesizing a dossier, you are a **relationship analyst**. Read raw intera
 - Topics raised but not resolved
 - Action items assigned to user or contact
 - Mark resolved when follow-up evidence exists in newer data
+
+**HARD RULE — never surface a stored `open_threads` item in a meeting-prep briefing without
+re-verifying it as still open, and never state who owes whom without checking message direction.**
+On 2026-09-02 (thread b84ba7d2) the Weekly Risk Meeting prep listed items as owed by Brian that
+were already discharged, and Brian corrected it twice in one message: *"I gave chin the dashboard
+in credit models channel. and the last message in my dm with Ivan is from me."* Two distinct root
+causes, both must be checked before the briefing goes out:
+
+1. **Resolution evidence lives in CHANNELS, not just DMs.** The gather step is DM-weighted, so a
+   deliverable handed over in a shared channel (e.g. #credit-model-building) never clears the
+   open thread. For every open item, run a channel-wide Slack search on the contact's name AND
+   the artifact noun (dashboard, model, tape, memo) since the item's created date — not just a
+   DM history pull. If Brian posted it anywhere, the item is CLOSED.
+2. **Ball-in-court is determined by the LAST message and its sender.** Before writing "unanswered
+   by you" / "you owe", read the last message in the thread and check the author. If the last
+   message is from Brian, the ball is with the CONTACT — say so, or say nothing. Never infer
+   direction from the age of the item.
+
+If either check cannot be run, omit the open-item line entirely. A briefing with fewer, correct
+lines beats one that tells Brian he owes something he already delivered.
 
 ### Rules
 - **NEVER fabricate interactions** — only cite what's in the gathered data

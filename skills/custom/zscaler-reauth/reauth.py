@@ -105,6 +105,34 @@ def _alert_owner(msg: str) -> None:
         print(f"owner alert failed: {e}", file=sys.stderr)
 
 
+def _boot_epoch() -> float:
+    """Wall-clock epoch of the last boot, from the monotonic tick counter."""
+    import ctypes as _c
+    return time.time() - (_c.windll.kernel32.GetTickCount64() * 0.001)
+
+
+def _alert_once_per_boot(key: str, msg: str) -> bool:
+    """Send msg at most once per boot. Returns True if it was sent."""
+    import json as _json
+    marker = r"C:\Jeeves\redshift-bot\zscaler_alert_marker.json"
+    boot_id = "%s-%d" % (key, int(_boot_epoch()))
+    try:
+        seen = _json.load(open(marker)) if os.path.exists(marker) else {}
+    except Exception:
+        seen = {}
+    if seen.get(key) == boot_id:
+        print("alert %s already sent for this boot -- staying quiet." % key)
+        return False
+    _alert_owner(msg)
+    seen[key] = boot_id
+    try:
+        with open(marker, "w") as f:
+            _json.dump(seen, f)
+    except Exception as e:
+        print("marker write failed: %s" % e, file=sys.stderr)
+    return True
+
+
 def main():
     # Step 1: Verify the problem — maybe it's a transient blip
     print("Checking Redshift connectivity...")
@@ -126,16 +154,25 @@ def main():
     # exit instead of failing blind.
     if _in_session_zero():
         sys.path.insert(0, SCRIPT_DIR)
-        from session_launcher import find_active_session
-        if find_active_session()[0] is None:
-            _alert_owner(
-                ":lock: *Zscaler reauth blocked* -- no interactive Windows session "
-                "is logged on, so there is no user token to launch the tray flow "
-                "with. Log in to the laptop and the next scheduled attempt will "
-                "self-heal without you doing anything else."
-            )
-            print("ERROR: session 0 and no interactive session to launch into.",
+        from session_launcher import find_active_session, session_report
+        sid, who = find_active_session()
+        if sid is None:
+            import datetime as _dt
+            evidence = session_report()
+            boot = _dt.datetime.fromtimestamp(_boot_epoch()).strftime("%b %d %H:%M")
+            print("ERROR: session 0 and no interactive session. %s" % evidence,
                   file=sys.stderr)
+            _alert_once_per_boot(
+                "no_interactive_session",
+                ":lock: *Redshift and every data cron are down until this laptop is "
+                "unlocked once.* It rebooted at %s for a Windows update and stopped "
+                "at the sign-in screen, so no desktop session exists (%s), ZSATray "
+                "never started, and there is no user token for ZPA to reauth with. "
+                "Automatic sign-in after update restarts is now armed, so a reboot "
+                "will restore the session by itself from here on -- this one still "
+                "needs a single unlock. You will not get this alert again until the "
+                "next boot." % (boot, evidence)
+            )
             sys.exit(1)
 
     # Step 2: Run the main reauth script (single attempt)

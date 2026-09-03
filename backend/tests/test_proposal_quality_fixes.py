@@ -62,7 +62,12 @@ class _FakeClient:
 
 
 @pytest.fixture(autouse=True)
-def _reset_lookup_state():
+def _reset_lookup_state(tmp_path, monkeypatch):
+    # Redirect the learned-pattern disk cache into tmp_path. Without this the
+    # write-through cache added 2026-09-02 would (a) pollute the live
+    # .deer-flow cache with test strings and (b) leak patterns between tests.
+    monkeypatch.setattr(wr, "_pattern_cache_path",
+                        lambda: tmp_path / "proposal_pattern_cache.json")
     wr._pattern_lookup_failures = 0
     wr._pattern_lookup_last_alert = 0.0
     yield
@@ -98,13 +103,55 @@ def test_error_key_counts_as_failure(monkeypatch):
 
 
 def test_chronic_failure_alerts_owner_once(monkeypatch):
+    """Cold cache + chronic outage = the classifier really is blind → alert once."""
     _patch_http(monkeypatch, _FakeClient(exc=RuntimeError("conn refused")))
     alerts = []
     monkeypatch.setattr(wr, "_post_slack", lambda text, **kw: alerts.append(text) or {})
     for _ in range(wr.PATTERN_LOOKUP_ALERT_THRESHOLD + 5):
         wr._get_proposal_patterns("a@b.com", "b.com", "s")
     assert len(alerts) == 1  # alerted at threshold, then suppressed for 24h
-    assert "feedback loop" in alerts[0].lower() or "severed" in alerts[0].lower()
+    # The alert must carry the remediation, not just the symptom.
+    assert "fix" in alerts[0].lower()
+    assert "learned patterns" in alerts[0].lower()
+
+
+def test_cached_patterns_served_during_outage(monkeypatch):
+    """2026-09-02: a Qdrant outage must DEGRADE the feedback loop, not sever it."""
+    _patch_http(monkeypatch, _FakeClient(payload={"results": [{"memory": "p1"}]}))
+    assert wr._get_proposal_patterns("a@b.com", "b.com", "s") == ["p1"]
+
+    _patch_http(monkeypatch, _FakeClient(exc=RuntimeError("WinError 10061")))
+    assert wr._get_proposal_patterns("a@b.com", "b.com", "other subject") == ["p1"]
+
+
+def test_cache_hit_suppresses_owner_alert(monkeypatch):
+    """Degraded-but-working is a log line, not a page."""
+    _patch_http(monkeypatch, _FakeClient(payload={"results": [{"memory": "p1"}]}))
+    wr._get_proposal_patterns("a@b.com", "b.com", "s")
+
+    alerts = []
+    monkeypatch.setattr(wr, "_post_slack", lambda text, **kw: alerts.append(text) or {})
+    _patch_http(monkeypatch, _FakeClient(exc=RuntimeError("WinError 10061")))
+    for _ in range(wr.PATTERN_LOOKUP_ALERT_THRESHOLD + 5):
+        wr._get_proposal_patterns("a@b.com", "b.com", "s")
+    assert alerts == []
+
+
+def test_cache_falls_back_to_domain_for_new_sender(monkeypatch):
+    _patch_http(monkeypatch, _FakeClient(payload={"results": [{"memory": "dom"}]}))
+    wr._get_proposal_patterns("known@b.com", "b.com", "s")
+
+    _patch_http(monkeypatch, _FakeClient(exc=RuntimeError("WinError 10061")))
+    assert wr._get_proposal_patterns("brand.new@b.com", "b.com", "s") == ["dom"]
+
+
+def test_stale_cache_is_not_served(monkeypatch):
+    _patch_http(monkeypatch, _FakeClient(payload={"results": [{"memory": "p1"}]}))
+    wr._get_proposal_patterns("a@b.com", "b.com", "s")
+
+    monkeypatch.setattr(wr, "PROPOSAL_PATTERN_CACHE_MAX_AGE", -1)
+    _patch_http(monkeypatch, _FakeClient(exc=RuntimeError("WinError 10061")))
+    assert wr._get_proposal_patterns("a@b.com", "b.com", "s") == []
 
 
 def test_below_threshold_no_alert(monkeypatch):

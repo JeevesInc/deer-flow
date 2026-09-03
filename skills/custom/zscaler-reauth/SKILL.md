@@ -76,6 +76,34 @@ The report scheduler's own "connection error -> reauth -> retry once" path then 
 `zscaler reauth failed`, which reads like an Okta failure but is **the automation refusing itself**.
 **Before diagnosing Okta/FastPass, read that state file and check the cooldown.**
 
+### 5. Nobody signed in after a Windows Update reboot (root-caused + fixed 2026-09-02)
+
+**Symptom:** `:lock: Zscaler reauth blocked -- no interactive Windows session is logged on`,
+Redshift TCP timeouts on 5439, every data cron dead for hours before anyone notices.
+
+**How to confirm in 1 command (never guess):** enumerate sessions and ask for a token --
+`session_launcher.session_report()` prints e.g. `s0 Disconnected user=none; s1 Connected user=none`.
+`s1 Connected` with no username = the console is sitting at the sign-in screen. Cross-check:
+`ZSATray.exe` absent from tasklist, `ZSATunnel` service Stopped, `ZSAService` Running, and
+event 1074 from `TrustedInstaller.exe` at the boot time. On 2026-09-02 the box rebooted twice
+for updates (13:17 user-approved, 13:29 TrustedInstaller) and stopped at the lock screen; ZPA
+had no user token, so reauth was genuinely impossible -- that alert was TRUE, unlike 2026-08-09.
+
+**Permanent fix applied:** ARSO (Automatic Restart Sign-On) is now armed --
+`ARSOUserConsent=1` and `DisableAutomaticRestartSignOn=0` under
+`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` plus the Policies\System
+mirror, and `ARSOUserConsent=1` inside Brian's NTUSER hive. Windows now signs the last
+interactive user back in (locked) after an update restart, so ZSATray returns by itself and
+the session-1 headless reauth path works with no human. It does NOT cover cold power-off.
+
+**Code hardening shipped with it:**
+- `find_active_session()` now accepts **WTSDisconnected** sessions that have a username, not
+  just WTSActive, and proves the choice by calling `WTSQueryUserToken` -- an RDP-disconnected
+  or fast-user-switched desktop still owns a usable token and still runs the tray. This kills
+  a whole class of false "blocked" alerts.
+- The blocked alert is now **once per boot** (`zscaler_alert_marker.json`, keyed on boot epoch
+  from `GetTickCount64`) and carries its evidence: boot timestamp plus the session table.
+
 ## Diagnosing: read the RIGHT log
 
 Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (services back on
@@ -87,6 +115,13 @@ Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (ser
 - Do not call this skill preemptively — only when you actually get a connection error
 - Do not call it more than once per conversation — if it fails once, escalate to the user
 - Do not retry the reauth script in a loop
+- **Do not probe the box with `tasklist` switches from bash.** `tasklist /FI ... /V` was rejected
+  three separate times on 2026-09-02 (threads 24bf0626, 74519e17, 805c8cc2) with
+  `Error: Unsafe absolute paths in command: /FI, /V` — the bash path guard reads every
+  slash-prefixed token as a path, and Windows CLI switches always trip it. There is no quoting
+  that fixes this; do not try variants. Use `session_launcher.session_report()`, or a `write_file`
+  script calling `subprocess.run(['tasklist', '/FI', ...], capture_output=True)` with list-args
+  so the switches never touch the bash command line.
 - Do not tell Brian a human step is required without positive evidence. Do not infer he is logged
   out from `active_user=none` read in session 0 — that field is session-local and was wrong on
   2026-08-09; query the active session properly (`session_launcher.find_active_session`) instead.

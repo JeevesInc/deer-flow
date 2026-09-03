@@ -598,25 +598,92 @@ PATTERN_LOOKUP_ALERT_INTERVAL = 24 * 3600  # seconds between owner alerts
 _pattern_lookup_failures = 0
 _pattern_lookup_last_alert = 0.0
 
+# 2026-09-02: a Qdrant outage (Docker engine down — WSL cannot run as LOCAL
+# SYSTEM, so the engine only exists inside an interactive logon session) severed
+# the feedback loop for real: every lookup returned WinError 10061 and proposals
+# ran blind. Vector search is now write-through cached to disk, so an outage
+# DEGRADES the loop (stale-but-real patterns) instead of severing it. Alerts
+# only escalate to a DM when the cache cannot cover the sender either.
+PROPOSAL_PATTERN_CACHE_PATH = PROPOSAL_LOG_PATH.parent / 'proposal_pattern_cache.json'
+PROPOSAL_PATTERN_CACHE_MAX_AGE = 45 * 24 * 3600  # serve cached patterns up to 45d
+_pattern_cache_lock = threading.Lock()
 
-def _pattern_lookup_failed(reason: str) -> None:
+
+def _pattern_cache_path():
+    """Indirection so tests can redirect the cache to tmp_path."""
+    return PROPOSAL_PATTERN_CACHE_PATH
+
+
+def _pattern_cache_read() -> dict:
+    try:
+        with _pattern_cache_path().open(encoding='utf-8') as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _pattern_cache_write(key: str, patterns: list) -> None:
+    """Write-through: every successful lookup refreshes the sender + domain key."""
+    if not patterns:
+        return
+    try:
+        with _pattern_cache_lock:
+            data = _pattern_cache_read()
+            data[key] = {'patterns': patterns[:PROPOSAL_PATTERN_INJECTION_LIMIT],
+                         'cached_at': time.time()}
+            path = _pattern_cache_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix('.json.tmp')
+            with tmp.open('w', encoding='utf-8') as f:
+                json.dump(data, f)
+            tmp.replace(path)
+    except Exception as e:
+        log.warning('pattern cache write failed: %s', e)
+
+
+def _pattern_cache_get(keys: list) -> list:
+    """Best available cached patterns: exact sender first, then domain."""
+    data = _pattern_cache_read()
+    now = time.time()
+    for key in keys:
+        entry = data.get(key)
+        if not isinstance(entry, dict):
+            continue
+        if now - float(entry.get('cached_at', 0)) > PROPOSAL_PATTERN_CACHE_MAX_AGE:
+            continue
+        pats = [p for p in entry.get('patterns', []) if p]
+        if pats:
+            return pats
+    return []
+
+
+def _pattern_lookup_failed(reason: str, cached: int = 0) -> None:
     global _pattern_lookup_failures, _pattern_lookup_last_alert
     _pattern_lookup_failures += 1
     if _pattern_lookup_failures < PATTERN_LOOKUP_ALERT_THRESHOLD:
-        log.warning('proposal pattern lookup failed (%d consecutive): %s',
-                    _pattern_lookup_failures, reason)
+        log.warning('proposal pattern lookup failed (%d consecutive, %d cached '
+                    'patterns served): %s', _pattern_lookup_failures, cached, reason)
         return
-    log.error('proposal pattern lookup failed %d times in a row — feedback loop '
-              'is severed, classifier running without learned patterns: %s',
+    if cached:
+        # Degraded, not severed — log loudly, do not page the owner.
+        log.error('proposal pattern lookup failed %d times in a row — serving %d '
+                  'cached patterns (vector store down): %s',
+                  _pattern_lookup_failures, cached, reason)
+        return
+    log.error('proposal pattern lookup failed %d times in a row and the disk cache '
+              'is empty — classifier running without learned patterns: %s',
               _pattern_lookup_failures, reason)
     now = time.time()
     if now - _pattern_lookup_last_alert >= PATTERN_LOOKUP_ALERT_INTERVAL:
         _pattern_lookup_last_alert = now
         _post_slack(
-            f":warning: *Proposal feedback loop severed* — the classifier's learned-pattern "
-            f"lookup has failed {_pattern_lookup_failures} times in a row "
-            f"(latest: {reason[:200]}). Proposals are running without your past feedback. "
-            f"Check the gateway `/api/memory/mem0` endpoint."
+            f":warning: *Proposals running without learned patterns* — vector store "
+            f"unreachable ({reason[:120]}) and no cached patterns cover this sender.\n"
+            f"*Fix:* the qdrant container needs the Docker engine, which only runs "
+            f"inside an interactive logon session (WSL refuses LOCAL SYSTEM). Log in "
+            f"once and it self-heals (restart=unless-stopped); to force it: "
+            f"`docker compose -f C:\\Jeeves\\redshift-bot\\monitoring\\docker-compose.yml up -d qdrant`."
         )
 
 
@@ -632,6 +699,7 @@ def _get_proposal_patterns(sender_email: str, sender_domain: str, subject: str) 
     """
     global _pattern_lookup_failures
     query = f"email from {sender_email} ({sender_domain}) re: {subject}"
+    cache_keys = [f'sender:{sender_email}', f'domain:{sender_domain}']
     try:
         with httpx.Client(timeout=httpx.Timeout(10)) as http:
             resp = http.get(
@@ -645,15 +713,21 @@ def _get_proposal_patterns(sender_email: str, sender_domain: str, subject: str) 
             resp.raise_for_status()
             data = resp.json()
         if data.get('error'):
-            _pattern_lookup_failed(str(data['error']))
-            return []
+            fallback = _pattern_cache_get(cache_keys)
+            _pattern_lookup_failed(str(data['error']), cached=len(fallback))
+            return fallback
         hits = data.get('results', []) or []
         patterns = [h.get('memory', '').strip() for h in hits if isinstance(h, dict) and h.get('memory')]
+        patterns = [p for p in patterns if p]
         _pattern_lookup_failures = 0
-        return [p for p in patterns if p]
+        if patterns:
+            for key in cache_keys:
+                _pattern_cache_write(key, patterns)
+        return patterns
     except Exception as e:
-        _pattern_lookup_failed(str(e))
-        return []
+        fallback = _pattern_cache_get(cache_keys)
+        _pattern_lookup_failed(str(e), cached=len(fallback))
+        return fallback
 
 
 # ---------------------------------------------------------------------------

@@ -36,6 +36,8 @@ wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
 userenv = ctypes.WinDLL("userenv", use_last_error=True)
 
 WTSActive = 0
+WTSConnected = 1
+WTSDisconnected = 4
 MAXIMUM_ALLOWED = 0x02000000
 TokenPrimary = 1
 SecurityImpersonation = 2
@@ -89,26 +91,71 @@ def find_active_session():
     if not wtsapi32.WTSEnumerateSessionsW(wt.HANDLE(0), 0, 1,
                                           ctypes.byref(ptr), ctypes.byref(count)):
         return None, None
-    best = (None, None)
+    active, disconnected = [], []
     try:
         for i in range(count.value):
             s = ptr[i]
-            if s.SessionId == 0 or s.State != WTSActive:
+            if s.SessionId == 0 or s.State not in (WTSActive, WTSDisconnected):
                 continue
             buf = wt.LPWSTR()
             n = wt.DWORD(0)
+            user = ""
             # WTSUserName = 5
             if wtsapi32.WTSQuerySessionInformationW(wt.HANDLE(0), s.SessionId, 5,
                                                     ctypes.byref(buf), ctypes.byref(n)):
                 user = buf.value or ""
                 wtsapi32.WTSFreeMemory(buf)
-                if user:
-                    return s.SessionId, user
-            if best[0] is None:
-                best = (s.SessionId, "")
+            if not user:
+                continue
+            (active if s.State == WTSActive else disconnected).append(
+                (s.SessionId, user))
     finally:
         wtsapi32.WTSFreeMemory(ptr)
-    return best
+
+    # A locked desktop is still WTSActive. An RDP-disconnected or fast-user-switched
+    # desktop reports WTSDisconnected but still owns a usable primary token and still
+    # has ZSATray running in it, so it is perfectly launchable. Only "nobody signed in
+    # at all" is truly unlaunchable. Prefer Active, fall back to Disconnected, and
+    # prove the choice by actually acquiring the token instead of trusting the state.
+    for sid, user in active + disconnected:
+        tok = wt.HANDLE()
+        if wtsapi32.WTSQueryUserToken(wt.DWORD(sid), ctypes.byref(tok)):
+            kernel32.CloseHandle(tok)
+            return sid, user
+    if active or disconnected:
+        return (active + disconnected)[0]
+    return None, None
+
+
+def session_report():
+    """Human-readable evidence line for every enumerated session."""
+    names = {0: "Active", 1: "Connected", 2: "ConnectQuery", 3: "Shadow",
+             4: "Disconnected", 5: "Idle", 6: "Listen", 7: "Reset", 8: "Down",
+             9: "Init"}
+    count = wt.DWORD(0)
+    ptr = ctypes.POINTER(WTS_SESSION_INFOW)()
+    if not wtsapi32.WTSEnumerateSessionsW(wt.HANDLE(0), 0, 1,
+                                          ctypes.byref(ptr), ctypes.byref(count)):
+        return "session enumeration failed"
+    rows = []
+    try:
+        for i in range(count.value):
+            s = ptr[i]
+            if s.SessionId >= 65536:
+                continue
+            buf = wt.LPWSTR()
+            n = wt.DWORD(0)
+            user = ""
+            if wtsapi32.WTSQuerySessionInformationW(wt.HANDLE(0), s.SessionId, 5,
+                                                    ctypes.byref(buf), ctypes.byref(n)):
+                user = buf.value or ""
+                wtsapi32.WTSFreeMemory(buf)
+            rows.append("s%d %s user=%s" % (s.SessionId,
+                                            names.get(s.State, s.State),
+                                            user or "none"))
+    finally:
+        wtsapi32.WTSFreeMemory(ptr)
+    return "; ".join(rows)
 
 
 def run_in_user_session(argv, log_path=None, timeout=300):

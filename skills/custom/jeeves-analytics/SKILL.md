@@ -165,6 +165,13 @@ Every one was avoidable. Before building any structuring model:
 3. **"Duplicate columns" is a labelling hypothesis until proven a data hypothesis.** Identical sums mean one column under two names — that is a naming defect and nothing is double counted. Never tell a lender or a counterparty that a report double counts until you have shown the same row contributing twice to one total.
 4. **"Can you look at <person>'s email about <report>" is never a request for a summary.** He has read it. He wants the underlying data question answered and a reply he can send. Answering with a recap earns "why would I just want you to summarize it?" (2026-08-24 08:07 PT).
 
+## Movement / roll-rate explanations — HARD RULES (added 2026-09-04, Dream #108, from the mods 31–60 thread 60fba965)
+
+1. **One bullet = one unit. Never mix metric types on a line.** "$462K (2 loans) cured to 1–30 — TRUCKA USA paid $38.9K, TPS Container paid $17.6K" mixed *balance that changed bucket* with *cash received*, and Brian's next message was **"38+17 does not equal 462"** (2026-09-03 12:27 PT). If a line carries two or more dollar figures they must either add up, or each figure gets its own labelled line: "balance moved", "cash applied", "DPD reset — no cash".
+2. **Add up your own numbers before sending.** Brian audits arithmetic on sight. Print the components AND the total, and make the total equal the sum. An unexplained residual is a labelled line ("unexplained — $X, still tracing"), never a rounding shrug.
+3. **A bucket delta is only explained when exhaustive, mutually exclusive causes sum to it**: cash paid, DPD reset / RPP re-bucketing, roll to the next bucket, charge-off, new inflow. August mods: $1.57M left 31–60 = ~$129K real cash + ~$1.0M rolled to 61–90 + the rest re-bucketed by RPP DPD resets. "The bucket emptied" is not an answer until the pieces tie.
+4. **Obligor names attach to the figure that belongs to them**, on their own sub-line beneath the bucket total — never appended to a different number with an em-dash.
+
 ## Rules
 
 - Always state the snapshot date in the response

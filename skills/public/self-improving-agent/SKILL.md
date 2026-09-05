@@ -120,6 +120,18 @@ You MUST run the self-improvement loop when ANY of these conditions are met:
 | **Task used 5+ tool calls and succeeded** | Complex task = reusable procedure | Consider creating a new skill or patching an existing one |
 | **You recovered from an error** | Error recovery = valuable lesson | Log episode + patch the skill that had wrong/incomplete guidance |
 | **User corrected your output** | Corrections = highest-value signal | Log episode + patch skill + decrease confidence on old pattern |
+
+> **HARD RULE — A LOGGED EPISODE CHANGES NOTHING ON ITS OWN. [added 2026-09-05, Dream #109]**
+> Episodes are an archive; only `SKILL.md` text is injected into a future run's context.
+> On 2026-09-04 Brian said *"You consistently are too verbose and provide too much detail,
+> where does that belong?"* and two well-written episodes were logged against `gmail` and
+> `jeeves-analytics` — but neither skill file was touched, so the lesson could never have
+> fired again. **After `skill_manage.py log`, you MUST either (a) run
+> `skill_manage.py patch <skill> --old ... --new ...` so the rule lives in a HARD RULES
+> section, or (b) state explicitly why no patch is warranted.** Before closing a correction,
+> `grep` the target SKILL.md for a distinctive phrase from the new rule; if it is not there,
+> the correction is not absorbed. Never log the same lesson twice — improve the existing
+> rule text instead.
 | **You discovered a non-obvious workflow** | Novel solution = future time savings | Log episode + consider new skill creation |
 | **A query/script pattern was reused 3+ times** | Repetition = skill candidate | Extract into a reusable skill or add to SQL library |
 

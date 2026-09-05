@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 198,
+      "applications": 202,
       "created": "2026-04-07",
-      "last_applied": "2026-09-04T09:08:17.968991+00:00",
+      "last_applied": "2026-09-05T09:14:38.572958+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3934,6 +3934,54 @@
       "solution": "",
       "target_skills": [
         "zscaler-reauth"
+      ]
+    },
+    "pat-2026-09-05-247": {
+      "id": "pat-2026-09-05-247",
+      "name": "Detail belongs in the artifact, not the reply. Slack/chat re",
+      "source": "ep-2026-09-05-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-05",
+      "last_applied": "2026-09-05T00:02:19.389789+00:00",
+      "category": "general",
+      "pattern": "Detail belongs in the artifact, not the reply. Slack/chat response = the number plus the so-what in <=5 lines; methodology, caveats, row-level backup, and reasoning go into the Excel/doc/appendix uploaded to Drive. If detail is worth writing, it is worth writing into a file he can open on demand, not into a message he has to read now.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-09-05-248": {
+      "id": "pat-2026-09-05-248",
+      "name": "Same rule applies to outbound drafts. Email body = the ask o",
+      "source": "ep-2026-09-05-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-05",
+      "last_applied": "2026-09-05T00:03:22.069789+00:00",
+      "category": "general",
+      "pattern": "Same rule applies to outbound drafts. Email body = the ask or the answer in 3-5 sentences, one imperative per named person, full CC block intact. Methodology, assumptions, exclusions, tables and row-level detail go in the attachment or a linked Drive doc referenced in one line, never pasted into the body. Match Brian voice: short, direct, holding statement with a self-imposed deadline when the answer is not ready yet.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-09-05-249": {
+      "id": "pat-2026-09-05-249",
+      "name": "cmd_download passed the raw MIME filename straight to open()",
+      "source": "ep-2026-09-05-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-05",
+      "last_applied": "2026-09-05T09:14:49.723261+00:00",
+      "category": "general",
+      "pattern": "cmd_download passed the raw MIME filename straight to open(); any attachment name containing a colon, quote, pipe, question mark, asterisk, angle bracket or a path separator raised OSError on NTFS and aborted the whole download, which pushed the work onto screenshots instead of the real file. Fixed 2026-09-05 by basename-ing and regex-sanitizing the filename before os.path.join. If download ever fails again, read the exception before blaming Gmail auth or the message id.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
       ]
     }
   }

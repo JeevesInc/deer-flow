@@ -158,6 +158,17 @@ python action_learner.py --consolidate --force
   When the ask is imperative, produce the artifact in that turn; the verbatim text still goes in the
   reply message, but as a record of what was created, not as a plan awaiting approval. Confirmation
   is owed only for SENDING, deleting, or anything outward-facing.
+- **HARD RULE — EMAIL BODY LENGTH. The body is the ask or the answer in 3–5 sentences;
+  everything else is an attachment (Brian, 2026-09-04 17:01/17:03, thread 5455c542:
+  *"You consistently are too verbose and provide too much detail, where does that belong?"*
+  … *"I also mean this in email drafts, etc"*).** Shape of every draft, internal or external:
+  (1) one line saying what happened or what is being asked; (2) one imperative line per
+  named recipient — "Pablo: confirm X", "Luis: send Y" — so nobody has to work out whether
+  they are on the hook; (3) the CC block intact; (4) the numbers, methodology, assumptions,
+  exclusions, reconciliations, tables and row-level detail in an **attached file or a short
+  numbered appendix below the signature**, never inline in the body. An ELI5 request makes
+  this stricter, not looser — ELI5 means fewer words and plainer ones, not a friendlier wall
+  of text. If the body runs past ~8 lines on screen, the excess belongs in the attachment.
 - ALWAYS search first to find the relevant email before reading or replying
 - NEVER send emails directly -- only create drafts for the user to review
 - ALWAYS reply-all by default unless Brian explicitly says otherwise

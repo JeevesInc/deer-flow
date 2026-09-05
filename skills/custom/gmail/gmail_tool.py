@@ -430,7 +430,17 @@ def cmd_download(message_id, output_dir=None):
             userId='me', id=att_id, messageId=message_id
         ).execute()
         data = base64.urlsafe_b64decode(att['data'])
-        dest = os.path.join(output_dir, filename)
+        # Windows-safe destination name. Gmail returns the raw MIME filename,
+        # which can carry path separators or characters illegal on NTFS
+        # (colon, quote, pipe, question mark, asterisk, angle brackets, control
+        # chars). Passing it straight to open() raised OSError twice on
+        # 2026-09-04 (thread fe35484d), losing the attachment and forcing the
+        # work to be done off screenshots instead.
+        _raw = filename.replace(chr(92), '/').split('/')[-1]
+        safe = re.sub(r'[<>:"|?*\x00-\x1f]', '_', _raw).strip().strip('.')
+        if not safe:
+            safe = 'attachment'
+        dest = os.path.join(output_dir, safe)
         with open(dest, 'wb') as f:
             f.write(data)
         print(f"Saved: {dest} ({len(data)} bytes)")

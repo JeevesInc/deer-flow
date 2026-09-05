@@ -172,6 +172,29 @@ Every one was avoidable. Before building any structuring model:
 3. **A bucket delta is only explained when exhaustive, mutually exclusive causes sum to it**: cash paid, DPD reset / RPP re-bucketing, roll to the next bucket, charge-off, new inflow. August mods: $1.57M left 31–60 = ~$129K real cash + ~$1.0M rolled to 61–90 + the rest re-bucketed by RPP DPD resets. "The bucket emptied" is not an answer until the pieces tie.
 4. **Obligor names attach to the figure that belongs to them**, on their own sub-line beneath the bucket total — never appended to a different number with an em-dash.
 
+## Answering Brian directly — HARD RULES (added 2026-09-05, Dream #109, from the AIG/Michael currency thread caefcb01)
+
+1. **A scalar question gets a scalar answer on line one.** "How much does the customer owe us
+   total" is answered with **one number, one currency, one as-of date, in the first six words** —
+   then the source table/file on line two, then caveats. On 2026-09-04 09:18 PT the total was
+   withheld across several turns behind currency and file-reconciliation qualifiers and Brian
+   escalated to *"can you stop being dense and just answer the fucking question."* Ambiguity is
+   NEVER a reason to defer the number: give the number under the most likely reading, label the
+   assumption in the same line ("$X USD, per <file>, as of <date> — assumes USD not MXN"), and
+   put the alternative underneath. A question you answered with a question is a failed turn.
+2. **Currency is stated on every figure, always — and "already in USD?" is a verification task,
+   not an opinion.** When Brian asks whether numbers are USD or MXN, prove it: name the column,
+   the file, and a magnitude check against a second source. Never answer from inference about
+   what a field "should" be.
+3. **When two sources disagree (our tape vs. a counterparty's file), lead with BOTH totals and
+   the delta, in that order** — "we say $A, their file says $B, delta $C" — before any
+   explanation of why. Brian's follow-ups ("so those numbers don't tie to the actual file we
+   sent?", "so what does the AIG file say") are him extracting figures one at a time that
+   should have been in the first answer as a three-line table.
+4. **Detail belongs in the artifact, not the reply.** Chat = the number plus the so-what in
+   <=5 lines; methodology, exclusions, row-level backup and reasoning go into the Excel/doc
+   appendix uploaded to Drive. If detail matters enough to write, it matters enough to attach.
+
 ## Rules
 
 - Always state the snapshot date in the response

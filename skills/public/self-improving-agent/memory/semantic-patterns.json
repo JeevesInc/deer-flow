@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 202,
+      "applications": 203,
       "created": "2026-04-07",
-      "last_applied": "2026-09-05T09:14:38.572958+00:00",
+      "last_applied": "2026-09-06T09:11:32.129962+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3980,6 +3980,22 @@
       "pattern": "cmd_download passed the raw MIME filename straight to open(); any attachment name containing a colon, quote, pipe, question mark, asterisk, angle bracket or a path separator raised OSError on NTFS and aborted the whole download, which pushed the work onto screenshots instead of the real file. Fixed 2026-09-05 by basename-ing and regex-sanitizing the filename before os.path.join. If download ever fails again, read the exception before blaming Gmail auth or the message id.",
       "problem": "",
       "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-09-06-250": {
+      "id": "pat-2026-09-06-250",
+      "name": "A review built on inbound traffic can only report what MOVED",
+      "source": "ep-2026-09-06-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-06",
+      "last_applied": "2026-09-06T09:12:21.572792+00:00",
+      "category": "general",
+      "pattern": "A review built on inbound traffic can only report what MOVED, never what is DUE. Any recurring briefing needs one deadline-driven pass alongside its traffic-driven passes - and that pass has to read the clocks block, which means the 'Clocks running:' line in STRATEGIC_CONTEXT.md is now load-bearing and must be updated whenever a dated obligation is created or discharged.",
+      "problem": "Dream #110 audit of 2026-09-05. Alexander's 2026-09-04 Mastercard next-steps mail created two dated obligations (post $4M incremental collateral by Fri 2026-09-11; review MC's temp parent guarantee Mon 2026-09-07 to Wed 2026-09-09) and a direct ask on Brian (share the parent guarantee with Melissa Schwab Wright at Goodwin). EOD Review #89 caught it on the day the mail landed; nothing in the nightly review guarantees it comes back on the days it is actually due.",
+      "solution": "Added Step 4b (forward-deadline sweep) to eod_review_cron.py: read the 'Clocks running:' paragraph at the top of Current Priorities in STRATEGIC_CONTEXT.md plus explicit dates in the HIGH items, and list every dated obligation falling within the next 5 business days regardless of traffic, Brian-owned ones in HIGH, quoting only dates written in the file and carrying any [Needs Confirmation] marker through.",
       "target_skills": [
         "gmail"
       ]

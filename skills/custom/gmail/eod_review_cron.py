@@ -240,6 +240,12 @@ def _build_eod_prompt(review_number: int) -> str:
         "- Never draft text that commits Brian to deal terms, numbers, or legal language.\n"
         "  Use placeholders: [CONFIRM AMOUNT], [CHECK WITH ALEX], [VERIFY DATE].\n"
         "- Uncertain whether action is needed -> UNCLEAR, not ACTIONABLE.\n"
+        "- A broken number from OUR OWN pipeline is never an UNCLEAR item -- diagnose it in\n"
+        "  this run. If a bot-owned cron or report shows an impossible value (exactly zero,\n"
+        "  null, or a component equal to its own total -- e.g. the MX SOFOM BB DM printing\n"
+        "  Eligible $0.00 on 2026-09-04/05/06 with ineligible == total receivables), open the\n"
+        "  state file and the script that writes it, name the mechanism, and say whether the\n"
+        "  number is real. Handing Brian one of our own metrics we did not check is noise.\n"
     )
 
 

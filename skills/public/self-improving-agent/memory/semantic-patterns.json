@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 203,
+      "applications": 204,
       "created": "2026-04-07",
-      "last_applied": "2026-09-06T09:11:32.129962+00:00",
+      "last_applied": "2026-09-07T09:13:23.259993+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -3998,6 +3998,22 @@
       "solution": "Added Step 4b (forward-deadline sweep) to eod_review_cron.py: read the 'Clocks running:' paragraph at the top of Current Priorities in STRATEGIC_CONTEXT.md plus explicit dates in the HIGH items, and list every dated obligation falling within the next 5 business days regardless of traffic, Brian-owned ones in HIGH, quoting only dates written in the file and carrying any [Needs Confirmation] marker through.",
       "target_skills": [
         "gmail"
+      ]
+    },
+    "pat-2026-09-07-251": {
+      "id": "pat-2026-09-07-251",
+      "name": "A pipeline number that is exactly zero, null, or exactly equ",
+      "source": "ep-2026-09-07-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-07",
+      "last_applied": "2026-09-07T09:13:41.639834+00:00",
+      "category": "general",
+      "pattern": "A pipeline number that is exactly zero, null, or exactly equal to its own denominator is a PARSE FAULT until proven otherwise - never publish or quote it. Sanity-check every BB metric against the prior tape (2026-08-10: Ineligible MXN 119.1M / Eligible MXN 1,169.1M) before it reaches Brian, and prefer label-based cell lookup over hardcoded cell refs when reading a hand-maintained workbook.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

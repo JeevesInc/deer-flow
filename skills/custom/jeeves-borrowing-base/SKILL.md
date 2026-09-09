@@ -293,6 +293,21 @@ in `Capital Markets, Debt, CIM, Reporting, {YYYYMM}` (Reporting folder id
 1eEv4-_bidc7xILB-s8oOVGI-2_fEx16U). The file dated the 15th covers the PRIOR month (20260715 = June
 period, BOP 6-1 EOP 6-30). Upload the new month with `--folder <month id> --new`.
 
+### HARD RULE — Marisol's "confirm the number" asks (added 2026-09-08 after a five-message correction loop)
+
+When Monex trust administration (**Lizbeth Marisol Caballero Quintana, lcaballero@monex.com.mx**) writes
+on **F/12340** asking Jeeves to confirm a figure, the figure is the **Exhibit B average daily balance
+(G10) for the report month** — NOT the EOP balance and NOT any tape total. Procedure, in ONE turn:
+(1) open the workbook **you** sent her that month (it is in the CIM Reporting folder and attached to your
+own sent mail); (2) read Exhibit B **G10**; (3) compare digit-for-digit to the number in her email;
+(4) answer **"Yes, confirmed — <number>"** or **"No, our figure is <number>"** in one line, **reply-all**.
+Do not restate methodology, do not offer an alternative metric, do not ask which balance she means, and
+do not answer from a tape re-run when the sent file is the thing she is asking about. Precedent:
+2026-08-11 she asked to confirm **1,226,804,057** (July average daily balance) and Brian replied "Yes, I
+confirm"; 2026-09-08 the August figure was **1,305,967,747**. His escalation when this gets hedged
+instead of answered: *"bro you sent the file. just look at it and see if it's the same number"* …
+*"so confirm or not, why are we still talking about this"* … *"that's not the number in her email"*.
+
 Write ONLY these cells: Exhibit A L6 (FX spot), L10:L25 (rollforward values), K31 (EOP account count);
 Exhibit B H52 and H53 plus H58 and H59 (roll the prior month's cached H51, H52, H57, H58 forward),
 G144 and G154 (interest period days = days in month), D36 (collection-account available amount - blank

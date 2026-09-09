@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 204,
+      "applications": 208,
       "created": "2026-04-07",
-      "last_applied": "2026-09-07T09:13:23.259993+00:00",
+      "last_applied": "2026-09-09T09:11:43.733513+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4014,6 +4014,54 @@
       "solution": "",
       "target_skills": [
         "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-08-252": {
+      "id": "pat-2026-09-08-252",
+      "name": "A delivery instruction (send/upload the file) is NOT license",
+      "source": "ep-2026-09-08-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-08",
+      "last_applied": "2026-09-08T18:44:28.719404+00:00",
+      "category": "general",
+      "pattern": "A delivery instruction (send/upload the file) is NOT license to draft the accompanying counterparty email. Deliver, report, and ASK before drafting outbound email he did not request. For internal recipients the default channel is Slack with the file uploaded to the DM, never a Gmail draft.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-09-09-253": {
+      "id": "pat-2026-09-09-253",
+      "name": "NEVER name a workspace script after a stdlib module (inspect",
+      "source": "ep-2026-09-09-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-09",
+      "last_applied": "2026-09-09T09:11:59.922501+00:00",
+      "category": "general",
+      "pattern": "NEVER name a workspace script after a stdlib module (inspect.py, types.py, json.py, io.py, code.py, select.py, copy.py, string.py, random.py, socket.py, queue.py). If `import pandas` (or any third-party import) fails on line 1-2 of a fresh script, rename the script before debugging anything else. Use a task-specific name such as inspect_aig_workbook.py.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-09-09-254": {
+      "id": "pat-2026-09-09-254",
+      "name": "Resolving a Slack recipient is NEVER a reason to write a scr",
+      "source": "ep-2026-09-09-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-09",
+      "last_applied": "2026-09-09T09:12:00.007524+00:00",
+      "category": "general",
+      "pattern": "Resolving a Slack recipient is NEVER a reason to write a script. `slack_tool.py send <user-id-or-email> \"text\"` does the email lookup itself; if you need the raw id, use `slack_tool.py user <email>`. Hand-rolled WebClient calls bypass bot_dm_history.log and burn turns on SDK method names.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
       ]
     }
   }

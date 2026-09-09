@@ -169,9 +169,32 @@ python action_learner.py --consolidate --force
   numbered appendix below the signature**, never inline in the body. An ELI5 request makes
   this stricter, not looser — ELI5 means fewer words and plainer ones, not a friendlier wall
   of text. If the body runs past ~8 lines on screen, the excess belongs in the attachment.
+- **HARD RULE — A DELIVERY INSTRUCTION IS NOT A DRAFTING INSTRUCTION, AND EMAIL IS NOT THE DEFAULT CHANNEL (Brian, 2026-09-08, thread e83ec170).**
+  He asked for a new AIG file, then *"Send the file to Pablo"*. The agent chose Gmail and wrote an
+  accompanying counterparty-style email he never asked for; he answered *"Why wouldn't you just slack
+  him"* and *"I never asked for that draft"*. Three rules: (1) **"send X to <person>" means transport
+  the artifact and nothing else** — no covering narrative, no counterparty email, no summary of the
+  file's contents; (2) if the recipient is **INTERNAL to Jeeves, the default channel is Slack**
+  (`python /mnt/skills/custom/slack-search/slack_tool.py send <email> "..."`), not Gmail — use email
+  only when he names email or when the thing being answered IS an email thread; (3) any outbound email
+  he did not explicitly request must be **asked for before it is written**, not produced and then
+  offered for approval.
+- **HARD RULE — NEVER call anything "unanswered", "open" or "awaiting you" without reading the
+  thread's latest message first, INCLUDING Brian's own sends.** Repeat offence 2026-09-08:
+  *"It's not unanswered, I replied myself."* This is the STATUS RULE below, extended past drafts to
+  **every status claim on every surface** — in-thread answers, EOD/dream restatements, nudges,
+  STRATEGIC_CONTEXT entries. Cheapest sufficient check: `read <latest message_id in that thread>` or
+  `search "in:sent <counterparty>"`. He answers from his phone and it leaves no bot-visible signal, so
+  his sent mail is the only ground truth. Same discipline on Slack: read the channel/DM for his own
+  reply before flagging an item as needing him.
 - ALWAYS search first to find the relevant email before reading or replying
 - NEVER send emails directly -- only create drafts for the user to review
-- ALWAYS reply-all by default unless Brian explicitly says otherwise
+- **ALWAYS reply-all by default unless Brian explicitly says otherwise — and on a STANDING
+  DISTRIBUTION (Monex F/12340, SOFOM F/12339>F/12340 distribution, servicer reports, lender reporting)
+  reply-all is non-negotiable.** Corrected again 2026-09-08 on Marisol's F/12340 request
+  (*"why would you not reply all?"*). Resolve recipients off the **raw headers** (To + Cc) — the
+  rendered reader view hides Cc — and print the recipient list you resolved when you report the draft,
+  so the reply-all is checkable without opening Gmail.
 - The draft command handles reply-all automatically (fetches To/Cc, excludes Brian)
 - **HARD RULE -- if the ask is a REPLY, it MUST be `draft <message_id>`. NEVER `draft-new`.** `draft` supports everything `draft-new` does (`--attach`, `--body-file`) PLUS `--to`/`--cc`, and it is the only command that sets `threadId` + `In-Reply-To` + `References`, i.e. the only one that actually lands in the counterpartys thread. A new email with a matching subject is NOT a reply -- it starts a second thread the counterparty has to reconcile. Brian corrected this twice: 2026-05-12 (episode logged, did not stick) and again 2026-07-24 on the Kroll/Nick P2 closeout ("you didnt put it in the thread, you just drafted a new email"). If you cannot find the message_id: search harder (`search "from:<sender>"`, check Trash/All Mail -- the Kroll thread had been trashed and restored), or ask Brian for the thread. **"Draft an email to <person>" is NOT an instruction to use `draft-new`.** Brian phrases replies as new emails all the time; the wording describes the recipient, not the transport. Third correction 2026-08-19 (AIG/TEX, Christian Lestik): asked to "draft an email to christian, cc pablo", the agent created a standalone email and Brian came back with "no I want this replying to a previous thread where he said he reset the environment." **Before drafting anything outbound, search the counterparty for a live thread on that topic (`search "from:<their email> <topic word>"` and `in:sent`) and default to `draft <message_id>` inside it.** Only use `draft-new` when the search returns nothing, and say so when you report. NEVER fall back to `draft-new`, and never silently -- a non-threaded reply is a failed deliverable, not a partial one. After creating any reply draft, confirm the printed Thread ID matches the source messages threadId before reporting done.
 - If someone is mentioned in the body but not CC'd, look up their email via Slack and add them

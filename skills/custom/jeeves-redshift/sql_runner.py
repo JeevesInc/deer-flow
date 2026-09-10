@@ -65,6 +65,15 @@ ALLOWED_TABLES = {
     'dms_mysql_jeeves_raw.naics_industries',
     'analytics_sandbox.company_to_industry',
     'analytics_sandbox.industry_backfill',
+    # Added 2026-09-10 (Dream #114): FX rate sources. `master.exchange_rate_logs` was rejected
+    # as "not in the allowed list" on 2026-09-09 during the MX ineligibility-spike diagnosis
+    # (Macropay USD credit limit re-converted at a new FX rate) -- the table is REAL, confirmed
+    # from information_schema the same night, so this was the FIFTH recurrence of the
+    # lagging-whitelist pattern (Dreams #60, #63, #80, #93). FX-conversion questions on the MX
+    # SOFOM pool now recur, so all three confirmed rate sources go on the list together.
+    'master.exchange_rate_logs',
+    'master_dimensions.exchange_rates_dim',
+    'master_dimensions.historical_exchange_rates_dim',
 }
 # Added 2026-08-20 (Dream #93): the three industry-waterfall tables behind the CANONICAL,
 # committed KB query cfo-org-kb/sql/mastercard_spend_by_org_id.sql (commit a3f0324). Rejected at
@@ -459,6 +468,63 @@ def _save_csv(columns: list[str], rows: list[tuple], path: str) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+def _column_hint(sql: str, err_msg: str) -> str:
+    """Turn a 'column X does not exist' error into the real column list.
+
+    Added 2026-09-10 (Dream #114). Parses the offending column out of the server error,
+    finds every schema-qualified table in the SQL, and queries information_schema for the
+    closest-matching real column names. Falls back to the old static hint on any failure --
+    this must never turn a query error into a crash.
+    """
+    import difflib
+    static = ("Hint: Check column name spelling. Load jeeves-redshift skill for the full "
+              "schema. Do NOT guess a second name -- list columns from information_schema.")
+    try:
+        m = re.search(r'column\s+"?([\w.]+)"?\s+does not exist', err_msg, re.I)
+        bad = m.group(1).split('.')[-1] if m else None
+        cleaned = _strip_comments(sql, strip_strings=True)
+        tables = set(re.findall(r'(?:from|join)\s+([a-z_][\w]*\.[a-z_][\w]*)', cleaned, re.I))
+        if not tables:
+            return static
+        pairs = [tuple(t.split('.', 1)) for t in sorted(tables)]
+        where = ' OR '.join("(table_schema = %s AND table_name = %s)" for _ in pairs)
+        params = [v for pair in pairs for v in pair]
+        conn2 = _connect()
+        try:
+            cur2 = conn2.cursor()
+            cur2.execute(
+                "SELECT table_schema || '.' || table_name, column_name "
+                "FROM information_schema.columns WHERE " + where, params)
+            fetched = cur2.fetchall()
+            cur2.close()
+        finally:
+            _release(conn2)
+        if not fetched:
+            return static
+        by_table = {}
+        for tbl, col in fetched:
+            by_table.setdefault(tbl, []).append(col)
+        head = ("Hint: '%s' is not a real column. Real columns (information_schema, live):" % bad
+                if bad else "Hint: real columns (information_schema, live):")
+        out = [head]
+        for tbl, cols in by_table.items():
+            near = difflib.get_close_matches(bad, cols, n=5, cutoff=0.4) if bad else []
+            if bad:
+                near += [c for c in cols
+                         if bad.lower() in c.lower() or c.lower() in bad.lower()][:5]
+            near = list(dict.fromkeys(near))
+            if near:
+                out.append("  %s -> closest: %s" % (tbl, ', '.join(near)))
+            else:
+                shown = ', '.join(cols[:40])
+                more = '' if len(cols) <= 40 else ' ... (%d total)' % len(cols)
+                out.append("  %s -> %s%s" % (tbl, shown, more))
+        out.append("Use one of these verbatim. Do not guess a third name.")
+        return '\n'.join(out)
+    except Exception:
+        return static
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -581,7 +647,11 @@ def main():
 
         # Provide actionable guidance for common errors
         if 'column' in err_msg.lower() and 'does not exist' in err_msg.lower():
-            print("Hint: Check column name spelling. Load jeeves-redshift skill for the full schema.", file=sys.stderr)
+            # 2026-09-10 (Dream #114): "check the spelling" made the agent GUESS a second name.
+            # On 2026-09-09 that cost two failed queries in one thread (cdm.currency_code, then
+            # company_name on companies_dm) even though both are called out in SKILL.md. The
+            # hint now lists the actual columns so there is nothing left to guess.
+            print(_column_hint(sql, err_msg), file=sys.stderr)
         elif 'relation' in err_msg.lower() and 'does not exist' in err_msg.lower():
             print("Hint: Check table name. Allowed tables: " + ', '.join(sorted(ALLOWED_TABLES)), file=sys.stderr)
         elif 'permission denied' in err_msg.lower():

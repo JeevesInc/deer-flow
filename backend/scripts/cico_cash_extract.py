@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -260,19 +261,35 @@ def _extract_summary_totals(client, images: list) -> dict:
                     cand.get("total_cash_plus_restricted_usd"))
         if None in (c, r, cr):
             continue
-        if abs((c + r) - cr) <= 1.0:
+        # Tolerance, not exact equality: the printed grand totals are rounded
+        # dollars and OCR can land $1-2 off (2026-09-09: 64,558,514 + 11,177,635
+        # vs a printed 75,736,147 -> $2 delta vetoed the write for 9 days).
+        # $100 / 5bps still catches the real failure mode this guard exists for
+        # (section subtotals merged as grand totals, off by tens of millions).
+        if abs((c + r) - cr) <= max(100.0, abs(cr) * 0.0005):
             cand["_verified"] = True
             log.info("Summary totals reconcile on one image: cash %.0f + restricted "
                      "%.0f = %.0f", c, r, cr)
             return cand
 
-    # No self-consistent image: merge field-wise but flag it as unverified so
-    # the caller refuses to overwrite good state with a mis-read.
+    # No single self-consistent image. Merge field-wise and re-test: the grand
+    # totals legitimately straddle two images (2026-09-09: total cash on image 2,
+    # restricted + cash-and-restricted on image 3), so the single-image rule
+    # rejected a perfectly good read and froze the dashboard for 9 days. The
+    # merged set still has to reconcile, which is what actually guards against
+    # section subtotals being mistaken for grand totals.
     for cand in candidates:
         for k, v in cand.items():
             merged.setdefault(k, v)
+    c, r, cr = (merged.get("total_cash_usd"), merged.get("total_restricted_usd"),
+                merged.get("total_cash_plus_restricted_usd"))
+    if None not in (c, r, cr) and abs((c + r) - cr) <= max(100.0, abs(cr) * 0.0005):
+        merged["_verified"] = True
+        log.info("Summary totals reconcile across images: cash %.0f + restricted "
+                 "%.0f = %.0f (printed %.0f)", c, r, c + r, cr)
+        return merged
     merged["_verified"] = False
-    log.error("Summary totals did NOT reconcile on any image: %s",
+    log.error("Summary totals did NOT reconcile on any image or merged: %s",
               {k: round(v) for k, v in merged.items() if isinstance(v, float)})
     return merged
 
@@ -371,6 +388,26 @@ def _ocr_image(client: Anthropic, img_bytes: bytes) -> list[dict]:
         return []
 
 
+def _alert_extract_failure(subject: str, date: str, summary: dict) -> None:
+    """A refused write must be loud. Silent refusal let CICO cash go 9 days
+    stale (2026-08-31 -> 2026-09-09) with nothing but a log line."""
+    try:
+        nums = {k: round(v) for k, v in summary.items() if isinstance(v, float)}
+        msg = (
+            ":rotating_light: CICO extract blocked - dashboard cash will be stale.\n"
+            f"Email: {subject} ({date})\n"
+            f"OCR read: {nums}\n"
+            "Totals failed the cash + restricted reconciliation; previous state kept."
+        )
+        tool = Path(__file__).resolve().parents[1] / "skills" / "custom" / "slack-search" / "slack_tool.py"
+        if not tool.exists():
+            tool = Path(__file__).resolve().parents[2] / "skills" / "custom" / "slack-search" / "slack_tool.py"
+        subprocess.run([sys.executable, str(tool), "send", "U05B5HGNCN9", msg],
+                       timeout=60, capture_output=True)
+    except Exception as e:  # never let the alerter mask the original failure
+        log.warning("Could not send CICO failure alert: %s", e)
+
+
 def main() -> int:
     svc = _gmail_service()
     msg = _fetch_latest_cico(svc)
@@ -448,6 +485,7 @@ def main() -> int:
         log.error("Refusing to write _cico_state.json: summary totals failed the "
                   "cash + restricted = cash+restricted check. Keeping previous state "
                   "(email: %s / %s).", subject, date)
+        _alert_extract_failure(subject, date, summary)
         return 2
     if summary.get("daca_pledged_usd") is not None:
         pledged_daca = summary["daca_pledged_usd"]

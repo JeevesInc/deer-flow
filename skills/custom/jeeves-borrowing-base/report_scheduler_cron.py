@@ -820,6 +820,45 @@ def run_nb_bb():
         if m_link:
             drive_link = m_link.group(0).rstrip(')')
 
+        # -- 3.5 Gmail draft to the NB / Wilmington Trust distribution ---------
+        # 2026-09-09: this step never existed, so Brian had to ask for the email
+        # by hand on 8/25, 9/2 and 9/9 even though the workbook built fine.
+        # DRAFT ONLY -- nothing is ever auto-sent.
+        draft_note = ''
+        try:
+            import shutil as _shutil, base64 as _b64
+            sys.path.insert(0, os.path.join(skills_dir, '..', 'gmail'))
+            import gmail_tool as _gt
+            _dist = os.path.join(os.path.dirname(_state_path()), 'nb_bb_distribution.json')
+            with open(_dist, encoding='utf-8') as _f:
+                _cfg = json.load(_f)
+            _as_of_long = datetime.strptime(yesterday, '%Y-%m-%d').strftime('%B %-d, %Y') \
+                if os.name != 'nt' else datetime.strptime(yesterday, '%Y-%m-%d').strftime('%B %#d, %Y')
+            _attach = os.path.join(outputs_dir,
+                                   f'Jeeves NB Borrowing Base - {today_stamp}.xlsx')
+            _shutil.copy2(final_wb, _attach)
+            _subject = _cfg.get('subject_template',
+                                'Jeeves Weekly Borrowing Base - As of {as_of_long}'
+                                ).format(as_of_long=_as_of_long)
+            _body = ("Hi all-\n\n"
+                     f"Attached is this week's borrowing base as of Sunday, {_as_of_long}.\n\n"
+                     "Thanks,\nBrian\n")
+            _mime = _gt._build_mime(_body, 'brian.mauck@tryjeeves.com',
+                                    ', '.join(_cfg['to']), _subject,
+                                    cc=', '.join(_cfg.get('cc', [])),
+                                    attachments=[_attach])
+            _svc_g = _gt._get_service()
+            _draft = _svc_g.users().drafts().create(
+                userId='me',
+                body={'message': {'raw': _b64.urlsafe_b64encode(_mime.as_bytes()).decode()}}
+            ).execute()
+            log.info(f"  [gmail_draft] OK: draft {_draft['id']} -- {_subject}")
+            draft_note = (f"\n:email: Draft ready in Gmail: *{_subject}* "
+                          f"(To: {len(_cfg['to'])}, Cc: {len(_cfg.get('cc', []))}) -- review and send.")
+        except Exception as _de:
+            log.error(f"  [gmail_draft] FAILED: {_de}", exc_info=True)
+            draft_note = f"\n:warning: Gmail draft step failed -- `{str(_de)[:200]}`"
+
         # -- 4. Slack ----------------------------------------------------------
         bits = []
         m_stats = _re.search(r"STATS: (\{.*\})", build_out)
@@ -834,6 +873,7 @@ def run_nb_bb():
             + (f"<{drive_link}|Open in Drive>" if drive_link
                else f"Uploaded to Drive/Neuberger Berman/Reporting/{yyyymm}/")
             + "\nOpen in Excel to recalculate the form."
+            + draft_note
         )
         log.info('run_nb_bb: done.')
 

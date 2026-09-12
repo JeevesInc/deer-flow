@@ -1153,6 +1153,43 @@ def run_cico_dashboard():
 # Main loop
 # ---------------------------------------------------------------------------
 
+def run_receivable_forecast():
+    """Daily receivable balance forecast — WEEKLY, MONDAYS, after the NB borrowing base.
+
+    Cadence set by Brian 2026-09-11 ("systemize it so we can run it on a weekly basis,
+    retrain using all available data"). Delegates to the model of record in cfo-org-kb:
+
+      scripts/receivable_balance_weekly_run.py
+        1. pulls the daily balance/flow panel from Redshift to the last COMPLETE tape day
+        2. refits the pooled XGBoost (direct multi-horizon, log-ratio target, MAE) on
+           ALL available history; bias corrections refit monthly from out-of-fold folds
+        3. forecasts every day to month end, immaterial series carried flat
+        4. re-runs a rolling 40-day hold-out so the quoted accuracy is never stale
+        5. writes workbook + two charts, uploads to Drive, posts the summary to Slack
+
+    The script posts its own Slack summary with the Drive links; this wrapper only
+    announces the start and raises on a non-zero exit so the supervisor marks it failed.
+    """
+    import subprocess
+
+    skills_dir = os.path.dirname(os.path.abspath(__file__))
+    script = os.path.abspath(os.path.join(skills_dir, '..', 'cfo-org-kb', 'scripts',
+                                          'receivable_balance_weekly_run.py'))
+    log.info(f"run_receivable_forecast: launching {script}")
+    _post_slack(":chart_with_upwards_trend: Running scheduled *receivable balance forecast* "
+                "(retrain on all history, forecast to month end)...")
+
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    r = subprocess.run([sys.executable, script], capture_output=True, text=True,
+                       timeout=5400, encoding='utf-8', errors='replace', env=env,
+                       stdin=subprocess.DEVNULL)
+    out = ((r.stdout or '') + (r.stderr or '')).strip()
+    if r.returncode != 0:
+        raise RuntimeError(f"receivable forecast failed (rc={r.returncode}):\n{out[-1500:]}")
+    log.info(f"run_receivable_forecast: OK\n{out[-800:]}")
+
+
 def run_loop():
     log.info(f"Report scheduler started. Interval={CHECK_INTERVAL}s, max_task={MAX_TASK_SECONDS}s.")
     _reconcile_stale_running(datetime.now().date().isoformat())
@@ -1203,6 +1240,17 @@ def run_loop():
                         and not _state_completed_today(state, 'last_nb_bb', today_str)
                         and not state.get('last_nb_bb', '').endswith('_running')):
                     _launch_background('nb_bb', run_nb_bb, 'last_nb_bb', today_str)
+
+                # ── Receivable balance forecast ───────────────────────────
+                # Weekly, MONDAYS from 9:30am PT — deliberately after the NB BB job so the
+                # two heavy Redshift pulls do not overlap. Retrains on all available
+                # history and forecasts to month end. Cadence set by Brian 2026-09-11.
+                if (weekday == 0
+                        and (now.hour > 9 or (now.hour == 9 and now.minute >= 30))
+                        and not _state_completed_today(state, 'last_receivable_forecast', today_str)
+                        and not state.get('last_receivable_forecast', '').endswith('_running')):
+                    _launch_background('receivable_forecast', run_receivable_forecast,
+                                       'last_receivable_forecast', today_str)
 
                 # ── Morning Capital Markets Brief ─────────────────────────
                 # Weekdays only, once per day at 8am — posts BB + CICO snapshot to Brian.

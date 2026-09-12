@@ -293,6 +293,23 @@ in `Capital Markets, Debt, CIM, Reporting, {YYYYMM}` (Reporting folder id
 1eEv4-_bidc7xILB-s8oOVGI-2_fEx16U). The file dated the 15th covers the PRIOR month (20260715 = June
 period, BOP 6-1 EOP 6-30). Upload the new month with `--folder <month id> --new`.
 
+### HARD RULE — EDIT SCOPE: change the named cells and nothing else (added 2026-09-12)
+
+Brian's servicer-report instructions are surgical and literal. On 2026-09-11 he said *"paste it into the
+servicer report. remove the trade date column"*; the edit also touched the payment-rate and charge-off
+lines, and he came back with **"No, I told you to delete the trade date. The payment rate stays, so does
+the charge off calc. Just relabel the column."** Three rules:
+
+1. **A named-column instruction covers that column only.** "Delete the trade date column" is not licence
+   to restructure the tab, re-derive a metric, or drop anything adjacent. If a second change looks
+   obviously right, **say so in the reply and leave the workbook alone** — he decides.
+2. **A LABELLING question gets a LABEL fix.** When a CIM/Aleja review question is about a column being
+   mislabelled (e.g. the GPY BQ/BR headers, whose true defect is the `jp_fee` / `jp_disbursement` swap in
+   `loc_tape`), relabel the header **at the report layer only** — headers changed, values, formulas and
+   metric definitions untouched. Never delete or recompute a column to resolve a naming complaint.
+3. **State the blast radius when you report done**: which cells/headers changed, and explicitly that no
+   values or formulas moved. "Done — headers only, no values touched" is the shape of the answer.
+
 ### HARD RULE — Marisol's "confirm the number" asks (added 2026-09-08 after a five-message correction loop)
 
 When Monex trust administration (**Lizbeth Marisol Caballero Quintana, lcaballero@monex.com.mx**) writes

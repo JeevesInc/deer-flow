@@ -499,7 +499,22 @@ def main():
         if len(sys.argv) < 3:
             print("Usage: python gmail_tool.py search \"query\"", file=sys.stderr)
             sys.exit(1)
-        cmd_search(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 10)
+        _rest = sys.argv[3:]
+        _n = 10
+        for _i, _a in enumerate(_rest):
+            if _a in ('--max', '-n', '--limit'):
+                if _i + 1 < len(_rest) and _rest[_i + 1].lstrip('-').isdigit():
+                    _n = int(_rest[_i + 1])
+                break
+            if _a.startswith('--max=') or _a.startswith('--limit='):
+                _tail = _a.split('=', 1)[1]
+                if _tail.isdigit():
+                    _n = int(_tail)
+                break
+            if _a.isdigit():
+                _n = int(_a)
+                break
+        cmd_search(sys.argv[2], _n)
 
     elif command == 'read':
         if len(sys.argv) < 3:

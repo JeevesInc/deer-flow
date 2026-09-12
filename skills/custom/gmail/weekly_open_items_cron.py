@@ -325,11 +325,10 @@ def run_review() -> None:
     review_number = state.get('review_count', 0) + 1
     prompt = _build_prompt(review_number)
 
-    notification = (
-        "Weekly Open Items review starting -- sweeping the past "
-        + str(LOOKBACK_DAYS) + " days of Slack + email for threads still awaiting you. "
-        "Briefing to follow shortly."
-    )
+    # No start ping: interim-progress narration is banned (Brian, 2026-08-27), and
+    # report_result=False below stops autonomous_dispatch echoing the briefing a
+    # second time. The agent posts the briefing itself. [Dream #116, 2026-09-12]
+    notification = None
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
@@ -341,6 +340,7 @@ def run_review() -> None:
         dispatched = dispatch(
             prompt,
             notification=notification,
+            report_result=False,
             category="Weekly Open Items",
             source_id="weekly-" + datetime.now().strftime('%Y%m%d'),
             source_metadata={"review_number": review_number},

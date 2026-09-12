@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 212,
+      "applications": 216,
       "created": "2026-04-07",
-      "last_applied": "2026-09-11T09:11:01.051267+00:00",
+      "last_applied": "2026-09-12T09:18:05.478717+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4078,6 +4078,38 @@
       "solution": "",
       "target_skills": [
         "jeeves-analytics"
+      ]
+    },
+    "pat-2026-09-12-256": {
+      "id": "pat-2026-09-12-256",
+      "name": "A named-column instruction covers that column only; a labell",
+      "source": "ep-2026-09-12-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-12",
+      "last_applied": "2026-09-12T09:17:34.925428+00:00",
+      "category": "general",
+      "pattern": "A named-column instruction covers that column only; a labelling question gets a label fix; always state the blast radius when reporting done.",
+      "problem": "2026-09-11 thread 74d8be46: Brian said 'paste the new hedge valuation into the servicer report, remove the trade date column'. The edit also touched the payment-rate and charge-off lines while answering Aleja's column-label questions. He corrected: 'No, I told you to delete the trade date. The payment rate stays, so does the charge off calc. Just relabel the column.'",
+      "solution": "Second pass relabelled the two GPY headers at the report layer only, values and formulas untouched, and reported 'headers only, no values touched'. Added HARD RULE - EDIT SCOPE to jeeves-borrowing-base SKILL.md above the Marisol rule.",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-12-257": {
+      "id": "pat-2026-09-12-257",
+      "name": "Fix the tool when an arg shape keeps biting; and a post-mort",
+      "source": "ep-2026-09-12-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-12",
+      "last_applied": "2026-09-12T09:17:35.266074+00:00",
+      "category": "general",
+      "pattern": "Fix the tool when an arg shape keeps biting; and a post-mortem question is answered in two lines - the defect and the fix.",
+      "problem": "2026-09-11 thread 4eaa459a and again in Dream #116: gmail_tool.py search raised ValueError: invalid literal for int() with base 10: '--max'. Separately Brian answered a long BBVA Anexo A post-mortem with 'can you just answer what you did wrong and what needs to change? garbage ass verbosity' - a repeat of the 2026-09-04 verbosity correction.",
+      "solution": "Patched gmail_tool.py search to accept --max/-n/--limit as well as a positional int (smoke-tested both forms). Extended the SOUL.md Behavior bullet with a two-line hard limit on 'what did you do wrong' answers. Recorded the CLI arg shape in STRATEGIC_CONTEXT Business Context.",
+      "target_skills": [
+        "gmail"
       ]
     }
   }

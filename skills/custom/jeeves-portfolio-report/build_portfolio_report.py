@@ -29,6 +29,11 @@ from pathlib import Path
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# `redshift_util` is shared and its canonical home is jeeves-borrowing-base
+# (jeeves-redshift/SKILL.md documents that path). This script moved here from
+# that skill on 2026-09-14, so its own directory no longer supplies the module
+# on sys.path[0] the way it did when they were siblings.
+sys.path.insert(0, os.path.join(SCRIPT_DIR, '..', 'jeeves-borrowing-base'))
 
 from redshift_util import ensure_deps, connect
 sys.path.insert(0, os.path.join(SCRIPT_DIR, '..', '_shared'))

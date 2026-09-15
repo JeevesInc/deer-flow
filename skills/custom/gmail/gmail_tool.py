@@ -41,6 +41,15 @@ from email.mime.text import MIMEText
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
 from google_auth import get_credentials as _get_creds
 
+# Placeholder gate on outbound attachments. Imported unguarded and on purpose:
+# a control that silently disables itself when its module goes missing is the
+# exact failure mode it exists to prevent. If this import ever breaks, every
+# attachment send fails loudly (and GMAIL_ATTACH_GATE=off is the escape hatch)
+# rather than quietly shipping a half-filled instruction letter. See
+# attachment_gate.py for the 2026-09-14 Anexo J incident that prompted it.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from attachment_gate import AttachmentGateError, assert_sendable
+
 
 def _get_service():
     from googleapiclient.discovery import build
@@ -175,6 +184,9 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
 
         for att_source in attachments:
             filename, content, content_type = _resolve_attachment(att_source)
+            # Gate every attachment on every draft/send path, before any of it
+            # is encoded into the message.
+            assert_sendable(filename, content)
             maintype, subtype = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
             part = MIMEBase(maintype, subtype)
             part.set_payload(content)
@@ -584,4 +596,10 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except AttachmentGateError as _gate_exc:
+        # Exit non-zero with the findings on stderr so the failure is impossible
+        # to read as success. Nothing was drafted and nothing was sent.
+        print(str(_gate_exc), file=sys.stderr)
+        sys.exit(1)

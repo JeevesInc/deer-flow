@@ -222,6 +222,12 @@ def start_crons() -> None:
     _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
     _load_and_start("weekly-open-items", skills_dir / "gmail" / "weekly_open_items_cron.py")
+    # nb-monthly-reporting: fires the 14th of each month. Chases the prior
+    # month's Sec 6.01(c) financials from Accounting (drafts, never sends) and
+    # restates the Sec 6.02(b)(y)/(f) month-end BBC + cash report deadline.
+    # Moved out of gmail/ 2026-09-14: it drafts an e-mail, but it is a monthly
+    # servicer-reporting obligation, not a mail utility.
+    _load_and_start("nb-monthly-reporting", skills_dir / "jeeves-servicer-report" / "nb_monthly_reporting_cron.py")
     _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
     # classifier-eval: weekly scoring of the email classifier against the golden
     # set (skills/custom/jeeves-eval). Feeds the jeeves_eval_* gauges and the

@@ -1,16 +1,65 @@
 ---
 name: jeeves-borrowing-base
-description: Use this skill when the user asks to build, run, or update the borrowing base, data tape, or portfolio report. Covers US (Bridge), MX (SOFOM), and end-of-month portfolio reports. Also triggers for "run tape", "build the BB", "update the borrowing base", or "generate the data tape."
+description: Use this skill for the RECURRING borrowing bases - the CIM MX SOFOM borrowing base (daily) and the NB borrowing base (weekly, Mondays as of the prior Sunday) - plus the daily SOFOM distribution tape and the NB DQ30 daily reading. Triggers on "run the BB", "build the borrowing base", "run the tape", "NB BB", "borrowing base certificate", "SOFOM", "distribution tape", "DQ30". NOT for the monthly servicer reports (jeeves-servicer-report) or the monthly portfolio report (jeeves-portfolio-report).
 allowed-tools:
   - bash
   - read_file
   - write_file
 ---
 
-# Borrowing Base & Portfolio Report Pipeline
+# Borrowing Bases (recurring)
 
 > **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
 
+## The three deliverable families
+
+Capital Markets produces **five recurring artifacts in three families** (Brian, 2026-09-14). Each
+family is a separate skill. Never substitute one for another — they have different cadences,
+different audiences, and different source data.
+
+| Family | Artifact | Cadence | Skill |
+|---|---|---|---|
+| **Borrowing base** | CIM MX SOFOM BB | **daily**, 08:30 PT | `jeeves-borrowing-base` |
+| **Borrowing base** | NB BB | **weekly**, Mondays, as of the prior Sunday | `jeeves-borrowing-base` |
+| **Servicer report** | CIM MX servicer report + Anexo J | **monthly**, the 15th, covering the prior month | `jeeves-servicer-report` |
+| **Servicer report** | NB monthly reporting | **monthly**, the 14th | `jeeves-servicer-report` |
+| **Portfolio reporting** | Portfolio Report (internal) | **monthly**, the 1st | `jeeves-portfolio-report` |
+
+**The relationship that matters:** a servicer report is monthly and **contains** borrowing-base
+figures; a borrowing base is a standalone weekly or daily deliverable. Being asked for "the BB"
+never means the servicer report, and month-end does not turn a borrowing base into one.
+
+**Retired 2026-08-10 — do not build, do not route to:** the daily **US Borrowing Base (Bridge)** and
+the **CIM Monthly Tested Portfolio Report**. The CIM US bridge facility was terminated and repaid in
+full ($76,055,829.63), replaced by NB. `build_us.py` hard-exits unless `BRIDGE_BB_ENABLED=1`.
+CIM today means **MX SOFOM only**.
+
+---
+
+## Request Router
+
+Match the request to a pipeline. If it is not in this table, it is **not this skill** — see the
+family map above and load the right one.
+
+| Keywords (any match) | Pipeline | Script | Date param | Upload folder |
+|---|---|---|---|---|
+| borrowing base, BB, run the tape, MX BB, SOFOM, mexico BB | **CIM MX SOFOM Borrowing Base** (daily) | `build_mx.py` → `merge_template.py` | `--end-date YYYY-MM-DD` (default yesterday) | `Debt/CIM/{YYYYMM}/MX/` |
+| NB BB, Neuberger, weekly borrowing base, borrowing base certificate, BBC | **NB Borrowing Base** (weekly) | `build_nb.py` | `--as-of <prior Sunday>` | `Debt/Neuberger Berman/Reporting/{YYYYMM}/` |
+| distribution tape, F/12339, F/12340 distribution | **SOFOM Distribution Tape** (daily) | `data_tape_sofom.sql` × 3 days | 3-day range ending yesterday | e-mail reply only — never the Master BB |
+| DQ30, delinquency reading | **NB DQ30 daily reading** | `backend/scripts/nb_dq30_daily.py` | `--print [YYYY-MM-DD]` | Slack |
+
+**Routed elsewhere:**
+- servicer report, Anexo J, Monex, Marisol, carta de instrucción, waterfall → **`jeeves-servicer-report`**
+- portfolio report, portfolio reporting, monthly report → **`jeeves-portfolio-report`**
+- US BB, bridge BB, tested portfolio report → **RETIRED**, see the family map. Say so; do not build one.
+
+**Date rules:**
+- **Never use today's date.** Always use yesterday as the snapshot — even on Mondays (Sunday data is
+  available). Do NOT fall back to last Friday on weekends. Scripts hard-reject today/future.
+- "run the BB" with no date → yesterday. "BB for 3/27" → `--end-date 2026-03-27`.
+- NB is as of the **prior Sunday**, not yesterday.
+
+---
 
 ## ⚠️ HARD RULES — scheduler edits and completion truth (added 2026-08-10)
 
@@ -53,6 +102,8 @@ allowed-tools:
 
 ---
 
+---
+
 ## ⚠️ SOFOM Distribution Tape (Daily — F/12339 > F/12340)
 
 When asked to run the SOFOM distribution tape for Axel's daily distribution email, the file to generate and attach is **NOT** the Master BB. It is the **raw tape**:
@@ -76,155 +127,6 @@ draft, or (4) state already says today. Check the state file and the gateway log
 answer this question from the skill's prose alone.
 
 ---
-
-## Request Router
-
-Match the user's keywords to the correct pipeline. These are three DIFFERENT products — never substitute one for another.
-
-| Keywords (any match) | Pipeline | Script | Date param | Upload folder |
-|---|---|---|---|---|
-| **monthly tested** portfolio report, tested portfolio report, CIM monthly report, CIM report ("for CIM") | **CIM Monthly Tested Portfolio Report** (see its own section below) | `build_us.py --date {month-end}` then merge 5 tabs into prior-month CIM file | month-end of the covered month | `Debt/CIM/Reporting/{YYYYMM}/` |
-| portfolio report, portfolio reporting, monthly report, run reporting | **Portfolio Report** | `build_portfolio_report.py` | `--date YYYY-MM-01` (1st of month) | `Portfolio Reporting/{YYYYMM}/` |
-
-**Router precedence (Brian corrected this 2026-08-04, cost ~70 turns):** the words **"tested"** or **"CIM"** anywhere in the request override every other match -- that is the 12-tab CIM Monthly Tested Portfolio Report, NOT `build_portfolio_report.py`. "Monthly tested portfolio report" and "portfolio report" are two different deliverables to two different audiences; never treat the longer phrase as a verbose way of saying the shorter one. If the request is ambiguous between the two, ask before building -- building the wrong one wastes an hour.
-| borrowing base, BB, run the tape, US BB, bridge BB | **US Borrowing Base** | `build_us.py` → `merge_template.py` | `--date YYYY-MM-DD` (snapshot date, default yesterday) | `Debt/CIM/{YYYYMM}/US/` |
-| SOFOM, MX BB, MX borrowing base, mexico BB | **MX Borrowing Base** | `build_mx.py` → `merge_template.py` | `--end-date YYYY-MM-DD` (default yesterday) | `Debt/CIM/{YYYYMM}/MX/` |
-
-**Date rules:**
-- Portfolio report: "4/1 portfolio reporting" → `--date 2026-04-01`. Script derives EOP (3/31) and BOP (2/28) automatically.
-- Borrowing base: "run the BB" with no date → use yesterday. "BB for 3/27" → `--date 2026-03-27`.
-- **Never use today's date.** Always use yesterday's date as the snapshot — even on Mondays (Sunday data is available). Do NOT fall back to last Friday on weekends. Scripts hard-reject today/future.
-
----
-
-## Monthly Portfolio Report
-
-The portfolio report is a 7-tab workbook with formula-driven Summary dashboards. It is NOT raw data — it uses a template from the previous month. **If the user asks for "portfolio reporting", THIS is what they want — not borrowing bases.**
-
-**Template structure:**
-
-| Tab | Type | Description |
-|-----|------|-------------|
-| **Summary** | Formulas | Dashboard: UPB, DQ buckets, charge-offs, receivable rollforward, MoM comparison (col L=current, col N=prior) |
-| **Summary (2)** | Formulas | Second summary view |
-| **Country** | Formulas | DQ by country (Mexico, Colombia, Brazil) |
-| **loc** | Data | LOC tape at EOM |
-| **rollforward** | Data | Balance rollforward BOP→EOP |
-| **mods** | Data | GWC repayment plans (`loan_reference_number LIKE 'RPP%'`, ~95 rows) |
-| **loans** | Formulas | Loan-level summary |
-
-### Step 1: Find a valid template (previous month's report WITH formulas)
-
-```bash
-python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
-```
-
-Navigate to the most recent month folder and find `Portfolio Reporting - {YYYYMM}01.xlsx`.
-
-**IMPORTANT:** The template MUST be a real report named **`Portfolio Reporting - {YYYYMM}01.xlsx`** that contains Summary formula tabs (Summary, Summary (2), Country, loans). Do NOT use files named `Portfolio Report - *.xlsx` (no "ing") — those are broken raw-data files the bot generated incorrectly. A valid template has 7 tabs with formulas in the Summary sheets. Currently, the last known valid template is `Portfolio Reporting - 20260301.xlsx` in `202603/` (file ID: `1tQ4JwCHJHP2U4-k0iiFwalyDY0KzO5PC`).
-
-**Summary tie-out fix (applied 2026-08-03 — use the 20260801 file as the template going forward, file ID `11fEFPPxowwGWM6G9OWbRisIrvEvj-Cxa` in `202608/`).** Every template through 20260701 had a broken Summary!L56 Check because the rollforward buildup mis-mapped three columns: L45 (FX) summed `rollforward!O:P`, which double-counted `adjustment_amount_usd` (col P) already picked up on L46, while `jeeves_pay_fee_amount_usd` (col K) and `fx_adjustment_amount_usd` (col N) were never picked up at all. Result: L56 = -SUM(P), i.e. -$3,943,575.18 in the July report (only -$44,609 in June, because June adjustments were small — the bug scales with adjustments). Correct formulas: L37 `=SUM(rollforward!H:H) + SUM(rollforward!K:K)`, L45 `=SUM(rollforward!N:N) + SUM(rollforward!O:O)`, L46 unchanged. Then L50 = SUM(rollforward!T:T) and L56 = 0.00. If you ever build off a pre-August template, re-apply these three edits. Row-level integrity check: rollforward col X (diff) should sum to 0 and V should equal W.
-
-**Apply those three fixes to the `Summary` tab ONLY.** `Summary (2)` uses different row semantics (L37 = "(+) Jeeves Pay Interest" `=SUM(rollforward!J:J)`, L45 = "Check" `=SUM(rollforward!P:P) - L42`) and also carries pre-existing `#REF!`/`#ERROR!` cells inherited from the Google-Sheets-era template. Blind row-number patching clobbers it (caught and reverted 2026-08-04).
-
-**Cadence (Brian, 2026-08-04):** the report is **due the 15th of the month and covers the prior month**. So `Portfolio Report - {YYYYMM}01.xlsx` holds the **previous** month data - `20260701` = the June report delivered 7/15, `20260801` = the July report due 8/15. When Brian asks for "the July report" after month end that means BOP 6/30 -> EOP 7/31, i.e. `--date 2026-08-01`, template = the **June** file. He may ask for the filename to carry the run date instead (`Portfolio Report - 20260804.xlsx`) for an interim/pre-delivery cut - build with `--date {first of following month}` and rename the output; never set `--date` to today (that shifts the period to the partial current month).
-
-### Step 2: Run the builder
-
-```bash
-python /mnt/skills/custom/jeeves-borrowing-base/build_portfolio_report.py --date 2026-04-01 --template-id <PREVIOUS_REPORT_FILE_ID>
-```
-
-`--date` is the report date (1st of month). The script automatically derives EOP=3/31 and BOP=2/28. It queries LOC tape, rollforward, GWC mods (RPP% filter); downloads previous report as template; copies col L → col N in Summary tabs (MoM); replaces data tabs; saves as `Portfolio Report - 20260401.xlsx`.
-
-### Step 3: Upload to the correct month folder
-
-The folder matches the **report date month**. For `--date 2026-04-01`, upload to `Portfolio Reporting/202604/`. For `--date 2026-03-01`, upload to `Portfolio Reporting/202603/`.
-
-```bash
-python /mnt/skills/custom/google-drive/list_drive_folder.py "1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC"
-```
-
-Find the `{YYYYMM}/` folder matching the report month, then upload:
-
-```bash
-python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Portfolio Report - {YYYYMM}01.xlsx" --folder "<MONTH_FOLDER_ID>"
-```
-
-Remind user to **open in Excel** to recalculate formulas.
-
-### Step 2b (MANDATORY): the builder's MoM shift is a NO-OP — write col N yourself
-
-`_shift_summary_mom_with_values` copies **cached** col-L values into col N. The templates on
-Drive were written by openpyxl and never opened in Excel, so `Summary` has **0 cached col-L
-values** (only `Summary (2)` has 4). Verified on the 20260801 AND 20260804 templates,
-2026-09-01. Consequence if you ignore it: col N (prior period) silently keeps the
-month-BEFORE-last's numbers, and worse, **`Summary!N4` drives the whole period header** —
-`L4 = EOMONTH(N4,0)+1`, `L5 = EOMONTH(L4,0)` — so a stale N4 labels the report with the wrong
-month and mis-filters rows 22-25 and 69. The builder never touches N4/N5.
-
-After running `build_portfolio_report.py`, always:
-1. Set `Summary!N4` = first day of the PRIOR period, `N5` = its month end (for the 20260901
-   report: 2026-07-01 / 2026-07-31).
-2. Recompute the prior period's col-L values in Python **from the template workbook's own
-   loc / rollforward / mods tabs** and hard-code them into col N: rows 9-15 (Country F4:F9
-   buckets off `loc`: `balance_usd>0`, `charge_off_flag=FALSE`, `is_in_repayment=FALSE`,
-   `country_code` 484 MX / 170 CO / 76 BR, `days_past_due` buckets 0 / 1-30 / 30-60 / 60-90 /
-   90-120 / 120+), 17, 21-25 (`loans`), 30-56 (`rollforward`), 53-55 (country totals),
-   60 and 62-69 (`mods`; CY=balance_usd, DU=uninvoiced_interest_usd, DV=uninvoiced_vat_fee_tax_usd,
-   EE=dq_bucket_daily, EK=charge_off_dt, EL=charge_off_flag, ER=is_out_of_policy_repayment).
-3. **Two tie-outs must both hold before upload** — `SUM(rollforward!T:T) - L50 = 0.00` (L56) and
-   the `loc` DQ-bucket total = `L52` (EOP excl. negative balances) **to the cent**. Both held
-   for August 2026 at $224,219,947.93.
-
-Known, pre-existing and NOT introduced by the build: 6 error literals on `Summary (2)`
-(`L5 =loc!#REF!` plus five `ARRAY_CONSTRAIN`/`ARRAYFORMULA` Google-Sheets leftovers). `Summary`
-itself is clean. Also: **the builder does NOT refresh the `loans` tab** (nor `Sheet1`) — it
-carries the prior month's rows, which is why Summary rows 21-25 read 0.00 every month.
-
-`Portfolio Reporting/202609/` folder id `1x4_CJ566Lx8ntLIPZTp9ymJ8ZmThkLZb` (created 2026-09-01).
-Template of record for the September build (August period) is now
-`Portfolio Report - 20260901.xlsx`, id `1ys-RpbS9XwoKPB725ZxZRliY7_mTG5dl`.
-
----
-
-## CIM Monthly Tested Portfolio Report (due the 15th, covers prior month)
-
-**Different product from the Portfolio Report.** Lives in `Capital Markets/Debt/CIM/Reporting/{YYYYMM}/` as `Monthly Tested Portfolio Report - {YYYYMMDD}.xlsx` (date = delivery date, e.g. `20260715` = the June report). 12 tabs: Summary, historical_draws, elig, tape_start, tape_end, rollforward, revenue, bank_accts, br_mc_liability, Monthly Portfolio Report, Borrowing Base, eligibility_summary. Recipient is CELF 30-I LLC; the two letter tabs date themselves with `=TEXT(TODAY(),"mmmm dd, yyyy")` and Summary Begin/End derive from `tape_start!B2 + 1` / `tape_end!B2`, so dates need no manual edit.
-
-Build: `build_us.py --date {month-end}` (BOP = prior month-end automatically) then merge tape_start / tape_end / rollforward (index col in A) and eligibility_summary / revenue (no index col) into the **prior month file as template**, preserving all other tabs.
-
-- **revenue tab** = `select company_id, sum(revenue_usd) from master_transactions_dm.transactions_ssot where posted_at in month and is_company_test = false group by 1` (Brian, 2026-08-04). Revenue is ONLY in transactions_ssot -- a loc_tape fee-sum reconstruction came in 36% light. Back-test against the prior month tab before trusting it (June back-test: $5,279,312 vs $5,249,646 in the delivered file, +0.57% from restatement).
-- **br_mc_liability** (25-day spend, mc_collateral) carries forward month to month; confirm with Brian rather than deriving.
-- **bank_accts** is NOT the Bridge BB bank_accts row set -- 14 rows (Brazil 6540; Colombia 8116/1681/4511/0337/4765/2865/JSE233/0850; Mexico 5592/4380/0007; US 3601/6167) and `cico_fetch_balances.build_bank_accts_df` maps a *different* Brazil set (BS2/BTG/QiTech), so do not drop its frame in. The 7/31/2026 CICO email screenshots covered only 9 of the 14. Values in this tab are USD-converted despite the `currency` column labels (US 3601 template June 459,683 ties exactly to the workbook 6/30 original-currency USD row; COP/MXN rows are the workbook figure divided by an FX rate) -- confirm units and balance date with Brian before populating.
-
-## US Borrowing Base (Bridge)
-
-### 1. Generate data
-
-```bash
-python /mnt/skills/custom/jeeves-borrowing-base/build_us.py --date 2026-03-27
-```
-
-Defaults to yesterday. Output: `$OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx` (4 tabs: tape_start, tape_end, rollforward, eligibility_summary)
-
-### 2. Find template + merge
-
-```bash
-python /mnt/skills/custom/google-drive/list_drive_folder.py "1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU" --recursive --max-depth 3
-```
-
-Find latest `Jeeves Bridge Borrowing Base - *.xlsx` in `CIM/{YYYYMM}/US/`. Then:
-
-```bash
-python /mnt/skills/custom/jeeves-borrowing-base/merge_template.py "$OUTPUTS_PATH/Borrowing Base - US - {YYYYMMDD}.xlsx" "<TEMPLATE_DRIVE_ID>"
-```
-
-### 3. Upload to `Debt/CIM/{YYYYMM}/US/`
-
-```bash
-python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves Bridge Borrowing Base - {YYYYMMDD}.xlsx" --folder "<CIM_US_FOLDER_ID>"
-```
 
 ---
 
@@ -254,206 +156,7 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves 
 
 ---
 
-## Key Drive Locations
-
-| Location | Folder ID |
-|----------|-----------|
-| `Debt/` (CIM parent) | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` |
-| `Portfolio Reporting/` | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` |
-
-## Rules
-
-- Always state the date range used in your response
-- Never modify existing files on Drive — create new dated copies
-- Remind user to open in Excel for formula recalculation
-- Follow naming: `Jeeves Bridge Borrowing Base - {YYYYMMDD}.xlsx` (US), `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx` (MX), `Portfolio Report - {YYYYMM}01.xlsx` (monthly)
-- **When Brian says "use the most recent tape available" (a tape runs daily), do NOT reuse a cached/earlier-session tape file.** Check the actual latest tape by file timestamp in the relevant Drive/output folder (or the cron's last-run date in its state JSON) before running any calc against it, and state that date explicitly. Corrected 2026-07-11 (NB BB thread) after a stale tape was used despite a same-day tape existing.
-
-
-
-<!-- Evolution: 2026-07-11 | source: self-improving-agent -->
-## MX Servicer Report (Monthly)
-
-
-### Run recipe (verified 2026-08-10, July 2026 period)
-
-`build_mx_servicer_report.py` in this skill dir is STALE: dates hardcoded to April 2026 AND it still
-writes only the BOP and EOP snapshots to the tape tab. Delivered workbooks require a FULL-MONTH DAILY
-tape (June file = 30 daily slices, 22,929 rows) because Exhibit B G10 average daily balance is
-`SUM(tape!AC:AC)` divided by `(D6-D5)`. Loop `sql\data_tape_sofom.sql` once per calendar day, apply
-`calculate_eligibility_fields_sofom`, and assert the resulting column list equals the template tape
-header EXACTLY (138 cols) - every Exhibit formula is a column-letter reference (AC=sofom_balance,
-I=dq_bucket, S=late_payment_penalty_amount, O=disbursement_amount, H=days_past_due). Fastest safe
-refresh of a 23k-row tab: `del wb['tape']` then `wb.create_sheet('tape', idx)` - no formulas live on
-tape or lista, and cell-by-cell blanking of 3M cells is needlessly slow.
-
-Naming and filing of record: template = prior month's `Jeeves Mexico Servicer Report - {YYYY}{MM}15.xlsx`
-in `Capital Markets, Debt, CIM, Reporting, {YYYYMM}` (Reporting folder id
-1oDi6HjzArnX_jPQbI9UfEs4R5DC9TTrA; 202607 id 11sGwEQFDwe3gbJu0VG7oSWx70yReOlVG, 202608 id
-1eEv4-_bidc7xILB-s8oOVGI-2_fEx16U). The file dated the 15th covers the PRIOR month (20260715 = June
-period, BOP 6-1 EOP 6-30). Upload the new month with `--folder <month id> --new`.
-
-### HARD RULE — EDIT SCOPE: change the named cells and nothing else (added 2026-09-12)
-
-Brian's servicer-report instructions are surgical and literal. On 2026-09-11 he said *"paste it into the
-servicer report. remove the trade date column"*; the edit also touched the payment-rate and charge-off
-lines, and he came back with **"No, I told you to delete the trade date. The payment rate stays, so does
-the charge off calc. Just relabel the column."** Three rules:
-
-1. **A named-column instruction covers that column only.** "Delete the trade date column" is not licence
-   to restructure the tab, re-derive a metric, or drop anything adjacent. If a second change looks
-   obviously right, **say so in the reply and leave the workbook alone** — he decides.
-2. **A LABELLING question gets a LABEL fix.** When a CIM/Aleja review question is about a column being
-   mislabelled (e.g. the GPY BQ/BR headers, whose true defect is the `jp_fee` / `jp_disbursement` swap in
-   `loc_tape`), relabel the header **at the report layer only** — headers changed, values, formulas and
-   metric definitions untouched. Never delete or recompute a column to resolve a naming complaint.
-3. **State the blast radius when you report done**: which cells/headers changed, and explicitly that no
-   values or formulas moved. "Done — headers only, no values touched" is the shape of the answer.
-
-### HARD RULE — Marisol's "confirm the number" asks (added 2026-09-08 after a five-message correction loop)
-
-When Monex trust administration (**Lizbeth Marisol Caballero Quintana, lcaballero@monex.com.mx**) writes
-on **F/12340** asking Jeeves to confirm a figure, the figure is the **Exhibit B average daily balance
-(G10) for the report month** — NOT the EOP balance and NOT any tape total. Procedure, in ONE turn:
-(1) open the workbook **you** sent her that month (it is in the CIM Reporting folder and attached to your
-own sent mail); (2) read Exhibit B **G10**; (3) compare digit-for-digit to the number in her email;
-(4) answer **"Yes, confirmed — <number>"** or **"No, our figure is <number>"** in one line, **reply-all**.
-Do not restate methodology, do not offer an alternative metric, do not ask which balance she means, and
-do not answer from a tape re-run when the sent file is the thing she is asking about. Precedent:
-2026-08-11 she asked to confirm **1,226,804,057** (July average daily balance) and Brian replied "Yes, I
-confirm"; 2026-09-08 the August figure was **1,305,967,747**. His escalation when this gets hedged
-instead of answered: *"bro you sent the file. just look at it and see if it's the same number"* …
-*"so confirm or not, why are we still talking about this"* … *"that's not the number in her email"*.
-
-Write ONLY these cells: Exhibit A L6 (FX spot), L10:L25 (rollforward values), K31 (EOP account count);
-Exhibit B H52 and H53 plus H58 and H59 (roll the prior month's cached H51, H52, H57, H58 forward),
-G144 and G154 (interest period days = days in month), D36 (collection-account available amount - blank
-it, Brian fills); bank_accts column C; and the tape and lista tabs. Everything else is a live formula
-(L31, L33, L35, concentration block H40:L50, L56 from hedge, L83 from historical_draws, all Exhibit B
-DQ SUMIFS). FX source that keeps the workbook internally consistent: reciprocal of
-`loc_tape.spot_rate` at EOP (7-31-26 gives 17.3476); prior months used a slightly different market
-print (June report 17.47 vs tape 17.4972), so always state which source was used.
-
-Exhibit A L12 plus L13:L22 minus L25 does NOT tie to zero and never has (June 220.9M, July 69.7M gap).
-It is a display block, not a check - do not try to fix it or report it as a build error. `repayment`
-(Modified Receivables) came back identical to the cent two months running (37,299,580.41) - it is a
-stock, not a flow; flag it rather than assuming a query bug.
-
-Brian's standing fills (2026-08-10): bank balances = 0, no draws in a month with no new draw rows,
-hedge MTM and collection-account available amount are his; he wants the FX spot filled by the agent.
-
-### Cash balance — show BOTH dates (Alejandra Granados, CIM, 2026-08-27)
-
-Aleja on the July 2026 MX MSR: *"Could you please confirm the cash balance as of July 31st? The
-current report includes the cash as of the payment date. In future reports, please include the cash
-balance for **both dates**, as both are needed for different purposes."*
-
-**Standing requirement for every MX servicer report from August 2026 forward: two labelled cash
-lines — cash as of PERIOD END (last calendar day of the reporting month) and cash as of the
-PAYMENT DATE.** Never one or the other. The `bank_accts` tab is populated from the CICO email
-closest to the target date, so this means sourcing TWO CICO snapshots per report, not one; pick the
-CICO file closest to each date and label which file fed which line. If the two dates coincide, still
-show both rows with the same figure rather than collapsing them.
-
-### Format rule (confirmed 2026-07-10)
-
-Output must be **in the same form as previous months** with **all formulas persisting** —
-merge new-month data into the existing template (like the BB merge step), never rebuild
-the workbook from scratch even if the underlying script only had to fix a data bug (e.g.
-the BOP/EOP-only vs full-month-loop bug fixed 2026-07-08/09). Default to updating the
-existing dated file in place only when correcting a known-bad prior version of the SAME
-report date; a genuinely new period still gets a new dated file per the BB `--new` rule.
-
-### Fee and payable lines — sweep EVERY representation, and check the counterparty's pending list
-
-Booking a fee/payable change in one place is not the job. Brian corrected this twice on the
-same artifact in one thread (2026-08-13, July 2026 period):
-
-1. *Completeness.* "Did you add all the items we owe Monex to the single line? And the total
-   amount we owe CxC?" - the month's newly-issued invoices are NOT the amount owed. Carried
-   balances (A-19888 116,000 and A-19627 20,300, unpaid since June/July) existed only in the
-   counterparty's own pending-invoice email (Gustavo Villarreal, "CXC Pending Invoices",
-   2026-08-06). ALWAYS pull the counterparty's pending/aging summary and reconcile it against
-   the invoice stream before writing any fee total, and list every invoice number that rolls
-   into the figure so Brian can audit it.
-2. *Propagation.* "put these in the waterfall too" - one figure appears in several places and
-   all of them must move together. For the CIM MX monthly package the map is:
-   Exhibit B **G128** and **G132** (CxC), **G133** (Trust/Monex fees), the source-note cells
-   **Q35/Q36** (invoice detail), the **waterfall clause (iii)** text, **G127** servicing fee
-   (formula-driven: (1%/12) x average daily balance - it moves when the expense block moves),
-   clause **(x) remanente** (only computable once D36 is filled by Brian), AND the matching
-   paragraph in the **Anexo J** Word file. After the edit, re-read each of those cells and
-   report the before/after per location - never report "added" off a single write.
-
-### No Excel on this host — replicate the workbook math in Python, then validate on the prior month
-
-Excel COM automation does not work here: `xlwings`/`win32com` import fine and `xw.App()` starts, but
-`app.books.open(...)` dies with `Open method of Workbooks class failed` (service session, no interactive
-desktop), and LibreOffice is not installed. So an agent-built servicer report / BB carries NO cached
-values — every formula reads `None` — and any figure needed for the Anexo J (which is plain text, not
-formulas) has to be computed outside the workbook. Do NOT burn retries on Excel.
-
-Working method (2026-08-14, July 2026 period):
-1. Read the formulas you need with openpyxl (`data_only=False`); array formulas come back as
-   `ArrayFormula` objects — use `.text`.
-2. Re-implement them in Python straight off the `tape` tab in `read_only=True` mode (23.8k rows x 138
-   cols loads in ~40s). Column letters map to the tape header: AC=`sofom_balance`, EF=`elig`,
-   EA=`elig_nn`, CH=`credit_limit_usd`, CF=risk score, CI=`state_name`, CJ=`city_name`,
-   CK=`naics_industry_id`, CL=`is_startup`, CC=onboarding date.
-3. **Validate against the PRIOR month's file, which does have cached values** — recompute D90:D100,
-   L35, L52, L81, N87, G36 and G47 from the June tape and require a to-the-cent match before you
-   trust the current month. That check reproduced all 11 concentration cells and G47 = 38,108,614.19
-   exactly, which is the only reason the July remanente could be signed off.
-   Quirks the replication must honour: D92/D94 test against empty `D8` so their IF is always TRUE
-   (1st largest, and sum of 2nd-4th largest, of eligible rows with `credit_limit_usd` < C90 = 2,000,000);
-   D91/D93 are 0 whenever the eligible pool exceeds 40,000,000 x FX; D100 uses `TODAY()`, so state the
-   as-of date you assumed.
-4. Exhibit A L54 (collection-account cash, "Prerecycling") stays 0 per Brian; the borrowing base can
-   therefore run a deficit that flows into the waterfall via G36 = D36 + `Exhibit A`!N87 (July: N87 =
-   -8,716,170.42, June: -124,933,097.33). A deficiency is NOT booked into clause (vii) — G44 stays 0.
-5. Tell Brian to open the workbook in Excel to materialise the values, and give him the computed
-   waterfall in the message so he can check Excel against it.
-
-### A change to the expense block silently invalidates the Anexo J servicing fee
-
-G127 = (1%/12) x average daily balance − G128, so **every edit to G128/G132 moves clause (iv)**. On
-2026-08-11 the July Anexo J was written with (iv) = MXN 950,416.71 (G128 = 71,920). The 8/13 CxC
-correction raised G128 to 208,220 and nobody re-derived (iv) — the Word file sat wrong by exactly
-136,300 until 8/14. Whenever the CxC/Monex/trust expense figures move, recompute
-(1%/12) x G10 − G128 and rewrite clause (iv) in the Word file in the same pass. Cross-check:
-(1%/12) x G10 must equal (iv) + G128 (July: 1,022,336.71 = 814,116.71 + 208,220).
-
-### Payment Rate — do NOT use a DPD-bucket stock proxy for a single bill's amount
-
-CIM's contractual Payment Rate is a **flow** definition (collections $ as % of opening/
-billed balance per the Borrowing Base/Compliance Certificate template), not a snapshot
-DPD-bucket ratio. A proxy like `1 - (1-30 DPD balance)/(Current + 1-30 DPD balance)` is
-invalid for amounts tied to *one specific month's bill*: DPD ages per-invoice/per-billing-
-cycle, so a charge from last month's bill can only ever be 1-30 DPD — it cannot reach 31+
-DPD while still being defined as "last month's charge." Before proposing any DPD-based
-proxy for a flow metric, check whether the bucket can even reach the range the proxy
-assumes for a single billing cycle. (Open follow-on as of 2026-07-10: whether "Current"
-bucket contamination from new unbilled spend still breaks a corrected proxy attempt —
-unresolved, needs the CIM 3-month trailing grid built from actual flow data instead.)
-
-
-
-
-<!-- Evolution: 2026-07-29 | source: self-improving-agent -->
-NB Borrowing Base Certificate
-
-
-<!-- Evolution: 2026-07-29 | source: dream-74 -->
-## HARD RULE — "use X as a starting point" means CLONE X, not redesign
-
-When Brian names an existing artifact as the starting point (e.g. "use the CIM bridge
-version"), **open that actual file and edit a copy of it**. Keep tab names, row order,
-the label column, column positions and the visual skeleton. "Trimmed down" means
-*delete rows/criteria that do not apply*, never re-architect the layout. Cost 87 turns
-and three corrections on the NB borrowing base certificate (2026-07-28) — the first
-draft was structurally original and Brian rejected it with "this doesn't look anything
-like the CIM version. I want a familiar format." Before delivering, diff your output
-against the source form tab-by-tab and be able to say what you deleted and nothing else.
+---
 
 ## NB borrowing base certificate — facility-specific rules (2026-07-28, Brian)
 
@@ -507,18 +210,7 @@ against the source form tab-by-tab and be able to say what you deleted and nothi
   passed explicitly; --file-id alone leaves the file in its existing parents and prints a NOTE. Rules (1)
   and (2) still stand as hygiene, but a missing --folder can no longer silently move a filed deliverable.
 
-## When a scheduled report fails: FIX IT, RE-RUN IT, DELIVER IT — never just diagnose (2026-08-17)
-
-Brian's escalation "i asked you to do this" came 3 minutes after a clean, correct root-cause writeup
-of the 15:22 NB failure. A diagnosis is not a deliverable. On any scheduler alert: patch the defect,
-re-run the job, produce the workbook, upload it, and report the numbers — in one turn, without asking.
-
-And when you patch one step of a pipeline, **sweep the whole chain before saying done**: data source →
-math → template selection → output filename → Drive folder → upload flags → the Slack/email delivery.
-On 2026-08-17 the truncation bug was fixed and reported as done, and Brian then had to ask two more
-questions one at a time — "and is it writing to the right folder?" and "no it should always use the most
-recent as a template" — both of which were inspectable in the same file at the same time. Three
-round-trips for one fix is the failure mode; enumerate and verify every link before reporting.
+---
 
 ## NB borrowing base — the Monday pipeline (`build_nb.py`, 2026-08-17)
 
@@ -561,6 +253,121 @@ first checking the flags against the perfection scope in
 headline figures (eligible, excess concentration, cash pool, liquidity, BB, step-up prongs) in
 Python by replicating the tab formulas, report them, and tell Brian to open in Excel to recalc.
 
+---
+
+## NB DQ30 backup - `dq30_detail` tab (2026-08-19)
+
+
+Brian, 2026-08-19: "we need to add backup to the dq30 calc on the nb borrowing base." The three
+month-end figures on the `dq30` tab were pasted values with only a prose source note. Now:
+
+- **`dq30_detail` tab** = loan-level backup, one row per non-charged-off, non-repayment-plan
+  `capital_markets_dm.loc_tape` record at each of the three month ends (20,311 rows for
+  May/Jun/Jul 2026). Raw fields are values; **encumbrance (col L), the >30 DPD numerator (col M)
+  and the DPD bucket (col N) are in-sheet formulas**, so the rule is auditable, not asserted.
+- **`dq30` rows 7-9** C/D are live `SUMIFS` over that tab keyed off new date cells `G7:G9`;
+  rows 30-41 add a DPD-bucket recon (Current / 1-30 / 31-60 / 61-90 / >90) whose totals must
+  reproduce rows 7-9 exactly (row 40 check = 0.00%).
+- **Spot memo C25/C26** were pasted python values that did NOT tie to the tape tab despite B28
+  claiming they did; they are now `SUMIFS(tape!$R:$R,tape!$W:$W,...)`. The old values used
+  `row_flags`' **OR** rule (`transfer_flag='on'` OR `sofom_balance_usd>0`) while the tape tab's
+  col W is effectively **`sofom_balance_usd>0` only** (its `N($P2)=1` test can never fire on text).
+  The gap is 148 rows, all negative/overpaid balances, -$64,650.45 -- it moves the spot denominator
+  but NOT the eligible pool ($118,731,470.95 under either rule at 8/16), so leave `row_flags` alone.
+- Query of record: `cfo-org-kb/sql/nb_dq30_monthend_detail.sql`. **Never `coalesce(jvs_remaining,0)`**
+  -- NULL means no financed tranche, i.e. UNENCUMBERED; coalescing flips such rows (1 row, $518 at
+  5/31/2026) and breaks the tie-out.
+- `build_nb.refresh_dq30_backup(wb, as_of, force=False)` runs on every build and re-pulls **only
+  when the 3-month window rolls** (`month_end_window` = the 3 most recently ENDED months), so the
+  weekly Monday run is cheap and the window updates itself on the first run after month end.
+- Verified 2026-08-19: 5/31 1.7317% | 6/30 2.0116% | 7/31 2.2203% -> **3-mo average 1.9879%**
+  (cap 2.50%; step-up prong needs <1.50% for three months). Every figure ties to the cent to what
+  was delivered on the 8/07 and 8/17 forms.
+
+
+
+
+<!-- Evolution: 2026-08-19 | source: self-improving-agent -->
+
+---
+
+## NB DQ30 daily reading cron (2026-08-19)
+
+
+Brian, 2026-08-19: "add a daily measurement of this to the morning daily crons? I want a
+simple message that I can forward internally."
+
+- `backend/scripts/nb_dq30_daily.py` — one aggregate Redshift query (~2-6s) for the spot
+  reading at the as-of date PLUS the three most recent month ends, so the message carries
+  both the daily number and the live covenant test. Writes `.deer-flow/_nb_dq30_state.json`
+  and shows the day-over-day bps move off the prior reading. `--print [YYYY-MM-DD]` for a
+  dry look; `NB_DQ30_DRY_RUN=1` to exercise the send path without posting.
+- **Delivery: `cm_morning_brief.py` spawns it DETACHED (`Popen`) after the brief sends.**
+  Deliberately not a `cron_supervisor` entry: (a) `run_morning_brief` gives the brief script
+  a 60s subprocess budget and a slow Redshift morning must not cost the brief, and (b) a new
+  supervisor registration needs a gateway restart, while a subprocess picks up edits on the
+  next run. Weekday cadence, as-of the prior day, so Monday reads Sunday.
+- Methodology is intentionally the SAME as the form's spot memo (total balance incl. interest
+  and fees, all countries). Brian reviewed the principal-only reading available under the
+  "Outstanding Receivables Balance" definition (-16 bps, but ~-$1.08M of BB availability at
+  the 90% advance rate) and said "let's leave it as is" — do not silently switch bases.
+- The message states that the daily figure is NOT a covenant test point, because the spot
+  reading sits ABOVE 2.50% (2.70% at 8/18) while the covenant 3-month average is 1.99%.
+  It is written to be forwarded internally: no emoji, no file paths, no bot voice.
+
+---
+
+## Key Drive Locations
+
+| Location | Folder ID |
+|----------|-----------|
+| `Debt/` (CIM parent) | `1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU` |
+| `Portfolio Reporting/` | `1T6E5zV-rrqZZBre5X3OH0JaztQbsk-QC` |
+
+---
+
+## Rules
+
+- Always state the date range used in your response
+- Never modify existing files on Drive — create new dated copies
+- Remind user to open in Excel for formula recalculation
+- Follow naming: `Jeeves Bridge Borrowing Base - {YYYYMMDD}.xlsx` (US), `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx` (MX), `Portfolio Report - {YYYYMM}01.xlsx` (monthly)
+- **When Brian says "use the most recent tape available" (a tape runs daily), do NOT reuse a cached/earlier-session tape file.** Check the actual latest tape by file timestamp in the relevant Drive/output folder (or the cron's last-run date in its state JSON) before running any calc against it, and state that date explicitly. Corrected 2026-07-11 (NB BB thread) after a stale tape was used despite a same-day tape existing.
+
+
+
+<!-- Evolution: 2026-07-11 | source: self-improving-agent -->
+
+---
+
+## HARD RULE — "use X as a starting point" means CLONE X, not redesign
+
+When Brian names an existing artifact as the starting point (e.g. "use the CIM bridge
+version"), **open that actual file and edit a copy of it**. Keep tab names, row order,
+the label column, column positions and the visual skeleton. "Trimmed down" means
+*delete rows/criteria that do not apply*, never re-architect the layout. Cost 87 turns
+and three corrections on the NB borrowing base certificate (2026-07-28) — the first
+draft was structurally original and Brian rejected it with "this doesn't look anything
+like the CIM version. I want a familiar format." Before delivering, diff your output
+against the source form tab-by-tab and be able to say what you deleted and nothing else.
+
+---
+
+## When a scheduled report fails: FIX IT, RE-RUN IT, DELIVER IT — never just diagnose (2026-08-17)
+
+Brian's escalation "i asked you to do this" came 3 minutes after a clean, correct root-cause writeup
+of the 15:22 NB failure. A diagnosis is not a deliverable. On any scheduler alert: patch the defect,
+re-run the job, produce the workbook, upload it, and report the numbers — in one turn, without asking.
+
+And when you patch one step of a pipeline, **sweep the whole chain before saying done**: data source →
+math → template selection → output filename → Drive folder → upload flags → the Slack/email delivery.
+On 2026-08-17 the truncation bug was fixed and reported as done, and Brian then had to ask two more
+questions one at a time — "and is it writing to the right folder?" and "no it should always use the most
+recent as a template" — both of which were inspectable in the same file at the same time. Three
+round-trips for one fix is the failure mode; enumerate and verify every link before reporting.
+
+---
+
 ## `--new` is REQUIRED on EVERY dated NB/CIM upload, not just the MX master (2026-08-07)
 
 Uploading `Jeeves NB Borrowing Base - 20260807.xlsx` with only `--folder` made the uploader
@@ -572,6 +379,8 @@ snapshot, and read the "Action:" line - "UPDATED existing file" on what should b
 snapshot means you just overwrote yesterday's file. Recovery: re-upload the prior day's local
 copy with `--new` (it gets a NEW file id, so any previously shared link to the old id now
 points at the newer file - tell Brian).
+
+---
 
 ## `max_dpd` is NOT current delinquency (diagnosed 2026-08-07)
 
@@ -594,6 +403,8 @@ Rules: current DQ always uses `days_past_due`. NB Section 7.01(b) **DQ30 Rate** 
 balance >30 DPD / total unencumbered, at month ends on a 3-month rolling average (cap 2.5%,
 step-up prong <1.50%) - not a spot mid-month figure. Sanity check on any NB tape: eligible-pool
 DPD>30 must be exactly 0 because `elig_iv_dpd30` already excludes it.
+
+---
 
 ## Editing existing lender workbooks with openpyxl - hard rules
 
@@ -674,60 +485,4 @@ DPD>30 must be exactly 0 because `elig_iv_dpd30` already excludes it.
 
 
 <!-- Evolution: 2026-08-19 | source: self-improving-agent -->
-## NB DQ30 backup - `dq30_detail` tab (2026-08-19)
-
-
-Brian, 2026-08-19: "we need to add backup to the dq30 calc on the nb borrowing base." The three
-month-end figures on the `dq30` tab were pasted values with only a prose source note. Now:
-
-- **`dq30_detail` tab** = loan-level backup, one row per non-charged-off, non-repayment-plan
-  `capital_markets_dm.loc_tape` record at each of the three month ends (20,311 rows for
-  May/Jun/Jul 2026). Raw fields are values; **encumbrance (col L), the >30 DPD numerator (col M)
-  and the DPD bucket (col N) are in-sheet formulas**, so the rule is auditable, not asserted.
-- **`dq30` rows 7-9** C/D are live `SUMIFS` over that tab keyed off new date cells `G7:G9`;
-  rows 30-41 add a DPD-bucket recon (Current / 1-30 / 31-60 / 61-90 / >90) whose totals must
-  reproduce rows 7-9 exactly (row 40 check = 0.00%).
-- **Spot memo C25/C26** were pasted python values that did NOT tie to the tape tab despite B28
-  claiming they did; they are now `SUMIFS(tape!$R:$R,tape!$W:$W,...)`. The old values used
-  `row_flags`' **OR** rule (`transfer_flag='on'` OR `sofom_balance_usd>0`) while the tape tab's
-  col W is effectively **`sofom_balance_usd>0` only** (its `N($P2)=1` test can never fire on text).
-  The gap is 148 rows, all negative/overpaid balances, -$64,650.45 -- it moves the spot denominator
-  but NOT the eligible pool ($118,731,470.95 under either rule at 8/16), so leave `row_flags` alone.
-- Query of record: `cfo-org-kb/sql/nb_dq30_monthend_detail.sql`. **Never `coalesce(jvs_remaining,0)`**
-  -- NULL means no financed tranche, i.e. UNENCUMBERED; coalescing flips such rows (1 row, $518 at
-  5/31/2026) and breaks the tie-out.
-- `build_nb.refresh_dq30_backup(wb, as_of, force=False)` runs on every build and re-pulls **only
-  when the 3-month window rolls** (`month_end_window` = the 3 most recently ENDED months), so the
-  weekly Monday run is cheap and the window updates itself on the first run after month end.
-- Verified 2026-08-19: 5/31 1.7317% | 6/30 2.0116% | 7/31 2.2203% -> **3-mo average 1.9879%**
-  (cap 2.50%; step-up prong needs <1.50% for three months). Every figure ties to the cent to what
-  was delivered on the 8/07 and 8/17 forms.
-
-
-
-
-<!-- Evolution: 2026-08-19 | source: self-improving-agent -->
-## NB DQ30 daily reading cron (2026-08-19)
-
-
-Brian, 2026-08-19: "add a daily measurement of this to the morning daily crons? I want a
-simple message that I can forward internally."
-
-- `backend/scripts/nb_dq30_daily.py` — one aggregate Redshift query (~2-6s) for the spot
-  reading at the as-of date PLUS the three most recent month ends, so the message carries
-  both the daily number and the live covenant test. Writes `.deer-flow/_nb_dq30_state.json`
-  and shows the day-over-day bps move off the prior reading. `--print [YYYY-MM-DD]` for a
-  dry look; `NB_DQ30_DRY_RUN=1` to exercise the send path without posting.
-- **Delivery: `cm_morning_brief.py` spawns it DETACHED (`Popen`) after the brief sends.**
-  Deliberately not a `cron_supervisor` entry: (a) `run_morning_brief` gives the brief script
-  a 60s subprocess budget and a slow Redshift morning must not cost the brief, and (b) a new
-  supervisor registration needs a gateway restart, while a subprocess picks up edits on the
-  next run. Weekday cadence, as-of the prior day, so Monday reads Sunday.
-- Methodology is intentionally the SAME as the form's spot memo (total balance incl. interest
-  and fees, all countries). Brian reviewed the principal-only reading available under the
-  "Outstanding Receivables Balance" definition (-16 bps, but ~-$1.08M of BB availability at
-  the 90% advance rate) and said "let's leave it as is" — do not silently switch bases.
-- The message states that the daily figure is NOT a covenant test point, because the spot
-  reading sits ABOVE 2.50% (2.70% at 8/18) while the covenant 3-month average is 1.99%.
-  It is written to be forwarded internally: no emoji, no file paths, no bot voice.
 

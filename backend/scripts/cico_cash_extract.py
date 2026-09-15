@@ -288,6 +288,26 @@ def _extract_summary_totals(client, images: list) -> dict:
         log.info("Summary totals reconcile across images: cash %.0f + restricted "
                  "%.0f = %.0f (printed %.0f)", c, r, c + r, cr)
         return merged
+    # Last resort: components corroborated, combined line misread.
+    # 2026-09-14: cash 78,497,060 came back identically on 4 separate bands and
+    # restricted 15,174,020 on one, but the printed "Total cash + restricted"
+    # line 93,671,081 was OCR'd as 83,671,081 (one digit), so the merged test
+    # failed and the digest served 5-day-old cash. The combined line is a
+    # derived figure; when the cash grand total is independently corroborated on
+    # >=2 bands (the CIM-reporting block and the summary-by-country block both
+    # print it), the components are the trustworthy read — accept and recompute.
+    if None not in (c, r):
+        cash_votes = sum(1 for cand in candidates if cand.get("total_cash_usd") == c)
+        if cash_votes >= 2:
+            merged["total_cash_plus_restricted_usd"] = c + r
+            merged["_verified"] = True
+            merged["_repaired"] = True
+            log.warning(
+                "Combined-line mismatch (printed %s vs computed %.0f); cash %.0f "
+                "corroborated on %d bands - accepting components, recomputing total.",
+                "n/a" if cr is None else format(cr, ".0f"), c + r, c, cash_votes)
+            return merged
+
     merged["_verified"] = False
     log.error("Summary totals did NOT reconcile on any image or merged: %s",
               {k: round(v) for k, v in merged.items() if isinstance(v, float)})

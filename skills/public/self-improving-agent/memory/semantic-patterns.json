@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 216,
+      "applications": 223,
       "created": "2026-04-07",
-      "last_applied": "2026-09-12T09:18:05.478717+00:00",
+      "last_applied": "2026-09-15T09:13:50.302658+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4110,6 +4110,38 @@
       "solution": "Patched gmail_tool.py search to accept --max/-n/--limit as well as a positional int (smoke-tested both forms). Extended the SOUL.md Behavior bullet with a two-line hard limit on 'what did you do wrong' answers. Recorded the CLI arg shape in STRATEGIC_CONTEXT Business Context.",
       "target_skills": [
         "gmail"
+      ]
+    },
+    "pat-2026-09-15-258": {
+      "id": "pat-2026-09-15-258",
+      "name": "Every Anexo J input has a file: hedge premiums AND trade dat",
+      "source": "ep-2026-09-15-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-15",
+      "last_applied": "2026-09-15T09:14:10.086222+00:00",
+      "category": "general",
+      "pattern": "Every Anexo J input has a file: hedge premiums AND trade dates from the JPM valuation workbook in Drive/Debt/CIM/Reporting/{YYYYMM}; Monex fees from Marisol's attached honorarios PDF; MX interest from Sam McNulty (Ocorian); F/12340 balance from #ops-mx-spv. Download and read before asking Brian for anything. When payments exceed the trust balance, trim clause (x) by exactly the shortfall and nothing else. The final .docx must be uploaded to Drive Debt/CIM/Reporting/{YYYYMM}/ in the same pass as the send, and once he has authorised the send, send it without a second confirmation question.",
+      "problem": "August 2026 Anexo J / carta de instruccion for Monex F/12340 (2026-09-14). Asked Brian for hedge premiums, trade dates and the interest amount that were already in a Drive workbook and an attached invoice; then asked whether to send after he had already authorised it; then sent the letter without filing it in Drive.",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-09-15-259": {
+      "id": "pat-2026-09-15-259",
+      "name": "The hold-out fit exists to MEASURE error, never to publish. ",
+      "source": "ep-2026-09-15-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-15",
+      "last_applied": "2026-09-15T09:14:10.167302+00:00",
+      "category": "general",
+      "pattern": "The hold-out fit exists to MEASURE error, never to publish. Any time new actuals exist, refit through the last complete tape day, forecast from the last actual print, and state the as-of date, the last actual and the workbook/chart links in the same message. 'Should I rerun it' is always yes - rerun first, then answer.",
+      "problem": "Daily/weekly receivable balance forecast published on 2026-09-14 for as-of 13-Sep with a 3.58% hold-out WAPE, generated from an earlier fit rather than a refit through the latest complete tape day, and reported without naming the republished files.",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
       ]
     }
   }

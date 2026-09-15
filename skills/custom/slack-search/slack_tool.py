@@ -248,6 +248,60 @@ def cmd_send(recipient, message):
         print("(Note: this is the owner. The polling cron filters this out of the dashboard.)")
 
 
+def cmd_upload(channel, paths, comment, as_owner=False):
+    """Upload one or more files to a channel or DM with a single initial comment.
+
+    For deliverables that should land as real attachments rather than links. as_owner posts
+    under the owner identity via the user token (use when the bot is not a member of the
+    target channel); otherwise the bot posts. Either way the send is appended to
+    bot_dm_history.log so it appears on the audit dashboard.
+    """
+    if not comment or not comment.strip():
+        print("ERROR: empty comment - refusing to upload.", file=sys.stderr)
+        sys.exit(1)
+    uploads = []
+    for p in paths:
+        if not os.path.exists(p):
+            print(f"ERROR: file not found: {p}", file=sys.stderr)
+            sys.exit(1)
+        uploads.append({'file': p, 'title': os.path.basename(p)})
+    client = _get_client() if as_owner else _get_bot_client()
+    try:
+        resp = client.files_upload_v2(file_uploads=uploads, channel=channel,
+                                      initial_comment=comment)
+    except Exception as e:
+        print(f"ERROR: files_upload_v2 to {channel} failed: {e}", file=sys.stderr)
+        sys.exit(1)
+    files = resp.get('files') or ([resp.get('file')] if resp.get('file') else [])
+    ids = ', '.join((f or {}).get('id', '?') for f in files)
+    try:
+        log_path = None
+        cur = Path(__file__).resolve().parent
+        for _ in range(8):
+            if (cur / "start.sh").exists():
+                log_path = cur / "bot_dm_history.log"
+                break
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+        if log_path is None:
+            log_path = Path("/c/Jeeves/redshift-bot/bot_dm_history.log")
+        line = (
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+            f"[Slack outbound] ts= to_user_id={channel} to_user_name='channel-upload' "
+            f"channel={channel} bot_user_id= "
+            f"sender={'slack-upload-tool-as-owner' if as_owner else 'slack-upload-tool'} "
+            f"files={[os.path.basename(p) for p in paths]!r} file_ids={ids!r} "
+            f"text={comment!r}"
+        )
+        with log_path.open('a', encoding='utf-8') as f:
+            f.write(line + '\n')
+    except Exception as e:
+        print(f"WARN: audit log append failed: {e}", file=sys.stderr)
+    print(f"Uploaded {len(uploads)} file(s) to {channel} as "
+          f"{'owner' if as_owner else 'bot'}: {ids}")
+
+
 def cmd_allowlist(action, target=None):
     """Manage the inbound DM allowlist (backend/.deer-flow/_slack_dm_allowlist.json).
 
@@ -403,7 +457,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: python slack_tool.py <command> [args]")
-        print("Commands: search, lookup, send, send-as-owner, allowlist")
+        print("Commands: search, lookup, send, upload, send-as-owner, allowlist")
         sys.exit(1)
 
     command = sys.argv[1]
@@ -476,6 +530,28 @@ def main():
             print('   or: python slack_tool.py send-as-owner --channel <id> [--thread <ts>] "message text"', file=sys.stderr)
             sys.exit(1)
         cmd_send_as_owner(channel, msg, thread, from_proposal)
+
+    elif command == 'upload':
+        # python slack_tool.py upload --channel <id> [--as-owner] --comment "text" file1 [file2 ...]
+        channel = comment = None
+        as_owner = False
+        paths = []
+        i = 2
+        while i < len(sys.argv):
+            a = sys.argv[i]
+            if a == '--channel' and i + 1 < len(sys.argv):
+                channel = sys.argv[i + 1]; i += 2
+            elif a == '--comment' and i + 1 < len(sys.argv):
+                comment = sys.argv[i + 1]; i += 2
+            elif a == '--as-owner':
+                as_owner = True; i += 1
+            else:
+                paths.append(sys.argv[i]); i += 1
+        if not channel or not paths or not comment:
+            print('Usage: python slack_tool.py upload --channel <id> [--as-owner] '
+                  '--comment "text" <file> [file ...]', file=sys.stderr)
+            sys.exit(1)
+        cmd_upload(channel, paths, comment, as_owner)
 
     else:
         print(f"Unknown command: {command}", file=sys.stderr)

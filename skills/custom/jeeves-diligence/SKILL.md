@@ -234,6 +234,27 @@ When writing a DDQ response document that will be shared externally (e.g., Vista
 
 ---
 
+## HARD RULE — a counterparty's questions get ANSWERS, not a matrix (added 2026-09-15)
+
+When a lender sends a list of questions or a data request (BBVA Spark's 2026-09-14 *"Info for
+increasing in SBLC/Overdraft"* is the precedent), the reply to Brian is **their numbering, one
+answer per line, number first**:
+
+```
+1. <figure/answer>. <one clause of support if it is not self-evident.>
+2. ...
+```
+
+**No tables.** Slack renders a multi-column table as unreadable wrapped text on his phone, and a
+table forces him to hunt for the answer he asked for. His words: *"Tables not readable, way too
+fucking verbose, just answer the goddamn questions."* Tables belong in the attached workbook, never
+in the message. If a question cannot be answered from data on hand, that line reads
+`N. [Needs confirmation] — <what is missing and who has it>` and nothing more. Supporting
+derivations, caveats and methodology go in the attachment, not in the body — and this rule also
+covers re-answers: if he asks the same question twice, shorten, never expand.
+
+---
+
 ## Tracker and Folder Hygiene
 
 Lessons from BBVA DD reconciliation:

@@ -593,6 +593,25 @@ def run_mx_bb():
         log.info(f"  [{step}] OK: {out[-300:]}")
         return out
 
+    def _run_retry(cmd, step, timeout, attempts=3, backoff=20):
+        """_run with bounded retries -- for NETWORK steps (Drive list/upload).
+
+        2026-09-14: the day's tape died because the Drive listing took >120s
+        (measured 102s on a good day -- it was always one slow call away from
+        failing) and a single TimeoutExpired killed the whole run. Network
+        steps now get 3 tries before the job is declared failed.
+        """
+        last_err = None
+        for i in range(1, attempts + 1):
+            try:
+                return _run(cmd, step if i == 1 else f"{step}_try{i}", timeout=timeout)
+            except Exception as err:
+                last_err = err
+                log.warning(f"  [{step}] attempt {i}/{attempts} failed: {str(err)[:200]}")
+                if i < attempts:
+                    time.sleep(backoff)
+        raise last_err
+
     try:
         # -- 1. Generate raw SOFOM tape (with one zscaler-reauth retry) ----------
         build_script = os.path.join(skills_dir, 'build_mx.py')
@@ -622,10 +641,18 @@ def run_mx_bb():
 
         # -- 2. Find most-recent SOFOM Master on Drive to use as template -------
         list_script = os.path.join(skills_dir, '..', 'google-drive', 'list_drive_folder.py')
-        listing = _run(
-            [sys.executable, list_script, '1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU',
-             '--recursive', '--max-depth', '4'],
-            'list_drive', timeout=120
+        # 2026-09-14: was a --max-depth 4 recursive crawl of the whole Debt root
+        # (1-0K8EM8slr1_I4Iik7_ZZn0t4SSAMKLU): 2,167 items, 102s measured, 120s
+        # timeout -> the job failed the moment Drive was slightly slow. Both
+        # things this step needs (the newest SOFOM Master and the {yyyymm}/
+        # upload folder) live in Debt/CIM/Reporting, so list ONLY that folder at
+        # depth 1: ~18s, and no cross-facility {yyyymm}/ name collisions with
+        # Debt/Neuberger Berman/Reporting.
+        MX_REPORTING_FOLDER = '1oDi6HjzArnX_jPQbI9UfEs4R5DC9TTrA'
+        listing = _run_retry(
+            [sys.executable, list_script, MX_REPORTING_FOLDER,
+             '--recursive', '--max-depth', '1'],
+            'list_drive', timeout=300
         ) or ""
 
         best_date, template_id = '', ''
@@ -664,9 +691,9 @@ def run_mx_bb():
 
         # -- 5. Upload (--new is REQUIRED so the dated master isn't overwritten) -
         upload_script = os.path.join(skills_dir, '..', 'google-drive', 'upload_to_drive.py')
-        upload_out = _run(
+        upload_out = _run_retry(
             [sys.executable, upload_script, final_wb, '--folder', month_folder_id, '--new'],
-            'upload', timeout=120
+            'upload', timeout=300, attempts=3
         )
         drive_link = ''
         m_link = _re.search(r'https://(?:docs|drive)\.google\.com/\S+', upload_out)
@@ -1227,8 +1254,25 @@ def run_loop():
                 # ── MX Borrowing Base (SOFOM) ──────────────────
                 # Every day at 8:30am PST.
                 if (now.hour > 8 or (now.hour == 8 and now.minute >= 30)):
-                    if not _state_completed_today(state, 'last_mx_bb', today_str) \
-                            and not state.get('last_mx_bb', '').endswith('_running'):
+                    # 2026-09-14: a '_failed' marker blocks every later tick, so one
+                    # transient fault (Drive slow, Zscaler blip) used to cost the whole
+                    # day's tape. Allow up to 2 automatic same-day retries; after that it
+                    # stays failed and needs a human, as before.
+                    _mx_val = state.get('last_mx_bb', '')
+                    _mx_retry = False
+                    if _mx_val == f"{today_str}_failed":
+                        _rk = state.get('mx_bb_retries', '')
+                        _n = int(_rk.split(':')[1]) if _rk.startswith(today_str + ':') else 0
+                        if _n < 2:
+                            _mx_retry = True
+                            with _state_lock:
+                                _s = load_state()
+                                _s['mx_bb_retries'] = f"{today_str}:{_n + 1}"
+                                _s.pop('last_mx_bb', None)
+                                save_state(_s)
+                            log.warning(f"mx_bb: auto-retry {_n + 1}/2 after failed run")
+                    if _mx_retry or (not _state_completed_today(state, 'last_mx_bb', today_str)
+                            and not _mx_val.endswith('_running')):
                         _launch_background('mx_bb', run_mx_bb, 'last_mx_bb', today_str)
 
 

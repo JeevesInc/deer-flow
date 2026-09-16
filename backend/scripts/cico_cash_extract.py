@@ -61,6 +61,12 @@ def _payload_has_image(payload) -> bool:
     return any(_payload_has_image(p) for p in (payload.get("parts") or []))
 
 
+# Mariana's daily report is subject "YYMMDD CICO- Daily balances"; tolerate
+# spacing/dash/case drift and a "Re:"/"Fwd:" prefix. Anything else on a CICO
+# thread (model updates, diligence schedules) is discussion, not data.
+_DAILY_BALANCES_RE = re.compile(r"cico\s*-?\s*daily\s*balance", re.IGNORECASE)
+
+
 def _fetch_latest_cico(svc):
     """Newest CICO email that actually carries balance screenshots.
 
@@ -71,8 +77,19 @@ def _fetch_latest_cico(svc):
     images -> "No images to OCR; aborting" -> state frozen on 2026-07-27 cash
     while the digest kept printing it as current.
 
-    Sender-agnostic now: scan newest-first, take the first message with an
-    image attachment (checked from the payload, no attachment download).
+    Sender-agnostic, but NOT subject-agnostic. Broken again 2026-09-15: the
+    "has an image attachment" test alone let Axel's 23:43 reply on the
+    "CICO - September 2026" *model* thread (quoted screenshots + signature
+    images, no balance table) outrank Mariana's real "260914 CICO- Daily
+    balances" sent 47 minutes earlier. Vision then read numbers off the model
+    screenshots (restricted 214,828,418; DACA wandering 105-153MM between
+    runs), the reconciliation gate refused the write — correctly — and the
+    dashboard served stale cash for 5 runs. Selection, not the gate, was wrong.
+
+    So: scan newest-first and take the first message that (a) has an image
+    attachment and (b) whose subject matches the daily-balances report name.
+    Discussion threads that merely mention CICO are never eligible. If nothing
+    matches we raise — a loud failure beats OCR'ing the wrong email.
     """
     res = svc.users().messages().list(
         userId="me", q="subject:CICO has:attachment", maxResults=25
@@ -84,15 +101,21 @@ def _fetch_latest_cico(svc):
     for m in msgs:
         full = svc.users().messages().get(userId="me", id=m["id"], format="full").execute()
         hdrs = {h["name"]: h["value"] for h in full["payload"].get("headers", [])}
-        if _payload_has_image(full["payload"]):
-            if skipped:
-                log.info("Skipped %d CICO hit(s) with no images: %s",
-                         len(skipped), "; ".join(skipped[:5]))
-            return full
-        skipped.append(hdrs.get("Subject", "")[:60])
+        subject = hdrs.get("Subject", "")
+        if not _payload_has_image(full["payload"]):
+            skipped.append(subject[:55] + " [no images]")
+            continue
+        if not _DAILY_BALANCES_RE.search(subject):
+            skipped.append(subject[:55] + " [not the daily balances report]")
+            continue
+        if skipped:
+            log.info("Skipped %d non-report CICO hit(s): %s",
+                     len(skipped), "; ".join(skipped[:5]))
+        return full
     raise RuntimeError(
-        "No CICO email with image attachments in the last %d hits (checked: %s)"
-        % (len(msgs), "; ".join(skipped[:5]))
+        "No CICO daily-balances email with image attachments in the last %d "
+        "subject:CICO hits (checked: %s)"
+        % (len(msgs), "; ".join(skipped[:6]))
     )
 
 
@@ -408,16 +431,72 @@ def _ocr_image(client: Anthropic, img_bytes: bytes) -> list[dict]:
         return []
 
 
-def _alert_extract_failure(subject: str, date: str, summary: dict) -> None:
-    """A refused write must be loud. Silent refusal let CICO cash go 9 days
-    stale (2026-08-31 -> 2026-09-09) with nothing but a log line."""
+# A refusal repeats every poll (30 min) until the source email changes, so an
+# un-deduped alerter turns one bad email into 20 identical DMs overnight
+# (2026-09-15: 18 alerts between midnight and 09:27 — "fix it or turn it off").
+# Alert once per (email, failure-kind), then stay quiet for this long.
+_ALERT_REPEAT_SECONDS = int(os.environ.get("CICO_ALERT_REPEAT_SECONDS", "21600"))
+ALERT_STATE_FILE = BACKEND_DIR / ".deer-flow" / "_cico_alert_state.json"
+
+
+def _alert_should_send(key: str) -> bool:
+    """True if this exact failure hasn't been alerted inside the repeat window."""
+    now = datetime.now()
     try:
+        prev = json.loads(ALERT_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        prev = {}
+    last = prev.get(key)
+    if last:
+        try:
+            if (now - datetime.fromisoformat(last)).total_seconds() < _ALERT_REPEAT_SECONDS:
+                log.warning("Suppressing duplicate CICO failure alert (%s); "
+                            "already alerted at %s", key, last)
+                return False
+        except Exception:
+            pass
+    # prune anything older than 48h so the file can't grow unbounded
+    keep = {}
+    for k, v in prev.items():
+        try:
+            if (now - datetime.fromisoformat(v)).total_seconds() < 172800:
+                keep[k] = v
+        except Exception:
+            continue
+    keep[key] = now.isoformat()
+    try:
+        ALERT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ALERT_STATE_FILE.write_text(json.dumps(keep, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.warning("Could not persist CICO alert state: %s", e)
+    return True
+
+
+def _alert_extract_failure(subject: str, date: str, summary: dict,
+                           reason: str | None = None) -> None:
+    """A refused write must be loud — but loud once, not every 30 minutes.
+
+    Silent refusal let CICO cash go 9 days stale (2026-08-31 -> 2026-09-09)
+    with nothing but a log line; un-deduped refusal then spammed 18 identical
+    DMs overnight on 2026-09-15. Both are failures. One DM per (email,
+    failure-kind) per _ALERT_REPEAT_SECONDS is the middle ground: a new bad
+    email, or a new failure mode, still alerts immediately.
+
+    `reason` overrides the default reconciliation wording so a selection
+    failure (no daily-balances email found) doesn't masquerade as an OCR
+    mismatch — the two need different fixes.
+    """
+    try:
+        kind = "selection" if reason else "reconciliation"
+        if not _alert_should_send(f"{subject}|{date}|{kind}"):
+            return
         nums = {k: round(v) for k, v in summary.items() if isinstance(v, float)}
         msg = (
             ":rotating_light: CICO extract blocked - dashboard cash will be stale.\n"
             f"Email: {subject} ({date})\n"
             f"OCR read: {nums}\n"
-            "Totals failed the cash + restricted reconciliation; previous state kept."
+            + (reason or "Totals failed the cash + restricted reconciliation; "
+                         "previous state kept.")
         )
         tool = Path(__file__).resolve().parents[1] / "skills" / "custom" / "slack-search" / "slack_tool.py"
         if not tool.exists():
@@ -430,7 +509,14 @@ def _alert_extract_failure(subject: str, date: str, summary: dict) -> None:
 
 def main() -> int:
     svc = _gmail_service()
-    msg = _fetch_latest_cico(svc)
+    try:
+        msg = _fetch_latest_cico(svc)
+    except RuntimeError as e:
+        log.error("Could not locate a CICO daily-balances email: %s", e)
+        _alert_extract_failure("(none found)", "-", {},
+                               reason=f"No CICO daily-balances email with images "
+                                      f"found; previous state kept. {e}")
+        return 3
     hdrs = {h["name"]: h["value"] for h in msg["payload"].get("headers", [])}
     subject = hdrs.get("Subject", "")
     date = hdrs.get("Date", "")

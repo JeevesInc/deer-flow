@@ -290,6 +290,29 @@ the month-end one different is the extra certifications it must carry:
 This cron exists so the month-end variant is never silently skipped behind the weekly one. When the
 14th falls in the same week as a Monday NB run, they are still two separate obligations.
 
+### HARD RULE — 6.01(c) certification mechanics, defined-term cites, and the outbound draft (added 2026-09-16 after three follow-ups in one thread on 2026-09-15)
+
+Three things Brian had to ask for in a single thread about Kacper's Jul-2026 monthly package:
+
+1. **Certification, not a certificate form.** Monthly financials under 6.01(c) carry **no Exhibit C** —
+   6.02(a) attaches the Compliance Certificate only to 6.01(a) and 6.01(b) (annual and quarterly).
+   The monthly needs a **one-paragraph certification signed by a Responsible Officer**: CEO, president,
+   CFO, COO, treasurer, chief compliance officer, general counsel or secretary. **A Controller is NOT a
+   Responsible Officer** unless designated in writing to the Administrative Agent, so Kacper's package
+   needs Alexander's signature. **The officer signs the certification, not every financial statement
+   page** (Brian: *"Does he need to sign the financials or just the certificate?"*). Monthly covenant
+   compliance rides on the **Exhibit G borrowing base certificate**, not on the financials.
+2. **Every defined term carries its agreement and section cite, and you never assert a term is absent.**
+   NB **defines** Consolidated Adjusted EBITDA (it is the 7.01(c) EBITDA-coverage input); the
+   **free-cash-flow proxy is a CIM definition**. Do not attribute one agreement's defined term to the
+   other and do not say a term is missing until you have read that agreement's definitions article
+   (Brian: *"the free cash flow proxy on the P&L is a definition in the CIM agreement. Are you telling
+   me there's no definition of EBITDA in NB?"*).
+3. **A compliance read is not delivered until the outbound draft exists.** When Brian asks whether
+   someone's financials satisfy a covenant, the same pass produces the reply draft on the actual
+   thread, with the verbatim text in Slack — he should never have to say *"can you just reply to
+   Alex's email to Kacper with your findings"*.
+
 **HARD RULE — the period Brian names applies to the WHOLE set, and the advance rates are yours
 (added 2026-09-15).** Two corrections in one thread on 2026-09-14: *"are the other deliverables
 done?"* (one deliverable of the set was built, the rest were described) and *"didn't I say 'do

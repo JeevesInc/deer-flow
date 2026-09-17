@@ -61,6 +61,32 @@ family map above and load the right one.
 
 ---
 
+## ⚠️ HARD RULE — a covenant failure KILLS the outbound draft (Brian, 2026-09-16)
+
+His words, escalating twice in one thread: *"NEVER ALLOW IT TO BE CREATED WITH A COVENANT FAILURE
+THAT ISN'T FLAGGED"* and, on the disclosure-style draft that followed, *"no we're not fucking
+sending that, don't ever draft an email like that."*
+
+- **Any failing Section 7.01 test (Liquidity, DQ30, EBITDA coverage) or a BB that does not cover
+  drawn + requested = NO outbound artifact of any kind.** Not a clean email, not a disclosing
+  email, not a "heads-up" email, not a draft left in Drafts for Brian to decide on. A draft that
+  exists can be sent by accident; the absence of a draft is the control.
+- **Fail-closed:** if the covenant check cannot be evaluated (missing tab, unreadable formula,
+  build error), treat it as a FAILURE and withhold. Never infer "probably passes."
+- **The escalation path is Slack DM to Brian, internal voice, with the failing test, the computed
+  value, the threshold and the gap.** Never lender-facing language about a shortfall — Brian owns
+  every word a lender sees about a covenant.
+- **Never read the pass/fail off the workbook.** openpyxl writes formulas with no cached value, so
+  every covenant cell is `None` on read. Re-compute in Python: `nb_covenant_check.check_workbook()`
+  (gate wired into `report_scheduler_cron.py` §3.4, 2026-09-16).
+- **When Brian adds bank accounts, sweep the WHOLE account set in one pass.** On 2026-09-16 accounts
+  were added one at a time across four corrections (Brazil account -> "add all the major accounts"
+  -> the four DACA'd accounts), costing 76 turns on one thread. Pull every account off the current
+  CICO file, add them all, and state which ones carry `controlled_acct = Yes` and why — the DACA
+  scope drives the cash pool and Section 7.01(a), so the flag matters more than the row.
+
+---
+
 ## ⚠️ HARD RULES — scheduler edits and completion truth (added 2026-08-10)
 
 0. **New or changed SQL born in this skill belongs in cfo-org-kb, and you CANNOT write it there with `write_file`/`str_replace` or with `skill_manage.py patch`.** Both fail: the clone is permission-denied to the write tools, and `skill_manage.py` edits the local clone with no git push, silently breaking the "GitHub is the only store, commit every query" rule. **Pattern:** write a python script to `WORKSPACE_PATH` that does plain `open().write()` into the clone, then `subprocess` the git add / commit / push with `cwd` set to the clone dir, and run it with `uv run python`. This is already a documented HARD RULE in cfo-org-kb/SKILL.md that recurred a 6th time on 2026-08-19 (Permission denied writing the new `nb_dq30_monthend_detail.sql`) because the work started HERE, in the borrowing-base skill, and cfo-org-kb/SKILL.md was never loaded. Read that rule before touching any .sql under cfo-org-kb.
@@ -73,6 +99,16 @@ family map above and load the right one.
    code path actually executed in `deerflow-gateway.err.log`.** Scripts invoked as subprocesses
    (`build_mx.py`, `merge_template.py`, `zscaler-reauth/reauth.py`) DO pick up edits immediately —
    only the long-running module is affected.
+
+   **Two-line proof, run it every time you patch this file (added 2026-09-16, Dream #121):** compare
+   the gateway process start time to the module mtime — `Get-Process python | Select Id,StartTime`
+   via `subprocess` vs `Path(cron).stat().st_mtime`. If mtime > StartTime, the edit is NOT live, full
+   stop, and saying "the gate is in place" is false. Yesterday the gateway started **11:14:22** and
+   `report_scheduler_cron.py` was written at **11:15:12** — 50 seconds later — so both that day's
+   changes (the covenant gate and the Monday-10:30 AIG TEX job) sit in a module version the running
+   process never imported. `sc start deerflow-gateway` alone returns **rc=1056 "instance already
+   running"** and does nothing; a real restart is `sc stop` -> wait for the port to free -> `sc start`,
+   then confirm a NEW "Report scheduler started" line in `deerflow-gateway.err.log`.
 
 2. **`_report_scheduler_state.json` is not proof the build ran.** Verify the artifact:
    `deer-flow\skills\custom\jeeves-borrowing-base\outputs\tape_sofom_daterange_<start>_<end>.xlsx`.

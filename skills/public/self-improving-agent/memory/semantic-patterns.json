@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 224,
+      "applications": 231,
       "created": "2026-04-07",
-      "last_applied": "2026-09-16T09:09:42.940932+00:00",
+      "last_applied": "2026-09-17T09:11:35.549332+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4142,6 +4142,38 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-09-16-260": {
+      "id": "pat-2026-09-16-260",
+      "name": "A failing covenant test means NO outbound email of any kind ",
+      "source": "ep-2026-09-16-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-16",
+      "last_applied": "2026-09-16T18:13:36.006784+00:00",
+      "category": "general",
+      "pattern": "A failing covenant test means NO outbound email of any kind - not a clean one, not a disclosure one. Covenant failures are flagged INTERNALLY to Brian on Slack only. Never write lender-facing language about a shortfall; the fix is to cure or correct the inputs, and Brian decides what any counterparty hears.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-17-261": {
+      "id": "pat-2026-09-17-261",
+      "name": "A patched daemon-thread module is inert until the gateway pr",
+      "source": "ep-2026-09-17-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-17",
+      "last_applied": "2026-09-17T09:11:47.042607+00:00",
+      "category": "general",
+      "pattern": "A patched daemon-thread module is inert until the gateway process restarts, and rc=1056 from sc start is NOT a restart. Prove liveness by comparing process StartTime to file mtime before ever telling Brian a scheduler-level control is in place.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

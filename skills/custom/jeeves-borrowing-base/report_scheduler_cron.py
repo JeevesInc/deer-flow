@@ -5,6 +5,9 @@ Schedule:
   - 2nd of each month, 8am+:     Portfolio report for the 1st (once per month)
   - Every weekday, 8am+:         US Borrowing Base (yesterday's date, for dashboard)
   - Every day, 8:30am+ PST:      MX Borrowing Base (yesterday's date)
+  - Mondays, 8:30am+ PT:         NB Borrowing Base (as of the prior Sunday)
+  - Mondays, 9:30am+ PT:         Receivable balance forecast
+  - Mondays, 10:30am+ PT:        AIG/Aronova TEX invoice file -> Brian's DM (no email)
   - Weekdays only, hourly 8am+:  SOFOM distribution tape reply to Axel
 
 Mechanism:
@@ -852,7 +855,36 @@ def run_nb_bb():
         # by hand on 8/25, 9/2 and 9/9 even though the workbook built fine.
         # DRAFT ONLY -- nothing is ever auto-sent.
         draft_note = ''
+
+        # -- 3.4 Covenant gate -------------------------------------------------
+        # 2026-09-16 (Brian): "NEVER ALLOW IT TO BE CREATED WITH A COVENANT
+        # FAILURE THAT ISN'T FLAGGED."  The workbook stores every covenant cell
+        # as an uncached Excel formula, so nb_covenant_check.py re-computes
+        # 7.01(a) Liquidity, 7.01(b) DQ30, 7.01(c) EBITDA Coverage and BB
+        # sufficiency in Python.  Fail closed: if the check errors or any test
+        # fails, NO draft is created and Slack gets a red flag instead.
+        class _CovenantGate(Exception):
+            pass
+
+        cov_res = None
+        cov_err = ''
         try:
+            sys.path.insert(0, skills_dir)
+            from nb_covenant_check import check_workbook as _cov_check
+            from nb_covenant_check import format_report as _cov_fmt
+            cov_res = _cov_check(final_wb)
+            log.info('  [covenant_check] ' + _cov_fmt(cov_res).replace('\n', ' | '))
+        except Exception as _ce:
+            cov_err = str(_ce)[:200]
+            log.error(f'  [covenant_check] FAILED: {_ce}', exc_info=True)
+
+        try:
+            if cov_res is None:
+                raise _CovenantGate(
+                    f'covenant check could not run ({cov_err}) -- no draft created')
+            if not cov_res['ok']:
+                raise _CovenantGate('; '.join(
+                    '{} -- {}'.format(t['name'], t['detail']) for t in cov_res['failures']))
             import shutil as _shutil, base64 as _b64
             sys.path.insert(0, os.path.join(skills_dir, '..', 'gmail'))
             import gmail_tool as _gt
@@ -880,8 +912,18 @@ def run_nb_bb():
                 body={'message': {'raw': _b64.urlsafe_b64encode(_mime.as_bytes()).decode()}}
             ).execute()
             log.info(f"  [gmail_draft] OK: draft {_draft['id']} -- {_subject}")
+            _cov_line = '; '.join(
+                '{}: {}'.format(t['name'].split()[1] if len(t['name'].split()) > 1
+                                else t['name'], t['detail'])
+                for t in cov_res['tests'])
+            log.info('  [covenant_check] all tests pass -- ' + _cov_line)
             draft_note = (f"\n:email: Draft ready in Gmail: *{_subject}* "
                           f"(To: {len(_cfg['to'])}, Cc: {len(_cfg.get('cc', []))}) -- review and send.")
+        except _CovenantGate as _cg:
+            log.error(f'  [gmail_draft] WITHHELD -- covenant gate: {_cg}')
+            draft_note = ('\n:rotating_light: *COVENANT FAILURE -- Gmail draft WITHHELD.* '
+                          f'{_cg}\nNothing was drafted to NB / Wilmington Trust. '
+                          'Review the certificate before any send.')
         except Exception as _de:
             log.error(f"  [gmail_draft] FAILED: {_de}", exc_info=True)
             draft_note = f"\n:warning: Gmail draft step failed -- `{str(_de)[:200]}`"
@@ -1217,6 +1259,119 @@ def run_receivable_forecast():
     log.info(f"run_receivable_forecast: OK\n{out[-800:]}")
 
 
+def run_aig_tex_file():
+    """Build the weekly AIG/Aronova TEX invoice-history file and post it to Brian's DM.
+
+    Cadence set by Brian 2026-09-16: Mondays ~10:30am PT, no email. The file still has to
+    be uploaded to Aronova's SFTP (/puts) by hand -- this machine holds NO ftp-tex
+    credentials, and the Airflow DAG (airflow-dags PR #542, merged 2026-09-09) is still
+    waiting on the aronova_tex_sftp connection + the sftp provider in the image. So the
+    job's deliverable is a validated file sitting in Slack, ready to drag onto the SFTP.
+
+    Pipeline:
+      1. sql_runner.py on cfo-org-kb/sql/aig_invoice_data_v8_tex_validated.sql -> CSV
+      2. aig_tex_builder.build_tex_dataframe / write_tex_file -> Jeeves-Invoice-{stamp}.txt
+      3. aig_tex_builder.validate_tex_file -- HARD GATE. Any error and nothing is posted
+         except the failure, because this file lands in a counterparty's platform.
+      4. slack_tool.py upload -> the .txt as a real attachment in Brian's DM, with the
+         row count and the per-currency breakdown in the comment.
+    """
+    import importlib.util, subprocess
+
+    now_local   = datetime.now()
+    stamp       = now_local.strftime('%Y%m%d-%H%M')
+    yyyymmdd    = now_local.strftime('%Y%m%d')
+    outputs_dir = os.environ.get('OUTPUTS_PATH', str(Path(__file__).resolve().parent)).replace(chr(92), '/')
+    skills_dir  = os.path.dirname(os.path.abspath(__file__))
+    owner_uid   = (os.environ.get('SLACK_OWNER_USER_ID')
+                   or os.environ.get('SLACK_OWNER_ID') or 'U05B5HGNCN9')
+    # files_upload_v2 needs a CONVERSATION id (^[CGDZ]...), not a user id -- passing
+    # U05B5HGNCN9 fails with invalid_arguments (proved on the 2026-09-16 dry run).
+    # Resolve the DM channel once, here, and fall back to the user id so a
+    # conversations.open hiccup does not kill the build.
+    owner_dm = owner_uid
+    try:
+        sys.path.insert(0, os.path.join(skills_dir, '..', '_shared'))
+        from notify import get_client
+        owner_dm = get_client().conversations_open(users=[owner_uid])['channel']['id']
+    except Exception as _e:
+        log.warning('run_aig_tex_file: could not resolve owner DM channel: ' + str(_e))
+
+    sql_path = os.path.join(skills_dir, '..', 'cfo-org-kb', 'sql',
+                            'aig_invoice_data_v8_tex_validated.sql')
+    csv_path = os.path.join(outputs_dir, 'aig_tex_raw_' + yyyymmdd + '.csv')
+    txt_path = os.path.join(outputs_dir, 'Jeeves-Invoice-' + stamp + '.txt')
+
+    log.info('run_aig_tex_file: building AIG TEX file ' + os.path.basename(txt_path))
+
+    try:
+        # -- 1. Pull the v8 tape -------------------------------------------------
+        runner = os.path.join(skills_dir, '..', 'jeeves-redshift', 'sql_runner.py')
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        r = subprocess.run([sys.executable, runner, '--file', sql_path, '--output', csv_path,
+                            '--statement-timeout', '900'],
+                           capture_output=True, text=True, timeout=1800,
+                           encoding='utf-8', errors='replace', env=env)
+        if r.returncode != 0 or not os.path.exists(csv_path):
+            raise RuntimeError('v8 query failed (rc=' + str(r.returncode) + '): '
+                               + ((r.stdout or '') + (r.stderr or ''))[-800:])
+
+        # -- 2/3. Format and validate -------------------------------------------
+        import pandas as pd
+        spec = importlib.util.spec_from_file_location(
+            'aig_tex_builder', os.path.join(skills_dir, 'aig_tex_builder.py'))
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+
+        raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        df = builder.build_tex_dataframe(raw)
+        builder.write_tex_file(df, txt_path)
+        errors, stats = builder.validate_tex_file(txt_path)
+        if errors:
+            raise RuntimeError('TEX validation failed, file NOT posted: ' + '; '.join(errors))
+
+        # -- 4. Per-currency breakdown (amounts are mixed currency, never summed) --
+        num = df.copy()
+        num['invoicedamount'] = pd.to_numeric(num['invoicedamount'], errors='coerce')
+        by_ccy = num.groupby('currency').agg(rows=('statement_id', 'count'),
+                                             invoiced=('invoicedamount', 'sum'))
+        by_ccy = by_ccy.sort_values('rows', ascending=False)
+        ccy_txt = '  |  '.join(
+            str(c) + ' ' + format(int(v['rows']), ',') + ' rows / ' + format(v['invoiced'], ',.0f')
+            for c, v in by_ccy.iterrows())
+        open_rows = int((df['settlementdatetime'].astype(str).str.strip() == '').sum())
+
+        comment = (
+            ':inbox_tray: *AIG / TEX weekly file -- ' + now_local.strftime('%a %d %b %Y') + '*'
+            + chr(10) + '`' + os.path.basename(txt_path) + '`  -- '
+            + format(stats['rows'], ',') + ' rows, ' + str(stats['fields'])
+            + ' fields, validation clean, zip populated '
+            + str(stats.get('zip_populated_pct', 0)) + '%, ' + format(open_rows, ',')
+            + ' open invoices.' + chr(10)
+            + 'Invoiced by currency (local, no FX): ' + ccy_txt + chr(10)
+            + '_Upload to Aronova /puts -- no SFTP credentials on this machine, so this step '
+            + 'is still manual until the Airflow DAG gets its connection._'
+        )
+
+        up = os.path.join(skills_dir, '..', 'slack-search', 'slack_tool.py')
+        r2 = subprocess.run([sys.executable, up, 'upload', '--channel', owner_dm,
+                             '--comment', comment, txt_path],
+                            capture_output=True, text=True, timeout=300,
+                            encoding='utf-8', errors='replace', env=env)
+        if r2.returncode != 0:
+            raise RuntimeError('Slack upload failed: ' + ((r2.stdout or '') + (r2.stderr or ''))[-500:])
+
+        log.info('run_aig_tex_file: done. ' + str(stats))
+
+    except Exception as exc:
+        log.error('run_aig_tex_file failed: ' + str(exc), exc_info=True)
+        _post_slack(
+            ':warning: *AIG / TEX weekly file* failed to build -- nothing was produced.'
+            + chr(10) + '`' + str(exc)[:600] + '`'
+        )
+
+
 def run_loop():
     log.info(f"Report scheduler started. Interval={CHECK_INTERVAL}s, max_task={MAX_TASK_SECONDS}s.")
     _reconcile_stale_running(datetime.now().date().isoformat())
@@ -1295,6 +1450,20 @@ def run_loop():
                         and not state.get('last_receivable_forecast', '').endswith('_running')):
                     _launch_background('receivable_forecast', run_receivable_forecast,
                                        'last_receivable_forecast', today_str)
+
+                # -- AIG / Aronova TEX invoice-history file ------------------
+                # Weekly, MONDAYS from 10:30am PT (Brian, 2026-09-16: "just set this
+                # up as a weekly monday cron, like 1030am. no email needed"). Runs
+                # after the NB BB (8:30) and the receivable forecast (9:30) so the
+                # three heavy Redshift pulls do not overlap. Posts the validated .txt
+                # to Brian's DM; the SFTP upload to Aronova stays manual until the
+                # Airflow DAG has its aronova_tex_sftp connection.
+                if (weekday == 0
+                        and (now.hour > 10 or (now.hour == 10 and now.minute >= 30))
+                        and not _state_completed_today(state, 'last_aig_tex', today_str)
+                        and not state.get('last_aig_tex', '').endswith('_running')):
+                    _launch_background('aig_tex_file', run_aig_tex_file,
+                                       'last_aig_tex', today_str)
 
                 # ── Morning Capital Markets Brief ─────────────────────────
                 # Weekdays only, once per day at 8am — posts BB + CICO snapshot to Brian.

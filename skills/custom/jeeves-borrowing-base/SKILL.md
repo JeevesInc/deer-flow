@@ -105,7 +105,7 @@ sending that, don't ever draft an email like that."*
    via `subprocess` vs `Path(cron).stat().st_mtime`. If mtime > StartTime, the edit is NOT live, full
    stop, and saying "the gate is in place" is false. Yesterday the gateway started **11:14:22** and
    `report_scheduler_cron.py` was written at **11:15:12** — 50 seconds later — so both that day's
-   changes (the covenant gate and the Monday-10:30 AIG TEX job) sit in a module version the running
+   changes were assumed dead. **Re-measured 2026-09-18 (Dream #122) by diffing the pre-patch backup 20260916T181512Z-report_scheduler_cron.py against the live file: that 11:15:12 edit contained ONLY the run_aig_tex_file fix that resolves Brian DM to a conversation id, so the covenant gate AND the Monday AIG TEX job ARE live in the running process — the one dormant thing is the upload target, and the Monday 2026-09-21 10:30 run will build and validate the file and then fail files_upload_v2 with invalid_arguments until the gateway restarts. Diff the backup and NAME the dormant change; never generalise a late mtime into all of that day changes being dead.** The earlier blanket claim that both changes sit in a module version the running
    process never imported. `sc start deerflow-gateway` alone returns **rc=1056 "instance already
    running"** and does nothing; a real restart is `sc stop` -> wait for the port to free -> `sc start`,
    then confirm a NEW "Report scheduler started" line in `deerflow-gateway.err.log`.

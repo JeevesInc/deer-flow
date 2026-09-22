@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 233,
+      "applications": 255,
       "created": "2026-04-07",
-      "last_applied": "2026-09-19T09:17:50.270961+00:00",
+      "last_applied": "2026-09-22T09:18:53.837716+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4188,6 +4188,54 @@
       "pattern": "Liveness verdicts have a shelf life. If the artifact proving a claim is not in git, the claim expires with it \u2014 re-derive from something that still exists or restart the process and stop reasoning. Also: __pycache__ .pyc files are timestamp-based, so the 16-byte header gives the source mtime+size that was compiled and marshal.loads + dis reveals the cached bytecode \u2014 good for 'which source was last compiled', useless as proof of what a long-running process holds, since a patch script recompiles on write.",
       "problem": "Dream #123 audited the claim (made by Dream #122 and written into both STRATEGIC_CONTEXT.md and jeeves-borrowing-base SKILL.md) that the NB borrowing-base covenant gate is live in the running gateway. The supporting artifact \u2014 a pre-patch backup 20260916T181512Z-report_scheduler_cron.py \u2014 no longer exists on disk, and the gateway has not restarted since 2026-09-16 11:14:22 (WinSW wrapper log + Prometheus deerflow_cron_last_heartbeat_ts for report-scheduler = 11:14:48).",
       "solution": "Re-derived what is still observable: bak_20260916 (pre-session copy) contains neither _CovenantGate nor run_aig_tex_file; the final source write 11:15:12 (80,675 bytes) post-dates the 11:14:48 import, so that content is definitively not in memory; the gate is [Unverified]. Downgraded both documents to [Unverified], added the standing instruction to bounce the gateway before the Monday run and to run nb_covenant_check.py by hand until then.",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-21-263": {
+      "id": "pat-2026-09-21-263",
+      "name": "For any retrospective meeting question (what were my takeawa",
+      "source": "ep-2026-09-21-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-21",
+      "last_applied": "2026-09-21T09:16:58.264659+00:00",
+      "category": "general",
+      "pattern": "For any retrospective meeting question (what were my takeaways / what did we agree with X), search from:gemini-notes@google.com with the attendee first name FIRST and read that message; only fall back to Calendar (to pin the date) or Drive (\"... - Notes by Gemini\") if it returns nothing. Rule added to jeeves-dossier SKILL.md 2026-09-21.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-dossier"
+      ]
+    },
+    "pat-2026-09-22-264": {
+      "id": "pat-2026-09-22-264",
+      "name": "A placeholder rule that lives only in a prompt gets talked o",
+      "source": "ep-2026-09-22-021",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-22",
+      "last_applied": "2026-09-22T09:18:22.154243+00:00",
+      "category": "general",
+      "pattern": "A placeholder rule that lives only in a prompt gets talked out of; put it in the tool and cover every format the artifact actually ships in. When an internal input is unobtainable, Brian wants a labelled management estimate, not a tag and not a delay.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-09-22-265": {
+      "id": "pat-2026-09-22-265",
+      "name": "Check every column an output depends on for NULLs before quo",
+      "source": "ep-2026-09-22-022",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-22",
+      "last_applied": "2026-09-22T09:18:22.232204+00:00",
+      "category": "general",
+      "pattern": "Check every column an output depends on for NULLs before quoting the output, and state the gap and its blast radius unprompted. A self-evidently broken reading is an incident to flag, not a number to print.",
+      "problem": "",
+      "solution": "",
       "target_skills": [
         "jeeves-borrowing-base"
       ]

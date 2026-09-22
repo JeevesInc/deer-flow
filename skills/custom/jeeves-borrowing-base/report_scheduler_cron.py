@@ -710,13 +710,29 @@ def run_mx_bb():
         if m_bal and m_elig:
             stats = f"SOFOM balance: *${m_bal.group(1)}*  |  Eligible: *${m_elig.group(1)}*"
 
+        # -- 6b. Source-data gaps are never silent ----------------------------
+        # 2026-09-21 (Brian): "If the spot rate or any other column isn't
+        # populated you need to let me know, not just coalesce over it."
+        # build_mx.py emits one DATA-GAP line per missing critical column;
+        # every one of them goes to Slack ABOVE the numbers, because a base
+        # built on carried-forward FX is not the same number as a market base.
+        gap_lines = [ln.strip() for ln in build_out.splitlines()
+                     if 'DATA-GAP:' in ln]
+        gap_block = ""
+        if gap_lines:
+            uniq = list(dict.fromkeys(g.split('DATA-GAP:', 1)[1].strip() for g in gap_lines))
+            gap_block = (":rotating_light: *SOURCE DATA GAPS -- base is not clean*\n"
+                         + "\n".join(f"  - {g}" for g in uniq) + "\n")
+            log.warning(f"run_mx_bb: {len(uniq)} data gap(s): {uniq}")
+
         msg = (
             f":white_check_mark: *MX Borrowing Base -- {yesterday}*\n"
+            + gap_block
             + (f"{stats}\n" if stats else "")
             + (f"<{drive_link}|Open in Drive>" if drive_link else f"Uploaded to Drive/CIM/{yyyymm}/")
         )
         _post_slack(msg)
-        log.info(f"run_mx_bb: done. {stats}")
+        log.info(f"run_mx_bb: done. {stats}{' | GAPS: ' + str(len(gap_lines)) if gap_lines else ''}")
 
     except Exception as exc:
         log.error(f"run_mx_bb failed: {exc}", exc_info=True)

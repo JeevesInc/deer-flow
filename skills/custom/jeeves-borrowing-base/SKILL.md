@@ -310,6 +310,20 @@ month-end figures on the `dq30` tab were pasted values with only a prose source 
   col W is effectively **`sofom_balance_usd>0` only** (its `N($P2)=1` test can never fire on text).
   The gap is 148 rows, all negative/overpaid balances, -$64,650.45 -- it moves the spot denominator
   but NOT the eligible pool ($118,731,470.95 under either rule at 8/16), so leave `row_flags` alone.
+- **GAP RULE — a NULL column is a finding, not a formatting problem. Report it in the same
+  message, never coalesce or omit it.** 2026-09-21: `loc_tape` had `spot_rate` NULL on all 9,051
+  rows for `max(dt)`, so `balance_usd` was NULL too; the digest printed the MXN figures and said
+  nothing, and Brian had to ask (*"Is spot rate missing from loc tape for the max day?"*), then:
+  *"If the spot rate or any other column isn't populated you need to let me know, not just
+  coalesce over it."* Before reporting any tape-derived number, check every column the output
+  depends on for NULLs and state the gap and its blast radius up front. `data_tape_sofom.sql`
+  carries an `fx_fallback` CTE (cfo-org-kb `fc8ac0d`) — the fallback still gets **reported**, never
+  used silently.
+- **A scheduled run is never "late".** The pipelines fire at the same time every day including
+  weekends. If a figure is missing the cause is a data or build failure — diagnose it and say so;
+  describing it as "weekend lag" was corrected 2026-09-21 (*"Weekend isn't 'late' it runs at the
+  same time every day"*). Equally, a self-evidently broken reading (ineligible == total
+  receivables, eligible = 0, BB = n/a) is an incident to flag, not a number to print.
 - Query of record: `cfo-org-kb/sql/nb_dq30_monthend_detail.sql`. **Never `coalesce(jvs_remaining,0)`**
   -- NULL means no financed tranche, i.e. UNENCUMBERED; coalescing flips such rows (1 row, $518 at
   5/31/2026) and breaks the tie-out.

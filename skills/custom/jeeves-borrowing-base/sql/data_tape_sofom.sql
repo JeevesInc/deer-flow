@@ -18,6 +18,22 @@ max_dq as (
         1=1
     group by 1
 ),
+fx_fallback as (
+    -- 2026-09-21: capital_markets_dm.loc_tape.spot_rate lands LATE for weekend
+    -- dates (the 2026-09-20 08:30 build read dt=2026-09-19 with spot_rate NULL
+    -- for all 788 rows). Every *_usd column is then NULL, elig_ff compares NaN
+    -- and returns 0 for every row, and Exhibit A publishes Eligible = MXN 0.
+    -- Fall back to the company's most recent non-null rate on or before dt.
+    select
+        company_id
+        , spot_rate
+        , row_number() over (partition by company_id order by dt desc) as rn
+    from
+        capital_markets_dm.loc_tape
+    where
+        spot_rate is not null
+        and dt <= '{0}'
+),
 sofom_transfer as (
     select
         c.id
@@ -95,7 +111,7 @@ select
     , lt.balance
     , eb.jvs_remaining
     , lt.balance - eb.jvs_remaining as sofom_balance
-    , (lt.balance - eb.jvs_remaining) * lt.spot_rate as sofom_balance_usd
+    , (lt.balance - eb.jvs_remaining) * coalesce(lt.spot_rate, fxf.spot_rate) as sofom_balance_usd
     , sofom_transfer.transfer_flag
     , lt.card_balance
     , lt.jp_balance
@@ -103,7 +119,7 @@ select
     , lt.jp_interest_balance
     , lt.overpay_balance
     , lt.invoiced
-    , lt.spot_rate
+    , coalesce(lt.spot_rate, fxf.spot_rate) as spot_rate
     , lt.disbursement_amount_usd
     , lt.payment_amount_usd
     , lt.cashback_amount_usd
@@ -115,11 +131,11 @@ select
     , lt.adjustment_amount_usd
     , lt.debit_amount_usd
     , lt.credit_amount_usd
-    , lt.balance_usd
-    , lt.card_balance_usd
-    , lt.jp_balance_usd
-    , lt.jp_principal_balance_usd
-    , lt.jp_interest_balance_usd
+    , coalesce(lt.balance_usd, lt.balance * fxf.spot_rate) as balance_usd
+    , coalesce(lt.card_balance_usd, lt.card_balance * fxf.spot_rate) as card_balance_usd
+    , coalesce(lt.jp_balance_usd, lt.jp_balance * fxf.spot_rate) as jp_balance_usd
+    , coalesce(lt.jp_principal_balance_usd, lt.jp_principal_balance * fxf.spot_rate) as jp_principal_balance_usd
+    , coalesce(lt.jp_interest_balance_usd, lt.jp_interest_balance * fxf.spot_rate) as jp_interest_balance_usd
     , lt.invoiced_usd
     , lt.forex_adjustment
     , lt.is_in_repayment
@@ -187,6 +203,10 @@ left join
     master_customer_dm.companies_dm cdm
     on cdm.company_id = lt.company_id
 left join
+    fx_fallback fxf
+    on fxf.company_id = lt.company_id
+    and fxf.rn = 1
+left join
     max_dq md
     on md.company_id = lt.company_id
 left join
@@ -220,7 +240,7 @@ left join
     and td.rn = 1
 where
     1=1
-    and lt.dt = '{}'
+    and lt.dt = '{0}'
     and lt.dt >= sofom_transfer.assignment_dt::date
     and is_in_repayment is False
     and charge_off_flag is False

@@ -22,6 +22,53 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 from redshift_util import ensure_deps, connect
 
 
+# Columns the borrowing base is actually computed from. A NULL in any of
+# these on the tape date is a DATA GAP: it silently nulls a downstream *_usd
+# column, flips elig_ff to 0, and publishes a wrong base. 2026-09-21: the
+# 2026-09-20 run published Eligible $0 this way. These are REPORTED, never
+# quietly filled.
+CRITICAL_COLS = [
+    'spot_rate', 'balance', 'sofom_balance', 'sofom_balance_usd', 'balance_usd',
+    'card_balance_usd', 'jp_principal_balance_usd', 'credit_limit_usd', 'elig',
+]
+
+
+def check_tape_completeness(con, df, date_str):
+    """Return (gaps, fx_carried) for one tape date.
+
+    gaps        list of "column: n/total rows NULL" strings for CRITICAL_COLS
+    fx_carried  count of rows whose spot_rate came from the fx_fallback CTE
+                (i.e. the source table had no rate for this date at all)
+
+    Both are surfaced to the caller and to Slack. The fallback keeps the base
+    computable, but it is never invisible.
+    """
+    gaps = []
+    n = len(df)
+    for col in CRITICAL_COLS:
+        if col not in df.columns:
+            gaps.append(f"{col}: COLUMN MISSING from tape")
+            continue
+        nulls = int(df[col].isna().sum())
+        if nulls:
+            gaps.append(f"{col}: {nulls}/{n} rows NULL")
+
+    fx_carried = 0
+    try:
+        cur = con.cursor()
+        cur.execute(
+            "select count(*), sum(case when spot_rate is null then 1 else 0 end) "
+            "from capital_markets_dm.loc_tape where dt = %s", (date_str,)
+        )
+        row_ct, null_ct = cur.fetchone()
+        cur.close()
+        if row_ct and null_ct and int(null_ct) == int(row_ct):
+            fx_carried = int(row_ct)
+    except Exception as err:
+        gaps.append(f"spot_rate source check failed: {err}")
+    return gaps, fx_carried
+
+
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -78,6 +125,7 @@ def main():
     tape_sql = Path(SCRIPT_DIR, 'sql', 'data_tape_sofom.sql').read_text()
 
     con = connect()
+    data_gaps = []
     try:
         dfs = []
 
@@ -88,6 +136,20 @@ def main():
             print(f"    {len(df)} rows")
             if len(df) > 0:
                 df = calculate_eligibility_fields_sofom(df)
+                gaps, fx_carried = check_tape_completeness(con, df, date_str)
+                if fx_carried:
+                    msg = (f"DATA-GAP: {date_str} capital_markets_dm.loc_tape has NO "
+                           f"spot_rate for any of {fx_carried} rows -- USD columns "
+                           f"rebuilt from each company's last prior non-null rate. "
+                           f"FX is CARRIED FORWARD, not market, for this date.")
+                    print(msg)
+                    print(msg, file=sys.stderr)
+                    data_gaps.append(msg)
+                for g in gaps:
+                    msg = f"DATA-GAP: {date_str} {g}"
+                    print(msg)
+                    print(msg, file=sys.stderr)
+                    data_gaps.append(msg)
             dfs.append(df)
     finally:
         con.close()
@@ -110,9 +172,36 @@ def main():
     print(f"\nDone! Output: {output_path}")
     if len(df_combined) > 0:
         latest = df_combined[df_combined['dt'] == df_combined['dt'].max()]
-        print(f"Latest date SOFOM balance: ${latest['sofom_balance_usd'].sum():,.2f}")
+        sofom_total = latest['sofom_balance_usd'].sum()
         eligible = latest[latest['elig'] == 1]
-        print(f"Eligible SOFOM balance:    ${eligible['sofom_balance_usd'].sum():,.2f}")
+        elig_total = eligible['sofom_balance_usd'].sum()
+        print(f"Latest date SOFOM balance: ${sofom_total:,.2f}")
+        print(f"Eligible SOFOM balance:    ${elig_total:,.2f}")
+
+        # 2026-09-21 GUARD: on 2026-09-20 the 08:30 build published SOFOM $0.00 /
+        # Eligible $0.00 because loc_tape.spot_rate was NULL for every row of the
+        # weekend dt, nulling every *_usd column so elig_ff compared NaN and
+        # returned 0 for all 788 rows. A pool that is 100% ineligible, or a latest
+        # date with no FX, is a data fault -- never a portfolio fact. Fail the
+        # build so the scheduler alerts instead of merging a $0 workbook.
+        n_no_fx = int(latest['spot_rate'].isna().sum())
+        if n_no_fx:
+            print(f"ERROR: spot_rate is NULL for {n_no_fx}/{len(latest)} rows on "
+                  f"{latest['dt'].max()} -- FX fallback did not resolve. "
+                  f"Not publishing this tape.", file=sys.stderr)
+            sys.exit(3)
+        if data_gaps:
+            print("\n" + "=" * 70)
+            print(f"DATA GAPS DETECTED ({len(data_gaps)}) -- REPORT BEFORE USING THIS BASE:")
+            for g in data_gaps:
+                print("  * " + g)
+            print("=" * 70)
+        if abs(latest['sofom_balance'].sum()) > 0 and elig_total == 0:
+            print(f"ERROR: eligible balance is 0 against a non-zero pool "
+                  f"({len(latest)} rows) on {latest['dt'].max()} -- eligibility "
+                  f"fault, not a portfolio fact. Not publishing this tape.",
+                  file=sys.stderr)
+            sys.exit(4)
 
 
 if __name__ == '__main__':

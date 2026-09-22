@@ -34,11 +34,17 @@ from io import BytesIO
 # braces and angle brackets so ordinary prose cannot trip them: "pendiente de
 # confirmacion" in a sentence is fine, "MXN$[PENDIENTE]" in an amount is not.
 _PATTERNS = [
-    re.compile(r"\[\s*(?:PENDIENTE|PENDING|TBD|TBC|XX+|_+|\.{2,}|\?+)\s*\]", re.I),
+    re.compile(r"\[\s*(?:PENDIENTE|PENDING|POR\s+CONFIRMAR|CONFIRM(?:AR|ED|ATION)?|NEEDS?\s+CONFIRMATION|TBD|TBC|XX+|_+|\.{2,}|\?+)\s*\]", re.I),
     re.compile(r"\[\s*\]"),                      # empty brackets
     re.compile(r"\{\{[^}]{0,60}\}\}"),           # {{mustache}}
     re.compile(r"<<[^>]{0,60}>>"),               # <<angle placeholder>>
     re.compile(r"\$\s*\[[^\]]{0,40}\]"),         # MXN$[...] / USD$[ ]
+]
+
+# Bare-word rules. Applied to prose documents only: a workbook of live deal data
+# legitimately carries "TBD" in a comment column, and blocking the daily
+# borrowing-base form over it would only train the gate to be switched off.
+_BARE_PATTERNS = [
     re.compile(r"\bTB[DC]\b"),                   # bare TBD / TBC
     re.compile(r"\bPLACEHOLDER\b", re.I),
     re.compile(r"\bLOREM IPSUM\b", re.I),
@@ -47,6 +53,7 @@ _PATTERNS = [
 # Only formats we can read text out of with no third-party dependency.
 _TEXT_SUFFIXES = (".txt", ".md", ".csv")
 _DOCX_SUFFIXES = (".docx", ".dotx")
+_XLSX_SUFFIXES = (".xlsx", ".xlsm", ".xltx")
 
 _TAG = re.compile(r"<[^>]+>")
 _PARA_BREAK = re.compile(r"</w:p>", re.I)
@@ -80,6 +87,33 @@ def _docx_text(content: bytes) -> str:
     return "\n".join(parts)
 
 
+def _xlsx_text(content: bytes) -> str:
+    """Extract visible cell text from a .xlsx without openpyxl.
+
+    Added 2026-09-22 after a CIM-facing draft attached a wind-down workbook whose
+    assumption cells still read "[CONFIRM]": the gate only read .docx, so it
+    passed. Reads xl/sharedStrings.xml (every distinct string in the workbook)
+    plus each sheet's inline strings, one cell per line.
+    """
+    parts = []
+    try:
+        with zipfile.ZipFile(BytesIO(content)) as zf:
+            names = [
+                n for n in zf.namelist()
+                if n == "xl/sharedStrings.xml"
+                or re.fullmatch(r"xl/worksheets/sheet\d*\.xml", n)
+                or re.fullmatch(r"xl/comments\d*\.xml", n)
+            ]
+            for name in names:
+                xml = zf.read(name).decode("utf-8", errors="replace")
+                # Keep cell boundaries so findings are reported per cell.
+                xml = re.sub(r"</(?:si|c|t)>", "\n", xml)
+                parts.append(unescape(_TAG.sub("", xml)))
+    except (zipfile.BadZipFile, KeyError, OSError):
+        return ""
+    return "\n".join(parts)
+
+
 def _extract_text(filename: str, content) -> str:
     lower = filename.lower()
     if isinstance(content, str):
@@ -88,6 +122,8 @@ def _extract_text(filename: str, content) -> str:
         return ""
     if lower.endswith(_DOCX_SUFFIXES):
         return _docx_text(bytes(content))
+    if lower.endswith(_XLSX_SUFFIXES):
+        return _xlsx_text(bytes(content))
     if lower.endswith(_TEXT_SUFFIXES):
         return bytes(content).decode("utf-8", errors="replace")
     return ""
@@ -98,6 +134,10 @@ def find_placeholders(filename: str, content) -> list[tuple[str, str]]:
     text = _extract_text(filename, content)
     if not text:
         return []
+
+    patterns = list(_PATTERNS)
+    if not filename.lower().endswith(_XLSX_SUFFIXES):
+        patterns += _BARE_PATTERNS
 
     findings: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -110,7 +150,7 @@ def find_placeholders(filename: str, content) -> list[tuple[str, str]]:
         # trips both the bracket rule and the currency rule. Report the widest
         # match per span so the agent sees one finding per actual blank.
         spans: list[tuple[int, int, str]] = []
-        for pattern in _PATTERNS:
+        for pattern in patterns:
             for match in pattern.finditer(line):
                 spans.append((match.start(), match.end(), match.group(0)))
         spans.sort(key=lambda s: (s[0], -(s[1] - s[0])))

@@ -19,6 +19,12 @@ Recipient control on threaded replies (draft):
     The draft stays on the same thread either way. ALWAYS check the
     RECIPIENTS line printed after creation before telling anyone it's ready.
 
+Inline images (charts in the BODY, Brian's standing preference for anything
+visual) — repeatable, optional ':cid' suffix, placed with [[IMAGE:<cid>]] in the
+body text or appended at the end if the marker is absent:
+    python gmail_tool.py draft <id> --body-file b.txt --inline /path/Chart.png
+    ... where b.txt contains a line reading  [[IMAGE:Chart]]
+
 Attachments can be:
     - Local file paths: /mnt/user-data/outputs/report.xlsx
     - Google Drive file IDs: drive:1LocDOgKKjQ4xs9bBRtkq_VvBTiCqmcMj
@@ -34,6 +40,7 @@ import os
 import re
 import sys
 from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -167,20 +174,87 @@ def _text_to_html(body_text):
     )
 
 
-def _build_body_part(body_text):
-    """multipart/alternative wrapping a text/plain and text/html rendering."""
+# Inline-image placement marker. Put [[IMAGE:name]] on its own line in the body
+# where the chart should appear; anything not referenced is appended at the end.
+_IMG_MARKER = re.compile(r'\[\[IMAGE:([A-Za-z0-9._-]+)\]\]')
+
+
+def _resolve_inline_images(specs):
+    """specs: ['/path/chart.png', '/path/chart.png:forecast'] -> parts list.
+
+    Returns [(cid, filename, content, subtype), ...]. The cid defaults to the
+    filename stem, so [[IMAGE:<stem>]] in the body needs no extra arguments.
+    """
+    resolved = []
+    for spec in specs or []:
+        path, cid = spec, None
+        # Only treat a trailing ':label' as a cid, never a Windows drive colon.
+        if spec.count(':') and not spec.rsplit(':', 1)[1].startswith(('\\', '/')):
+            head, tail = spec.rsplit(':', 1)
+            if head and len(tail) > 1 and not tail[0].isdigit() and len(head) > 2:
+                path, cid = head, tail
+        with open(path, 'rb') as fh:
+            content = fh.read()
+        filename = os.path.basename(path)
+        subtype = (mimetypes.guess_type(filename)[0] or 'image/png').split('/', 1)[1]
+        cid = cid or re.sub(r'[^A-Za-z0-9._-]', '_', os.path.splitext(filename)[0])
+        resolved.append((cid, filename, content, subtype))
+    return resolved
+
+
+def _build_body_part(body_text, inline_images=None):
+    """multipart/alternative body; wrapped in multipart/related if inline images.
+
+    Charts belong IN the body, not as attachments Brian has to open (standing
+    preference, re-stated 2026-09-21: "Put the visuals in the body of the
+    email"). Before this existed every inline-image email was a hand-rolled
+    MIME script, which is how two of them crashed on 2026-09-21.
+    """
+    images = _resolve_inline_images(inline_images)
+
+    text_body = _IMG_MARKER.sub(lambda m: f'[chart: {m.group(1)} — see HTML view]', body_text)
     alt = MIMEMultipart('alternative')
-    alt.attach(MIMEText(body_text, 'plain', 'utf-8'))
-    alt.attach(MIMEText(_text_to_html(body_text), 'html', 'utf-8'))
-    return alt
+    alt.attach(MIMEText(text_body, 'plain', 'utf-8'))
+
+    html = _text_to_html(body_text)
+    if not images:
+        alt.attach(MIMEText(html, 'html', 'utf-8'))
+        return alt
+
+    def _img_tag(cid):
+        return (f'<img src="cid:{cid}" style="max-width:100%;height:auto;'
+                'display:block;margin:12px 0;border:1px solid #e0e0e0;">')
+
+    used = set()
+
+    def _sub(match):
+        cid = match.group(1)
+        used.add(cid)
+        return _img_tag(cid)
+
+    html = _IMG_MARKER.sub(_sub, html)
+    trailing = ''.join(_img_tag(cid) for cid, _, _, _ in images if cid not in used)
+    if trailing:
+        html = html.replace('</div>', trailing + '\n</div>') if html.endswith('</div>') else html + trailing
+    alt.attach(MIMEText(html, 'html', 'utf-8'))
+
+    related = MIMEMultipart('related')
+    related.attach(alt)
+    for cid, filename, content, subtype in images:
+        part = MIMEImage(content, _subtype=subtype)
+        part.add_header('Content-ID', f'<{cid}>')
+        part.add_header('Content-Disposition', 'inline', filename=filename)
+        related.attach(part)
+        print(f"  Inline image: {filename} (cid:{cid}, {len(content) / 1024:.1f} KB)")
+    return related
 
 
 def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
-                in_reply_to=None, references=None, cc=None):
-    """Build a MIME message, with attachments if provided."""
+                in_reply_to=None, references=None, cc=None, inline_images=None):
+    """Build a MIME message, with attachments and/or inline images if provided."""
     if attachments:
         mime = MIMEMultipart('mixed')
-        mime.attach(_build_body_part(body_text))
+        mime.attach(_build_body_part(body_text, inline_images=inline_images))
 
         for att_source in attachments:
             filename, content, content_type = _resolve_attachment(att_source)
@@ -196,7 +270,7 @@ def _build_mime(body_text, from_addr, to_addr, subject, attachments=None,
             mime.attach(part)
             print(f"  Attached: {filename} ({content_type}, {len(content) / 1024:.1f} KB)")
     else:
-        mime = _build_body_part(body_text)
+        mime = _build_body_part(body_text, inline_images=inline_images)
 
     # NOTE: Header names MUST be canonical-case (To/From/Subject/Cc). Gmail's
     # drafts().create silently DROPS lowercase header names ('to','subject',...)
@@ -282,7 +356,8 @@ def cmd_read(message_id):
         print("(no text body found)")
 
 
-def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, cc_override=None):
+def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, cc_override=None,
+                    inline_images=None):
     service = _get_service()
 
     # Get the original message for threading — fetch Cc too for reply-all
@@ -335,6 +410,7 @@ def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, c
         in_reply_to=orig_message_id,
         references=orig_message_id,
         cc=cc_str,
+        inline_images=inline_images,
     )
 
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('utf-8')
@@ -367,13 +443,14 @@ def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, c
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
 
 
-def cmd_draft_new(to, subject, body_text, attachments=None):
+def cmd_draft_new(to, subject, body_text, attachments=None, inline_images=None):
     service = _get_service()
 
     profile = service.users().getProfile(userId='me').execute()
     my_email = profile['emailAddress']
 
-    mime = _build_mime(body_text, my_email, to, subject, attachments=attachments)
+    mime = _build_mime(body_text, my_email, to, subject, attachments=attachments,
+                       inline_images=inline_images)
 
     raw = base64.urlsafe_b64encode(mime.as_bytes()).decode('utf-8')
 
@@ -475,6 +552,21 @@ def _parse_attachments(args):
     return remaining, attachments or None
 
 
+def _parse_inline(args):
+    """Extract --inline values (image embedded in the body) from remaining args."""
+    inline = []
+    i = 0
+    remaining = []
+    while i < len(args):
+        if args[i] in ('--inline', '--inline-image') and i + 1 < len(args):
+            inline.append(args[i + 1])
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return remaining, inline or None
+
+
 def _pop_flag(args, flag):
     """Extract a single '--flag value' pair from args. Returns (remaining, value|None)."""
     if flag in args:
@@ -550,10 +642,12 @@ def main():
             body_text_arg = body_arg
             rest = sys.argv[4:]
         rest, attachments = _parse_attachments(rest)
+        rest, inline_images = _parse_inline(rest)
         rest, to_override = _pop_flag(rest, '--to')
         rest, cc_override = _pop_flag(rest, '--cc')
         cmd_draft_reply(sys.argv[2], body_text_arg, attachments=attachments,
-                        to_override=to_override, cc_override=cc_override)
+                        to_override=to_override, cc_override=cc_override,
+                        inline_images=inline_images)
 
     elif command == 'draft-new':
         if len(sys.argv) < 5:
@@ -566,11 +660,13 @@ def main():
                 sys.exit(1)
             with open(sys.argv[5], 'r', encoding='utf-8') as _bf:
                 body_text_arg = _bf.read()
-            _, attachments = _parse_attachments(sys.argv[6:])
+            _rest_new, attachments = _parse_attachments(sys.argv[6:])
         else:
             body_text_arg = body_arg
-            _, attachments = _parse_attachments(sys.argv[5:])
-        cmd_draft_new(sys.argv[2], sys.argv[3], body_text_arg, attachments=attachments)
+            _rest_new, attachments = _parse_attachments(sys.argv[5:])
+        _rest_new, inline_images = _parse_inline(_rest_new)
+        cmd_draft_new(sys.argv[2], sys.argv[3], body_text_arg, attachments=attachments,
+                      inline_images=inline_images)
 
     elif command == 'delete-draft':
         if len(sys.argv) < 3:

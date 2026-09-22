@@ -24,6 +24,15 @@ Build and maintain contact dossiers that track relationship health, communicatio
 > ```
 > Use the card to match the contact's communication style and surface what's owed before you write. For ONA questions ("who is most connected?", "key bridges"), use the `honcho-peers` skill.
 
+## Retrospective: "what were my takeaways from my 1:1 with X?"
+
+**Go straight to the Gemini notes email — one search, not a calendar/Drive crawl** (verified 2026-09-20, thread eb8cce73):
+```bash
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/gmail/gmail_tool.py search 'from:gemini-notes@google.com "<First Name>"' --max 10
+python C:/Jeeves/redshift-bot/deer-flow/skills/custom/gmail/gmail_tool.py read <message_id>
+```
+Gemini notes emails are titled `Notes: "<Attendee A> / <Attendee B>" <Mon D, YYYY>` and already carry Discussion / Action items sections — quote the meeting DATE and the Gmail message id as the source, and keep Brian's own action items separate from the other attendee's. Only fall back to Calendar (to pin the date) or Drive (`"... - Notes by Gemini"`) if that search returns nothing.
+
 ## Workflow: Prep for a meeting
 
 1. **Get meeting attendees:**

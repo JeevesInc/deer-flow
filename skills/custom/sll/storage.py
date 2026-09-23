@@ -103,6 +103,42 @@ def read_jsonl(path: Path) -> list[dict]:
     return out
 
 
+def read_jsonl_tail(path: Path, n: int) -> list[dict]:
+    """Last n rows without parsing the whole file.
+
+    Added 2026-09-22 with fat capture: log rows grew from ~300 chars to several
+    KB, and sll_score reads history on every turn. Parsing the entire log each
+    turn would degrade as the corpus grows.
+    """
+    if not path.exists() or n <= 0:
+        return []
+    try:
+        with path.open("rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            block = 65536
+            data = b""
+            while size > 0 and data.count(b"\n") <= n:
+                step = min(block, size)
+                size -= step
+                f.seek(size)
+                data = f.read(step) + data
+        lines = data.decode("utf-8", errors="replace").splitlines()[-n:]
+    except Exception as e:
+        log.warning("tail read failed: %s", e)
+        return read_jsonl(path)[-n:]
+    out = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except Exception:
+            continue
+    return out
+
+
 def write_jsonl(path: Path, entries: list[dict]) -> None:
     """Atomic rewrite of a jsonl file (used by --prune)."""
     ensure_dir()

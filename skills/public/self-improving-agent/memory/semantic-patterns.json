@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 255,
+      "applications": 257,
       "created": "2026-04-07",
-      "last_applied": "2026-09-22T09:18:53.837716+00:00",
+      "last_applied": "2026-09-23T09:13:44.201332+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4238,6 +4238,54 @@
       "solution": "",
       "target_skills": [
         "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-22-266": {
+      "id": "pat-2026-09-22-266",
+      "name": "A file in 'My Sign Requests' is the UNSIGNED source. Execute",
+      "source": "ep-2026-09-22-025",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-22",
+      "last_applied": "2026-09-22T17:28:10.109380+00:00",
+      "category": "general",
+      "pattern": "A file in 'My Sign Requests' is the UNSIGNED source. Executed documents land in 'My Signed Documents' AND produce a '<name> Signing Log.pdf'. Never call a document signed without (a) both of those artifacts and (b) reading the extracted signature block yourself. Box Sign is still 403 on this app token, so the agent cannot have originated any signature request.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "box"
+      ]
+    },
+    "pat-2026-09-22-267": {
+      "id": "pat-2026-09-22-267",
+      "name": "When an artifact is pending from an external system, registe",
+      "source": "ep-2026-09-22-026",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-22",
+      "last_applied": "2026-09-22T17:28:10.241241+00:00",
+      "category": "general",
+      "pattern": "When an artifact is pending from an external system, register a WATCH in a cron rather than asking Brian to notify you. Added check_cert_watches() to nb_monthly_reporting_cron.py (hourly) + _nb_cert_watch.json. Note inbound Gmail Pub/Sub only yields a PROPOSAL because dispatch_config.enabled is false, so poll the source system (Box) directly. Any new/edited cron is dead code until 'sc stop deerflow-gateway' fully stops (sc start during STOP_PENDING returns rc=1056) and a new [CronSupervisor] <name> started line appears.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-09-23-268": {
+      "id": "pat-2026-09-23-268",
+      "name": "A signature is never proven by a file existing. Prove execut",
+      "source": "ep-2026-09-23-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-23",
+      "last_applied": "2026-09-23T09:14:04.217961+00:00",
+      "category": "general",
+      "pattern": "A signature is never proven by a file existing. Prove execution by sign-request STATUS, or by a size/hash change against the recorded unsigned original, or by the Box Signing Log. While an external signature is pending, build no outbound draft at all - Brian: until then, there should not be a draft. Store the unsigned size when registering the watch so the comparison is possible.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "box"
       ]
     }
   }

@@ -228,8 +228,12 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         if os.environ.get("PYTEST_CURRENT_TEST"):
             return
 
-        task = _message_text(user_messages[-1]).strip()[:1500]
-        response = _message_text(assistant_messages[-1]).strip()[:1500]
+        # Fat capture (2026-09-22): the old 1500-char clip, then a further
+        # 300-char clip inside sll_score, left the eval judge unable to see the
+        # artifact or any placeholder text. Handed over as a temp JSON payload
+        # so there is no argv length ceiling.
+        task = _message_text(user_messages[-1]).strip()[:4000]
+        response = _message_text(assistant_messages[-1]).strip()[:20000]
         if not task or not response:
             return
 
@@ -247,17 +251,31 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
                 return
 
             def _run() -> None:
+                import json
+                import tempfile
+
+                payload_path = None
                 try:
                     subprocess.run(
                         [sys.executable, str(script), "--apply-sentiment",
-                         "--user-reply", task],
+                         "--user-reply", task[:4000]],
                         capture_output=True, timeout=120)
+                    with tempfile.NamedTemporaryFile(
+                            "w", suffix=".json", delete=False,
+                            encoding="utf-8") as fh:
+                        json.dump({"task": task, "response": response}, fh)
+                        payload_path = fh.name
                     subprocess.run(
-                        [sys.executable, str(script), "--task", task,
-                         "--response", response],
+                        [sys.executable, str(script), "--payload", payload_path],
                         capture_output=True, timeout=120)
                 except Exception as exc:  # noqa: BLE001 - background best-effort
                     logger.debug("SLL capture failed: %s", exc)
+                finally:
+                    if payload_path:
+                        try:
+                            os.unlink(payload_path)
+                        except Exception:
+                            pass
 
             threading.Thread(target=_run, name="sll-capture", daemon=True).start()
         except Exception as exc:

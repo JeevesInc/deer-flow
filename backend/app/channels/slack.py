@@ -23,6 +23,40 @@ from app.channels import slack_content
 
 logger = logging.getLogger(__name__)
 
+
+def _turn_audit(event: str, **fields: object) -> None:
+    """Append one transport-level row to .deer-flow/turn_audit.jsonl.
+
+    Added 2026-09-22. Brian: "anytime there's a '?' from me it's because there
+    was no response from the agent. which happens a lot and is annoying."
+    Nothing recorded interactive thread turns at the transport layer, so the
+    non-response rate was literally unmeasurable: the SLL only logs turns that
+    produced a response, and dispatch_audit.jsonl covers background jobs only
+    (Dream, EOD Review), not thread replies. Pairing `inbound_addressed` with
+    `outbound_final` on thread_ts gives the real number.
+
+    Never raises — this sits on the message path.
+    """
+    try:
+        import json as _json
+        import pathlib as _pathlib
+        from datetime import datetime as _dt, timezone as _tz
+
+        base = _pathlib.Path(__file__).resolve()
+        for parent in base.parents:
+            cand = parent / ".deer-flow"
+            if cand.is_dir():
+                row = dict(fields)
+                row["event"] = event
+                row["ts"] = _dt.now(_tz.utc).isoformat()
+                with (cand / "turn_audit.jsonl").open("a", encoding="utf-8") as fh:
+                    fh.write(_json.dumps(row, default=str) + "\n")
+                return
+    except Exception:
+        pass
+
+
+
 _slack_md_converter = SlackMarkdownConverter()
 
 
@@ -274,6 +308,11 @@ class SlackChannel(Channel):
         for attempt in range(_max_retries):
             try:
                 await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)
+                _turn_audit(
+                    "outbound_final" if msg.is_final else "outbound_progress",
+                    thread_ts=msg.thread_ts,
+                    chars=len(getattr(msg, "text", "") or ""),
+                )
                 if msg.thread_ts:
                     if is_assistant:
                         # Assistant thread: clear status (auto-clears, but be explicit)
@@ -955,6 +994,16 @@ class SlackChannel(Channel):
                 event.get("channel_type", "(none)"), event.get("thread_ts", "(none)"),
             )
             return
+
+        _turn_audit(
+            "inbound_addressed",
+            thread_ts=event.get("thread_ts") or event.get("ts"),
+            msg_ts=event.get("ts"),
+            user=event.get("user"),
+            channel=event.get("channel"),
+            channel_type=event.get("channel_type"),
+            chars=len(event.get("text") or ""),
+        )
 
         # Dedup: Slack sends both 'message' and 'app_mention' for @mentions in channels.
         # Skip if we already processed this exact message timestamp.

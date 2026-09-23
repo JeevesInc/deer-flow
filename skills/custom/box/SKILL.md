@@ -71,6 +71,16 @@ client credentials keep working).
 
 ## Operational hard rules (learned the hard way)
 
+- **A signature is NEVER proven by a file existing.** Box Sign writes an **UNSIGNED copy of the
+  document into "My Sign Requests" the moment the request is created**, so any watcher that matches
+  on filename alone will report a signature that has not happened. On 2026-09-22 that produced a
+  "Signed officer certification came back from Box" DM to Brian at 10:14 and a distribution draft
+  built on an unsigned NB Section 6.01(c) certificate; both had to be retracted, and Brian's rule
+  followed: *"until then, there shouldn't be a draft."* **Prove execution by the sign-request
+  STATUS, or by a size/hash change against the recorded unsigned original** (see
+  `.deer-flow/_nb_cert_watch.json`, which stores `unsigned_size` for exactly this comparison), or by
+  the Box Signing Log. And while an external signature is pending, **build no outbound draft at all**.
+
 - **Never satisfy a Box deliverable with a shortcut, web_link, or bookmark.** Diligence
   folders must contain REAL FILE BYTES. A Box shortcut/Drive-shortcut looks like a filed
   document in the folder listing but downloads/syncs as a 0-byte stub -- Brian discovered

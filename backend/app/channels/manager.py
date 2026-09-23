@@ -286,7 +286,15 @@ def classify_error_text(exc: BaseException) -> str:
         )
     return "An internal error occurred. Please try again."
 
-DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 50}
+# recursion_limit is GRAPH steps, not tool calls. StepBudgetMiddleware counts
+# ~6 graph steps per model->tool round-trip and reserves 2 calls for the final
+# answer, so 50 allowed roughly SIX tool-using turns before the agent was told
+# to wrap up or was killed outright. Every substantive desk task — a borrowing
+# base, a log investigation, anything touching Redshift plus Drive — exceeds
+# that, which is why Brian kept seeing "reply continue" and
+# "(No response from agent)". Raised 2026-09-22 to 200 (~32 round-trips).
+# For reference: deerflow/client.py defaults to 100, webhook_receiver uses 500.
+DEFAULT_RUN_CONFIG: dict[str, Any] = {"recursion_limit": 200}
 DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "thinking_enabled": True,
     "is_plan_mode": False,
@@ -977,7 +985,17 @@ class ChannelManager:
                 if attachments:
                     response_text = format_artifact_text([attachment.virtual_path for attachment in attachments])
                 elif stream_error:
-                    response_text = classify_error_text(stream_error)
+                    # Keep whatever the run already produced. A truncated
+                    # answer beats a canned apology: on the step-limit path the
+                    # agent has usually just been forced to write a wrap-up
+                    # summary, and discarding it was what made the failure look
+                    # like pure noise from the user's side.
+                    _err_note = classify_error_text(stream_error)
+                    response_text = (
+                        f"{latest_text}\n\n---\n_{_err_note}_"
+                        if latest_text and latest_text.strip()
+                        else _err_note
+                    )
                 else:
                     response_text = latest_text or "(No response from agent)"
 

@@ -258,9 +258,170 @@ def run_check(period_month_end=None):
     return True
 
 
+# ------------------------------------------------- executed-certificate watch
+# Brian, 2026-09-22: "I should not have to ping you." When an officer's
+# certificate is out for signature in Box, this cron polls Box hourly for the
+# EXECUTED copy and, the moment it lands, dispatches the agent to rebuild the
+# NB distribution draft. Nothing is ever sent automatically.
+
+CERT_WATCH_FILE = '_nb_cert_watch.json'
+CERT_PLACEHOLDER_MARKERS = ('[____', '[CONFIRM]', '[PENDIENTE]', '{{')
+
+
+def _cert_watch_path():
+    return _state_path().parent / CERT_WATCH_FILE
+
+
+def load_cert_watch():
+    p = _cert_watch_path()
+    if p.exists():
+        try:
+            with open(p, encoding='utf-8') as f:
+                return json.load(f)
+        except Exception:
+            log.warning("cert watch file unreadable, starting fresh")
+    return {'watches': []}
+
+
+def save_cert_watch(data):
+    p = _cert_watch_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2)
+
+
+def _box_client():
+    box_dir = Path(__file__).resolve().parent.parent / 'box'
+    if str(box_dir) not in sys.path:
+        sys.path.insert(0, str(box_dir))
+    from box_client import get_client
+    return get_client()
+
+
+def _pdf_text(raw: bytes) -> str:
+    try:
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(raw))
+        return "\n".join((pg.extract_text() or '') for pg in reader.pages)
+    except Exception as e:
+        log.warning("pdf text extraction failed: %s", e)
+        return ''
+
+
+def find_executed_cert(name_fragment, unsigned_size=None):
+    """Look for an EXECUTED copy of a document in Box.
+
+    Box Sign puts completed documents under 'My Signed Documents' (a per-request
+    subfolder) and drops a '<name> Signing Log.pdf' beside the source in
+    'My Sign Requests'. A file sitting only in 'My Sign Requests' is the
+    UNSIGNED source we uploaded -- never treat it as executed (2026-09-22).
+
+    Returns a dict or None. 'signed' is False when the file is found but still
+    carries placeholder markers or a blank signature block.
+    """
+    client = _box_client()
+    frag = name_fragment.lower()
+    hits = []
+    res = client.search.search_for_content(
+        query=name_fragment, limit=50,
+        fields=['name', 'size', 'modified_at', 'type', 'path_collection'])
+    for e in getattr(res, 'entries', []) or []:
+        if getattr(e, 'type', '') != 'file' or not e.name.lower().endswith('.pdf'):
+            continue
+        if frag not in e.name.lower():
+            continue
+        try:
+            path = "/".join([p.name for p in e.path_collection.entries])
+        except Exception:
+            path = ''
+        hits.append({'id': e.id, 'name': e.name, 'size': getattr(e, 'size', 0),
+                     'path': path, 'modified_at': str(getattr(e, 'modified_at', ''))})
+
+    signed_area = [h for h in hits if 'my signed documents' in h['path'].lower()
+                   and 'signing log' not in h['name'].lower()]
+    has_log = any('signing log' in h['name'].lower() for h in hits)
+    if not signed_area:
+        return None
+
+    cand = sorted(signed_area, key=lambda h: h['modified_at'], reverse=True)[0]
+    raw = client.downloads.download_file(cand['id']).read()
+    text = _pdf_text(raw)
+    placeholders = [m for m in CERT_PLACEHOLDER_MARKERS if m in text]
+    cand['has_signing_log'] = has_log
+    cand['placeholders'] = placeholders
+    cand['same_size_as_unsigned'] = (unsigned_size is not None
+                                     and cand['size'] == unsigned_size)
+    cand['signed'] = bool(has_log) and not placeholders and not cand['same_size_as_unsigned']
+    return cand
+
+
+def _build_cert_prompt(watch, found):
+    return (
+        "The EXECUTED " + watch['label'] + " just landed in Box -- Brian does not want to be\n"
+        "asked to ping you about it. Box file id " + found['id'] + " (" + found['name'] + ",\n"
+        + str(found['size']) + " bytes, " + found['path'] + ").\n\n"
+        "1. Download it with the box skill and re-read the signature block yourself. A file is\n"
+        "   only executed if the signature line, Name, Title and Date are all populated and no\n"
+        "   '[____' / '[CONFIRM]' placeholder remains. If it is NOT truly signed, STOP, build no\n"
+        "   draft, and DM Brian one line saying what is still blank.\n"
+        "2. If it IS executed, create a Gmail DRAFT (never send) to " + watch['recipients'] + "\n"
+        "   with subject '" + watch['subject'] + "', attaching the executed certificate and\n"
+        "   " + watch['companion'] + ". List the thread's existing drafts first and update or\n"
+        "   delete-then-recreate rather than creating a second one.\n"
+        "3. DM Brian the VERBATIM draft body, the draft ID, the recipient list and both\n"
+        "   attachment filenames with byte sizes, in that one message. No progress narration.\n"
+    )
+
+
+def check_cert_watches():
+    data = load_cert_watch()
+    changed = False
+    for w in data.get('watches', []):
+        if w.get('status') != 'pending':
+            continue
+        try:
+            found = find_executed_cert(w['name_fragment'], w.get('unsigned_size'))
+        except Exception as e:
+            log.warning("cert watch box lookup failed for %s: %s", w.get('label'), e)
+            continue
+        if not found:
+            continue
+        if not found.get('signed'):
+            log.info("cert watch: %s found in signed area but not verified signed (%s)",
+                     w.get('label'), found.get('placeholders'))
+            continue
+        try:
+            from autonomous_dispatch import dispatch
+            ok = dispatch(
+                _build_cert_prompt(w, found),
+                notification=None,
+                report_result=False,
+                category="NB Executed Certificate",
+                source_id="nb-cert-" + str(found['id']),
+                source_metadata={'label': w.get('label'), 'box_file_id': found['id']},
+            )
+        except Exception as e:
+            log.error("cert watch dispatch failed: %s", e)
+            continue
+        if ok:
+            w['status'] = 'dispatched'
+            w['found'] = found
+            w['dispatched_at'] = datetime.now().isoformat()
+            changed = True
+            log.info("cert watch: dispatched draft rebuild for %s", w.get('label'))
+    if changed:
+        save_cert_watch(data)
+
+
 def run_loop():
     log.info("NB Monthly Reporting cron started. Fires day %d at %02d:00.", FIRE_DAY, FIRE_HOUR)
     while True:
+        try:
+            check_cert_watches()
+        except Exception as e:
+            log.error("cert watch error: %s", e)
+            traceback.print_exc()
         try:
             if monthly_run_due(load_state().get('last_run'), datetime.now()):
                 run_check()

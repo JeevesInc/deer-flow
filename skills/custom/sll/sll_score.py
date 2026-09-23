@@ -21,6 +21,11 @@ from typing import Any
 
 import storage
 
+try:
+    import sll_behavior
+except Exception:  # behaviour is additive — verbal-only still works
+    sll_behavior = None
+
 logging.basicConfig(
     level=logging.WARNING,
     format="[sll-score %(levelname)s] %(message)s",
@@ -29,6 +34,13 @@ logging.basicConfig(
 log = logging.getLogger("sll_score")
 
 DEFAULT_COMPOSITE = 0.6
+
+# Fat capture (2026-09-22). The judge could not evaluate NO_PLACEHOLDER or
+# ARTIFACT_DELIVERED against a 300-char summary — 40 of 48 sampled turns came
+# back "na". These caps bound the log rather than summarise the turn.
+TASK_LIMIT = 4000
+RESPONSE_LIMIT = 20000
+REPLY_LIMIT = 4000
 
 # Sensitivity tuning (2026-06-09):
 # - implicit_positive boost 0.15 -> 0.25: building-on-output now reaches success threshold
@@ -192,9 +204,17 @@ def mode_end_of_turn(args: argparse.Namespace) -> int:
     failure_lesson = extract_lesson(task, response, "failure")
     success_lesson = extract_lesson(task, response, "success")
 
+    artifacts = []
+    if sll_behavior is not None:
+        try:
+            artifacts = sll_behavior.extract_artifacts(response)
+        except Exception as e:
+            log.warning("artifact extraction failed: %s", e)
+
     pending = {
         "task": task,
         "response": response,
+        "artifacts": artifacts,
         "composite": DEFAULT_COMPOSITE,
         "candidate_failure_lesson": failure_lesson,
         "candidate_success_lesson": success_lesson,
@@ -227,17 +247,66 @@ def mode_apply_sentiment(args: argparse.Namespace) -> int:
     )
     mode, value = SENTIMENT_RULES[sentiment]
     initial = float(pending.get("composite", DEFAULT_COMPOSITE))
+
+    # --- behavioral signal (2026-09-22) -------------------------------------
+    # What Brian DID beats what he said, but only where he said nothing.
+    # An explicit correction is never overridden by topic geometry.
+    sig = {}
+    if sll_behavior is not None:
+        try:
+            history = storage.read_jsonl_tail(storage.LOG_PATH, 40)
+            sig = sll_behavior.analyze(
+                pending.get("task", ""),
+                pending.get("response", ""),
+                user_reply,
+                history=history,
+                scored_at=pending.get("scored_at"),
+                applied_at=storage.now_iso(),
+            )
+        except Exception as e:
+            log.warning("behavior analysis failed: %s", e)
+            sig = {}
+
+    b_delta = float(sig.get("behavior_delta") or 0.0)
+    b_labeled = bool(sig.get("behavior_labeled"))
+    b_applied = 0.0
+
     if mode == "override":
         final = value
+        labeled, label_source = True, "verbal"
+    elif sentiment == "no_signal":
+        # The 429-turn problem: no words is not neutral, it is unlabeled.
+        # Behaviour is the only evidence available here.
+        b_applied = b_delta
+        final = max(0.0, min(1.0, initial + b_applied))
+        labeled = b_labeled
+        label_source = "behavioral" if b_labeled else "none"
     else:
         final = max(0.0, min(1.0, initial + value))
+        labeled, label_source = True, "verbal"
+        # Agreement between word and deed reinforces, at half weight.
+        if b_delta and ((b_delta > 0) == (value > 0)):
+            b_applied = b_delta * 0.5
+            final = max(0.0, min(1.0, final + b_applied))
+            label_source = "verbal+behavioral"
 
     # Determine outcome and lesson selection
     outcome = "neutral"
     boost = 0.0
     lesson = None
     lesson_id = None
-    if final < FAILURE_THRESHOLD:
+    # Lesson minting requires VERBAL evidence (2026-09-22 calibration).
+    # Behaviour alone tops out at 54% precision on the failure direction, so it
+    # moves the score and feeds trending, but never writes a lesson on its own.
+    may_mint = labeled and label_source.startswith("verbal")
+    # A non-response is definitional, not inferred — it is allowed to register
+    # as a failure on its own.
+    if sig.get("behavior_label") == "no_response":
+        may_mint = True
+
+    if not may_mint:
+        pass
+    elif final < FAILURE_THRESHOLD:
         outcome = "failure"
         boost = 2.5
         lesson = pending.get("candidate_failure_lesson")
@@ -258,10 +327,24 @@ def mode_apply_sentiment(args: argparse.Namespace) -> int:
     log_entry = {
         "scored_at": pending.get("scored_at"),
         "applied_at": storage.now_iso(),
-        "task": storage.truncate(pending.get("task", ""), 300),
+        "task": storage.truncate(pending.get("task", ""), TASK_LIMIT),
+        # response_summary kept for backward compat with the 878 historical rows
+        # and sll_dashboard; response_full is the new evidence substrate.
         "response_summary": storage.truncate(pending.get("response", ""), 300),
-        "user_reply": storage.truncate(user_reply, 300),
+        "response_full": storage.truncate(pending.get("response", ""), RESPONSE_LIMIT),
+        "artifacts": pending.get("artifacts") or [],
+        "user_reply": storage.truncate(user_reply, REPLY_LIMIT),
         "sentiment": sentiment,
+        "behavior_label": sig.get("behavior_label"),
+        "behavior_delta_applied": round(b_applied, 3),
+        "reask_similarity": sig.get("reask_similarity"),
+        "rework_marker": sig.get("rework_marker"),
+        "task_depth": sig.get("task_depth"),
+        "gap_minutes": sig.get("gap_minutes"),
+        "artifact_claimed": sig.get("artifact_claimed"),
+        "labeled": labeled,
+        "label_source": label_source,
+        "may_mint_lesson": may_mint,
         "initial_composite": initial,
         "final_composite": final,
         "outcome": outcome,
@@ -272,7 +355,9 @@ def mode_apply_sentiment(args: argparse.Namespace) -> int:
     storage.clear_pending()
 
     if args.verbose:
-        print(f"[sll] sentiment={sentiment} initial={initial:.2f} final={final:.2f} outcome={outcome}")
+        print(f"[sll] sentiment={sentiment} behavior={sig.get('behavior_label')} "
+              f"source={label_source} labeled={labeled} "
+              f"initial={initial:.2f} final={final:.2f} outcome={outcome}")
         if lesson and outcome != "neutral":
             print(f"[sll] stored lesson (boost={boost}): {storage.truncate(lesson, 140)}")
     return 0
@@ -284,8 +369,21 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--user-reply", default="")
     p.add_argument("--task", default="")
     p.add_argument("--response", default="")
+    p.add_argument("--payload", default="",
+                   help="path to a JSON file holding {task, response}; avoids "
+                        "the Windows argv length ceiling for fat capture")
     p.add_argument("--verbose", action="store_true")
     args = p.parse_args(argv)
+
+    if args.payload:
+        try:
+            with open(args.payload, encoding="utf-8") as fh:
+                data = json.load(fh)
+            args.task = data.get("task", args.task)
+            args.response = data.get("response", args.response)
+            args.user_reply = data.get("user_reply", args.user_reply)
+        except Exception as e:
+            log.warning("payload unreadable (%s): %s", args.payload, e)
     try:
         if args.apply_sentiment:
             return mode_apply_sentiment(args)

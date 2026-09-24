@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 257,
+      "applications": 258,
       "created": "2026-04-07",
-      "last_applied": "2026-09-23T09:13:44.201332+00:00",
+      "last_applied": "2026-09-24T09:10:11.676004+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4286,6 +4286,22 @@
       "solution": "",
       "target_skills": [
         "box"
+      ]
+    },
+    "pat-2026-09-24-269": {
+      "id": "pat-2026-09-24-269",
+      "name": "Do not hold a certificate we generated for failing an execut",
+      "source": "ep-2026-09-24-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-24",
+      "last_applied": "2026-09-24T03:46:26.520431+00:00",
+      "category": "general",
+      "pattern": "Do not hold a certificate we generated for failing an execution check our own template cannot satisfy. NB Aug BBC from nb_certifications.py has no Date line; Brian: you wrote the certificate, draft as is. Execution check for our own templates = signature, Name, Title, no placeholders; Date only if the template has a Date field.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
       ]
     }
   }

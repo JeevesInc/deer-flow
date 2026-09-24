@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""NB Monthly Reporting Cron — fires on the 14th of each month.
+"""NB Monthly Reporting Cron — the full NB monthly package, ahead of every due date.
+
+2026-09-23 (Brian: "I want all of it done before the requirement"): besides the
+14th financials chase, run_schedule() builds the 6.02(b)(y)/6.02(f) month-end BBC
+at BD+3, builds the 6.01(c) package the day Accounting delivers, escalates at
+due-10, and DMs Brian from due-3BD if Sent does not show a deliverable. Drafts only.
+
+Original scope — fires on the 14th of each month.
 
 Scope (set by Brian 2026-09-14): the Neuberger Berman monthly reporting
 requirements under the executed Credit Agreement, Article VI.
@@ -414,6 +421,361 @@ def check_cert_watches():
         save_cert_watch(data)
 
 
+# =====================================================================
+# Full-package schedule (Brian, 2026-09-23: "I want all of it done before
+# the requirement"). Every NB monthly deliverable now has a TARGET well
+# inside its contractual due date, and a deterministic guard that DMs Brian
+# if Gmail in:sent does not show it going out in time. Nothing is ever sent
+# automatically -- every lender-facing artifact is a Gmail DRAFT.
+#
+#   Milestone                     Target                     Contract due
+#   ---------------------------   ------------------------   -----------------
+#   6.02(b)(y) month-end BBC      BD+3 after month end       BD+15
+#   + 6.02(f) cash report         (same draft)               with the BBC
+#   6.01(c) financials chase #1   the 14th (existing)        ME+40 (30 from 3/27)
+#   6.01(c) package build         the day Accounting's       ME+40
+#                                 package lands (daily probe)
+#   6.01(c) chase #2 / escalate   due - 10 days              ME+40
+#   Deadline guard (both)         from due - 3 BD, daily     --
+# =====================================================================
+
+ME_BBC_BD = int(os.environ.get('NB_ME_BBC_BD', '3'))
+ME_BBC_HOUR = int(os.environ.get('NB_ME_BBC_HOUR', '9'))
+MAX_ATTEMPTS = 3
+GUARD_BD = 3
+ESCALATE_DAYS_BEFORE = 10
+ACCOUNTING_SENDERS = ('kacper.chrobot@tryjeeves.com', 'shalom@tryjeeves.com',
+                      'alexander@tryjeeves.com')
+
+
+def _dm(text):
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
+        from notify import dm_owner
+        dm_owner(text)
+    except Exception as e:
+        log.error("owner DM failed: %s", e)
+
+
+def _gmail():
+    gdir = str(Path(__file__).resolve().parent.parent / 'gmail')
+    if gdir not in sys.path:
+        sys.path.insert(0, gdir)
+    import gmail_tool
+    return gmail_tool._get_service()
+
+
+def _gmail_ids(query, n=10):
+    res = _gmail().users().messages().list(userId='me', q=query, maxResults=n).execute()
+    return [m['id'] for m in res.get('messages', [])]
+
+
+def _long_date(d):
+    return d.strftime('%B ') + str(d.day) + d.strftime(', %Y')
+
+
+def me_bbc_subject(me):
+    return 'Jeeves Monthly Borrowing Base Certificate - As of ' + _long_date(me)
+
+
+def fin_subject(me):
+    return 'Jeeves, Inc. - Monthly Financial Statements - ' + me.strftime('%B %Y') + ' (Section 6.01(c))'
+
+
+def sent_to_lenders(subject_fragment):
+    """True if Brian's Sent folder shows the deliverable going to NB/WT."""
+    q = ('in:sent (to:nb.com OR to:wilmingtontrust.com) subject:"' + subject_fragment
+         + '" newer_than:120d')
+    return bool(_gmail_ids(q, 3))
+
+
+def last_business_day_on_or_before(d):
+    hol = us_bank_holidays(d.year)
+    while d.weekday() >= 5 or d in hol:
+        d -= timedelta(days=1)
+    return d
+
+
+def find_month_end_cico(me):
+    """Mariana's '<YYMMDD> CICO- Daily balances' for the last business day of
+    the month. Returns a Gmail message id or None (never falls back to the
+    latest file -- a month-end certificate must carry month-end balances)."""
+    bd = last_business_day_on_or_before(me)
+    stamp = bd.strftime('%y%m%d')
+    ids = _gmail_ids('subject:"' + stamp + ' CICO" newer_than:180d', 5)
+    return (ids[0] if ids else None), bd
+
+
+def _pstate(state, me):
+    return state.setdefault('periods', {}).setdefault(me.strftime('%Y%m'), {})
+
+
+# ------------------------------------------------ 6.02(b)(y) / 6.02(f)
+
+def _build_me_bbc_prompt(me, res):
+    bbc_due = add_business_days(me, 15)
+    cov = res.get('cov_res') or {}
+    cov_lines = "\n".join('    - ' + t['name'] + ': ' + t['detail'] for t in cov.get('tests', []))
+    return (
+        "NB MONTH-END BORROWING BASE CERTIFICATE -- " + me.strftime('%B %Y') + "\n\n"
+        "The month-end NB borrowing base as of " + me.isoformat() + " was built and PASSED the\n"
+        "fail-closed covenant gate (nb_covenant_check.py):\n" + cov_lines + "\n"
+        "Workbook: " + str(res.get('final_wb')) + "\nDrive: " + str(res.get('drive_link')) + "\n\n"
+        "This is the Section 6.02(b)(y) month-end Borrowing Base Certificate (Exhibit G) plus the\n"
+        "Section 6.02(f) month-end cash report (Liquidity of the Loan Parties). Contract due date:\n"
+        + bbc_due.strftime('%A %Y-%m-%d') + " (15 Business Days). Load the jeeves-servicer-report\n"
+        "and jeeves-borrowing-base skills first; authority is the EXECUTED NB Credit Agreement.\n\n"
+        "1. Build the Exhibit G certificate (all six 6.02(b) certifications) with the\n"
+        "   deterministic module -- do NOT hand-derive any figure:\n"
+        "     python /mnt/skills/custom/jeeves-borrowing-base/nb_certifications.py --workbook \"" + str(res.get('final_wb')) + "\" --as-of " + me.isoformat() + " --variant month_end\n"
+        "   It writes 'Certificate - NB Monthly Borrowing Base Certificate - YYYYMMDD.docx' with\n"
+        "   Schedules 1-3 (7.01), Exhibit A (org docs), Exhibit B (accounts vs prior month-end\n"
+        "   snapshot / Schedule 5.22), Exhibit C (Effective Advance Rate from the SOFOM master +\n"
+        "   historical_draws) and item 9 (Immaterial Subsidiary test from Accounting inputs in\n"
+        "   .deer-flow/nb_cert_inputs.json). Upload it to the same NB Reporting month folder.\n"
+        "   If it prints PENDING items: create NO lender draft and NO Box upload; DM Brian the\n"
+        "   pending list verbatim and STOP. Officer items (ii), (iii), Exhibit A and (vi) are\n"
+        "   certified by Alexander Melikian signing -- never ask Accounting for them (Brian 2026-09-23).\n"
+        "2. Read Exhibit G. If it requires a Responsible Officer signature, prepare the signature\n"
+        "   page for Alexander Melikian, upload to Box, and register a 'pending' entry in\n"
+        "   .deer-flow/_nb_cert_watch.json (label, name_fragment, unsigned_size, subject '"
+        + me_bbc_subject(me) + "', recipients from nb_bb_distribution.json, companion = the\n"
+        "   workbook) so the executed-certificate watcher builds the draft -- no draft until signed.\n"
+        "   Otherwise create the Gmail DRAFT now (never send): To/Cc from\n"
+        "   .deer-flow/nb_bb_distribution.json, NEW thread, subject '" + me_bbc_subject(me) + "',\n"
+        "   workbook attached, body in Brian's voice ('Hi all-', short prose, no bullets) stating\n"
+        "   it is delivered pursuant to Sections 6.02(b)(y) and 6.02(f) and giving the three\n"
+        "   certifications and month-end Liquidity.\n"
+        "3. If ANY certification cannot be sourced, create NO draft and DM Brian one line naming\n"
+        "   what is missing. Never write a placeholder into a lender-facing file or body.\n"
+        "4. DM Brian: verbatim draft body, draft ID, recipients, attachment names + byte sizes,\n"
+        "   and the headline numbers (eligible, BB, Liquidity vs $15MM floor, DQ30). No narration.\n"
+    )
+
+
+def run_month_end_bbc(me, force=False):
+    state = load_state()
+    ps = _pstate(state, me).setdefault('me_bbc', {'status': 'pending', 'attempts': 0})
+    if ps.get('status') in ('handed_off', 'withheld') and not force:
+        return True
+    ps['attempts'] = ps.get('attempts', 0) + 1
+    ps['last_attempt'] = datetime.now().isoformat()
+    save_state(state)
+
+    try:
+        cico_id, cico_bd = find_month_end_cico(me)
+    except Exception as e:
+        cico_id, cico_bd = None, me
+        log.error("month-end CICO lookup failed: %s", e)
+    if not cico_id:
+        log.warning("no month-end CICO email for %s yet", cico_bd)
+        if ps['attempts'] >= MAX_ATTEMPTS:
+            _dm(":warning: *NB month-end BBC " + me.strftime('%b %Y') + "* not built: no '"
+                + cico_bd.strftime('%y%m%d') + " CICO- Daily balances' email found after "
+                + str(ps['attempts']) + " tries. Due " + add_business_days(me, 15).isoformat() + ".")
+            ps['status'] = 'failed'
+            save_state(state)
+        return False
+
+    bb_dir = str(Path(__file__).resolve().parent.parent / 'jeeves-borrowing-base')
+    if bb_dir not in sys.path:
+        sys.path.insert(0, bb_dir)
+    try:
+        import report_scheduler_cron as rsc
+        res = rsc.run_nb_bb(as_of=me.isoformat(), variant='month_end', cico_msg=cico_id)
+    except Exception as e:
+        log.error("month-end build failed: %s", e)
+        if ps['attempts'] >= MAX_ATTEMPTS:
+            ps['status'] = 'failed'
+        save_state(state)
+        return False
+
+    state = load_state()
+    ps = _pstate(state, me)['me_bbc']
+    ps['final_wb'] = res.get('final_wb')
+    ps['drive_link'] = res.get('drive_link')
+    if not res.get('gate_ok'):
+        # Covenant failure or unevaluable check: run_nb_bb already flagged it on
+        # Slack. Rule of record 2026-09-16 -- no outbound artifact of any kind.
+        ps['status'] = 'withheld'
+        save_state(state)
+        return True
+    try:
+        from autonomous_dispatch import dispatch
+        ok = dispatch(_build_me_bbc_prompt(me, res), notification=None, report_result=False,
+                      category="NB Month-End BBC", source_id="nb-me-bbc-" + me.strftime('%Y%m'),
+                      source_metadata={'period': me.isoformat()})
+    except Exception as e:
+        log.error("month-end dispatch failed: %s", e)
+        ok = False
+    ps['status'] = 'handed_off' if ok else 'built_not_dispatched'
+    save_state(state)
+    return bool(ok)
+
+
+# ------------------------------------------------ 6.01(c) package
+
+def financials_received(me):
+    """Cheap probe: a message from Accounting naming the period + financials."""
+    senders = ' OR '.join('from:' + s for s in ACCOUNTING_SENDERS)
+    q = '(' + senders + ') "' + me.strftime('%B %Y') + '" financials newer_than:60d'
+    ids = _gmail_ids(q, 5)
+    return ids[0] if ids else None
+
+
+def _build_fin_package_prompt(me, msg_id):
+    fin_due, fin_days = financials_due(me)
+    return (
+        "NB SECTION 6.01(c) PACKAGE -- " + me.strftime('%B %Y') + "\n\n"
+        "Accounting's " + me.strftime('%B %Y') + " financials appear to have landed (Gmail " + msg_id + ").\n"
+        "Contract due date " + fin_due.strftime('%A %Y-%m-%d') + " (" + str(fin_days) + " days). Load\n"
+        "jeeves-servicer-report (read the 6.01(c) HARD RULES) plus gmail, box, google-drive.\n\n"
+        "1. Read the thread yourself. If it is NOT the " + me.strftime('%B %Y') + " package (earlier\n"
+        "   month, a question, a draft), STOP and DM Brian nothing. If Alex has not approved it yet,\n"
+        "   still build steps 2-3 so it is ready the moment he does.\n"
+        "2. Download the attachments and build 'Financials - NB Monthly " + me.strftime('%B %Y')
+        + " - " + me.strftime('%Y%m%d') + ".xlsx'\n"
+        "   cloned from the July 2026 one ('Financials - NB Monthly July 2026 - 20260731.xlsx').\n"
+        "   Upload to Drive (Debt/Neuberger Berman/Reporting/" + me.strftime('%Y%m') + "/, --new).\n"
+        "3. Build the one-paragraph Responsible Officer certification for Alexander Melikian (CFO),\n"
+        "   cloned from 'NB Monthly Financials Officer Certification July 2026', named\n"
+        "   'NB Monthly Financials Officer Certification " + me.strftime('%B %Y') + "'. No\n"
+        "   placeholders except the signature block. Upload the PDF to Box.\n"
+        "4. Try box create_sign_request ONCE (signer alexander@tryjeeves.com). If it errors (the\n"
+        "   app lacks the Sign scope), do not retry -- the ask to Brian is to start Box Sign for\n"
+        "   Alex from the Box UI on that file.\n"
+        "5. Append a 'pending' watch to .deer-flow/_nb_cert_watch.json: label, name_fragment (the\n"
+        "   cert name), unsigned_size (bytes of the uploaded PDF), subject '" + fin_subject(me) + "',\n"
+        "   recipients = To list in nb_bb_distribution.json, companion = the step-2 workbook. The\n"
+        "   hourly watcher then drafts the lender email once the signed copy lands. Build NO\n"
+        "   lender draft yourself now.\n"
+        "6. DM Brian ONE message: Drive link, Box file link, sign-request status, and the single\n"
+        "   ask if any. No narration.\n"
+    )
+
+
+def _build_escalation_prompt(me):
+    fin_due, _ = financials_due(me)
+    return (
+        "NB 6.01(c) ESCALATION -- " + me.strftime('%B %Y') + " financials still not received,\n"
+        "due to NB " + fin_due.strftime('%A %B %d, %Y') + " (" + str((fin_due - date.today()).days)
+        + " days). Confirm on live Gmail (from Kacper/Shalom/Alex, the period named). If truly not\n"
+        "received, create a Gmail DRAFT (never send) replying on the latest monthly-financials\n"
+        "thread to " + ', '.join(FINANCE_RECIPIENTS) + ": 1-3 sentences, 'Hi Kacper-', ask for the\n"
+        + me.strftime('%B %Y') + " package and Alex's sign-off by a date 5 business days before the\n"
+        "NB deadline. DM Brian the verbatim body + draft ID. If it HAS arrived, instead run the\n"
+        "6.01(c) package build (financials workbook, officer certification, Box, cert watch).\n"
+    )
+
+
+def run_fin_milestones(me, now):
+    state = load_state()
+    ps = _pstate(state, me)
+    fin_due, _ = financials_due(me)
+    if ps.get('fin_package') or now.date() > fin_due:
+        return
+    if now.date() < me + timedelta(days=5):
+        return
+    # daily probe for arrival
+    if ps.get('fin_probe_date') != now.date().isoformat():
+        ps['fin_probe_date'] = now.date().isoformat()
+        save_state(state)
+        try:
+            msg_id = financials_received(me)
+        except Exception as e:
+            log.error("financials probe failed: %s", e)
+            msg_id = None
+        if msg_id:
+            try:
+                from autonomous_dispatch import dispatch
+                ok = dispatch(_build_fin_package_prompt(me, msg_id), notification=None,
+                              report_result=False, category="NB 6.01(c) Package",
+                              source_id="nb-fin-pkg-" + me.strftime('%Y%m'),
+                              source_metadata={'period': me.isoformat(), 'msg': msg_id})
+            except Exception as e:
+                log.error("package dispatch failed: %s", e)
+                ok = False
+            if ok:
+                state = load_state()
+                _pstate(state, me)['fin_package'] = {'msg': msg_id,
+                                                     'dispatched_at': now.isoformat()}
+                save_state(state)
+            return
+    # escalation at due - 10 days
+    if (not ps.get('fin_escalated')) and now.date() >= fin_due - timedelta(days=ESCALATE_DAYS_BEFORE) \
+            and now.hour >= FIRE_HOUR:
+        try:
+            from autonomous_dispatch import dispatch
+            ok = dispatch(_build_escalation_prompt(me), notification=None, report_result=False,
+                          category="NB 6.01(c) Escalation",
+                          source_id="nb-fin-esc-" + me.strftime('%Y%m'),
+                          source_metadata={'period': me.isoformat()})
+        except Exception as e:
+            log.error("escalation dispatch failed: %s", e)
+            ok = False
+        if ok:
+            state = load_state()
+            _pstate(state, me)['fin_escalated'] = now.isoformat()
+            save_state(state)
+
+
+# ------------------------------------------------ deadline guard
+
+def run_deadline_guard(me, now):
+    if now.hour < FIRE_HOUR:
+        return
+    state = load_state()
+    ps = _pstate(state, me)
+    if ps.get('guard_date') == now.date().isoformat():
+        return
+    items = [('6.02(b)(y) month-end BBC + 6.02(f) cash report', add_business_days(me, 15),
+              'Monthly Borrowing Base Certificate - As of ' + _long_date(me)),
+             ('6.01(c) monthly financials', financials_due(me)[0],
+              'Monthly Financial Statements - ' + me.strftime('%B %Y'))]
+    lines = []
+    for label, due, frag in items:
+        warn_from = due
+        for _ in range(GUARD_BD):
+            warn_from -= timedelta(days=1)
+            while warn_from.weekday() >= 5:
+                warn_from -= timedelta(days=1)
+        if now.date() < warn_from:
+            continue
+        if now.date() > due + timedelta(days=30):
+            continue
+        try:
+            if sent_to_lenders(frag):
+                continue
+        except Exception as e:
+            lines.append(label + ': could not check Sent (' + str(e)[:80] + ')')
+            continue
+        tag = 'OVERDUE' if now.date() > due else 'due'
+        lines.append(label + ' -- ' + tag + ' ' + due.strftime('%a %b %d') + ', not in Sent')
+    ps['guard_date'] = now.date().isoformat()
+    save_state(state)
+    if lines:
+        _dm(":alarm_clock: *NB " + me.strftime('%B %Y') + " reporting*\n" + "\n".join(lines))
+
+
+def run_schedule(now=None):
+    now = now or datetime.now()
+    me = prior_month_end(now.date())
+    # 6.02(b)(y) month-end BBC at BD+3
+    state = load_state()
+    ps = _pstate(state, me).get('me_bbc', {})
+    if ps.get('status') not in ('handed_off', 'withheld', 'failed') \
+            and now.date() >= add_business_days(me, ME_BBC_BD) and now.hour >= ME_BBC_HOUR \
+            and now.date() <= add_business_days(me, 15) \
+            and ps.get('attempts', 0) < MAX_ATTEMPTS \
+            and ps.get('last_attempt', '')[:13] != now.isoformat()[:13]:
+        run_month_end_bbc(me)
+    # 6.01(c): chase #1 on the 14th stays in run_check(); package + escalation here.
+    # The financials window reaches back two periods (40-day due date spans months).
+    for m in (me, prior_month_end(me)):
+        run_fin_milestones(m, now)
+        run_deadline_guard(m, now)
+
+
 def run_loop():
     log.info("NB Monthly Reporting cron started. Fires day %d at %02d:00.", FIRE_DAY, FIRE_HOUR)
     while True:
@@ -428,6 +790,11 @@ def run_loop():
         except Exception as e:
             log.error("loop error: %s", e)
             traceback.print_exc()
+        try:
+            run_schedule()
+        except Exception as e:
+            log.error("schedule error: %s", e)
+            traceback.print_exc()
         time.sleep(CHECK_INTERVAL_SECS)
 
 
@@ -439,7 +806,7 @@ if __name__ == '__main__':
 
     import argparse
     parser = argparse.ArgumentParser(description='NB Monthly Reporting Cron')
-    parser.add_argument('mode', nargs='?', choices=['once', 'show-prompt', 'dates'])
+    parser.add_argument('mode', nargs='?', choices=['once', 'show-prompt', 'dates', 'month-end-bbc', 'guard', 'status'])
     parser.add_argument('--period', help='month end YYYY-MM-DD (default: prior month end)')
     args = parser.parse_args()
 
@@ -453,6 +820,16 @@ if __name__ == '__main__':
         print('period month end :', m.isoformat())
         print('financials due   :', fd.strftime('%a %Y-%m-%d'), '(%d days)' % fdays)
         print('BBC + cash due   :', add_business_days(m, 15).strftime('%a %Y-%m-%d'), '(15 BD)')
+        print('BBC target       :', add_business_days(m, ME_BBC_BD).strftime('%a %Y-%m-%d'), '(BD+%d)' % ME_BBC_BD)
+        print('fin escalation   :', (fd - timedelta(days=ESCALATE_DAYS_BEFORE)).strftime('%a %Y-%m-%d'))
+    elif args.mode == 'month-end-bbc':
+        run_month_end_bbc(pme or prior_month_end(datetime.now().date()), force=True)
+    elif args.mode == 'guard':
+        m = pme or prior_month_end(datetime.now().date())
+        st = load_state(); _pstate(st, m).pop('guard_date', None); save_state(st)
+        run_deadline_guard(m, datetime.now())
+    elif args.mode == 'status':
+        print(json.dumps(load_state(), indent=2))
     elif args.mode == 'once':
         run_check(pme)
     else:

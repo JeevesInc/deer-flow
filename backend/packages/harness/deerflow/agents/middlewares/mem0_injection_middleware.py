@@ -23,6 +23,33 @@ from deerflow.config.memory_config import get_memory_config
 logger = logging.getLogger(__name__)
 
 
+def _jev_filter(query: str, items: list[dict], kind: str) -> list[dict]:
+    """Jev relevance pass over score-gated candidates (2026-09-23).
+
+    Loads skills/custom/_shared/jev_memfilter.py by path (the LangGraph
+    process does not have _shared on sys.path). Never raises; any failure
+    returns ``items`` unchanged. MEM0_JEV_FILTER=0 disables.
+    """
+    import os
+    import sys
+    from pathlib import Path
+
+    if not items or os.environ.get("MEM0_JEV_FILTER", "1") == "0":
+        return items
+    try:
+        shared = Path(__file__).resolve().parents[6] / "skills" / "custom" / "_shared"
+        if str(shared) not in sys.path:
+            sys.path.insert(0, str(shared))
+        from jev_memfilter import filter_memories
+
+        kept = filter_memories(query, items, kind=kind)
+        logger.info("mem0 jev filter (%s): kept %d/%d", kind, len(kept), len(items))
+        return kept
+    except Exception as e:
+        logger.warning("mem0 jev filter skipped: %s", e)
+        return items
+
+
 class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
     """Injects semantically relevant mem0 memories via wrap_model_call."""
 
@@ -77,6 +104,8 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
                         len(kept), len(memories), min_score)
                 memories = kept
 
+            memories = _jev_filter(query, memories, "fact")
+
             lines = []
             for mem in memories:
                 text = mem.get("memory", "") or mem.get("text", "") or ""
@@ -122,6 +151,7 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
             if min_score > 0:
                 lessons = [m for m in lessons
                            if float(m.get("score", 0.0) or 0.0) >= min_score]
+            lessons = _jev_filter(query, lessons, "lesson")
             lines = []
             for mem in lessons:
                 text = (mem.get("memory", "") or "").strip()

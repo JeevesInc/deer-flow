@@ -71,6 +71,17 @@ def normalize_lesson_text(text: str) -> str:
 
 def rank_with_haiku(task: str, lessons: list[dict], top_k: int) -> list[int]:
     """Return list of indices into `lessons`, ordered by Haiku-judged relevance."""
+    # Jev first (2026-09-23): scores EVERY lesson (P(relevant) Noul, fan-out in
+    # batches of 80) instead of an LLM eyeballing a truncated list. 12 sample
+    # tasks surfaced 31 distinct lessons vs the same 3-4 before; ~3s per task.
+    # Any error -> the Opus ranker below. SLL_JEV=0 disables.
+    import os
+    if os.environ.get("SLL_JEV", "1") != "0":
+        try:
+            from jev_sll import rank as _jev_rank  # _shared
+            return _jev_rank(task, [l.get("text", "") for l in lessons], top_k)
+        except Exception as e:
+            log.warning("Jev ranker failed, Opus fallback: %s", e)
     client = storage.anthropic_client()
     if client is None:
         return list(range(min(top_k, len(lessons))))

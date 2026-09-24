@@ -29,7 +29,7 @@ import re
 
 log = logging.getLogger("eval_judge")
 
-JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "claude-opus-5")
+JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "claude-opus-5-5")
 MAX_SCORE = 2
 
 

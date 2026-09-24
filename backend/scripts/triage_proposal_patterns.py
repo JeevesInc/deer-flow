@@ -60,7 +60,7 @@ except Exception:
 import os  # noqa: E402
 
 NAMESPACE = "proposal-patterns"
-MODEL = "claude-opus-5"
+MODEL = "claude-opus-5-5"
 BATCH = 10
 
 

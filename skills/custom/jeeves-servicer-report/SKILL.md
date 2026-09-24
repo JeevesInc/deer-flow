@@ -287,8 +287,23 @@ the month-end one different is the extra certifications it must carry:
 - Effective Advance Rate of each SPV Financing,
 - the Immaterial Subsidiary threshold test.
 
+**Built by `jeeves-borrowing-base/nb_certifications.py` (2026-09-23)** -- renders the full Exhibit G (items 1-9, Exhibits A-C, Schedules 1-3) from `.deer-flow/nb_cert_config.json` (signer Alexander Melikian, CFO; SPV = Mexican Warehouse Facility; Schedule 1.01(b) subs) and per-period `.deer-flow/nb_cert_inputs.json` (officer confirmations, Accounting's Immaterial Subsidiary figures). EAR = SOFOM master historical_draws minus config repayments / sum eligible_balance_usd at as-of. Exhibit B diffs bank_accts vs the prior month-end snapshot (`--save-snapshot` after delivery), else closing Schedule 5.22. Anything unsourced -> PENDING -> no draft. Weekly BBCs get the items 1-6 certificate from report_scheduler_cron.
+
 This cron exists so the month-end variant is never silently skipped behind the weekly one. When the
 14th falls in the same week as a Monday NB run, they are still two separate obligations.
+
+### Full-package schedule (added 2026-09-23 — Brian: "I want all of it done before the requirement")
+
+`run_schedule()` in the same cron, hourly tick, drafts only:
+
+| Milestone | Target | Contract due |
+|---|---|---|
+| 6.02(b)(y) month-end BBC + 6.02(f) cash report | BD+3 (`NB_ME_BBC_BD`), as of month end, month-end CICO email (`YYMMDD CICO` of last BD) via `run_nb_bb(variant='month_end')`; fail-closed covenant gate; agent adds certifications + draft | BD+15 |
+| 6.01(c) package (NB workbook + officer cert → Box → `_nb_cert_watch.json`) | the day Accounting's package lands (daily Gmail probe from ME+5) | ME+40 |
+| 6.01(c) escalation draft to Kacper/Shalom/Alex | due − 10 days | ME+40 |
+| Deadline guard DM to Brian | daily from due − 3 BD while Gmail Sent lacks it | — |
+
+Manual: `nb_monthly_reporting_cron.py month-end-bbc --period YYYY-MM-DD`, `dates`, `guard`, `status`. Month-end subject: `Jeeves Monthly Borrowing Base Certificate - As of {Month D, YYYY}`. build_nb refuses to zero-fill an unmatched Schedule 5.22 row — a month-end CICO file missing an account is a hard stop, not a default.
 
 ### HARD RULE — 6.01(c) certification mechanics, defined-term cites, and the outbound draft (added 2026-09-16 after three follow-ups in one thread on 2026-09-15)
 

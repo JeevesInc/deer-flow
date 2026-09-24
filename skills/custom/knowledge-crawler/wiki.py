@@ -137,7 +137,7 @@ Rewrite the FULL page body (markdown, starting with a "# {title}" header) by:
 Output ONLY the new page body markdown, nothing else."""
 
     response = client.messages.create(
-        model="claude-opus-5",
+        model="claude-opus-5-5",
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],
     )

@@ -426,7 +426,7 @@ Is this email from a real human intentionally writing to Brian (not automated)?
 Answer with exactly one word: YES or NO."""
 
         response = client.messages.create(
-            model='claude-opus-5',
+            model='claude-opus-5-5',
             max_tokens=5,
             messages=[{'role': 'user', 'content': prompt}],
         )

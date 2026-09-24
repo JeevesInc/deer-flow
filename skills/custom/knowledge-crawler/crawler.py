@@ -290,7 +290,7 @@ def _classify_domains(domain_info: dict) -> dict:
         )
 
         response = client.messages.create(
-            model="claude-opus-5",
+            model="claude-opus-5-5",
             max_tokens=1000,
             messages=[{"role": "user", "content": f"""You are analyzing email domains from a Capital Markets professional's sent mail to identify potential counterparties (lenders, investors, fund managers, financial institutions).
 
@@ -690,7 +690,7 @@ If the raw data doesn't contain meaningful new intelligence, just say "No signif
 
     try:
         response = client.messages.create(
-            model="claude-opus-5",
+            model="claude-opus-5-5",
             max_tokens=2000,
             messages=[{"role": "user", "content": prompt}],
         )

@@ -41,9 +41,9 @@ LESSONS_PATH = SLL_DIR / "lessons.jsonl"
 RETRIEVALS_PATH = SLL_DIR / "retrievals.jsonl"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-SENTIMENT_MODEL = "claude-opus-5"  # Opus 5 everywhere (2026-07-24)
-LESSON_MODEL = "claude-opus-5"
-RANKER_MODEL = "claude-opus-5"
+SENTIMENT_MODEL = "claude-opus-5-5"  # Opus 5 everywhere (2026-07-24)
+LESSON_MODEL = "claude-opus-5-5"
+RANKER_MODEL = "claude-opus-5-5"
 
 log = logging.getLogger("sll")
 

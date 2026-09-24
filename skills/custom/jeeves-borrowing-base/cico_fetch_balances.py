@@ -145,7 +145,7 @@ def _call_claude_vision(image_paths):
     last_err = None
     for budget in (16000, 16000):
         resp = client.messages.create(
-            model='claude-opus-5',
+            model='claude-opus-5-5',
             max_tokens=budget,
             messages=[{'role': 'user', 'content': content}]
         )

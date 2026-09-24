@@ -147,6 +147,68 @@ def fetch_cico(msg_id=None):
     return balances, hdrs.get('Subject', ''), hdrs.get('Date', '')
 
 
+def nearest_cico_filler(as_of, primary_msg_id, window_days=45, max_emails=8):
+    """Brian, 2026-09-23: when an account is missing from the as-of CICO email,
+    "use the closest date and just fill from that". Returns a callable that,
+    given {row: label} still unmatched, pulls CICO emails in order of distance
+    from as_of (ties -> the earlier date) and returns {row: (key, val, source)}.
+    """
+    def _fill(unmatched_labels):
+        import cico_fetch_balances as cico
+        service = cico._get_gmail_service()
+        target = dt.date.fromisoformat(str(as_of))
+        after = (target - dt.timedelta(days=window_days + 2)).strftime('%Y/%m/%d')
+        before = (target + dt.timedelta(days=window_days + 2)).strftime('%Y/%m/%d')
+        res = service.users().messages().list(
+            userId='me', maxResults=100,
+            q='subject:"CICO- Daily balances" after:{} before:{}'.format(after, before)).execute()
+        cands = []
+        for m in res.get('messages', []):
+            if m['id'] == primary_msg_id:
+                continue
+            md = service.users().messages().get(userId='me', id=m['id'], format='metadata',
+                                                metadataHeaders=['Subject']).execute()
+            subj = {h['name']: h['value'] for h in md['payload'].get('headers', [])}.get('Subject', '')
+            mm = re.match(r'\s*(\d{2})(\d{2})(\d{2})\s*CICO', subj)
+            if not mm:
+                continue
+            d = dt.date(2000 + int(mm.group(1)), int(mm.group(2)), int(mm.group(3)))
+            if abs((d - target).days) <= window_days:
+                cands.append((abs((d - target).days), d, m['id'], subj))
+        cands.sort()
+        # Only spend vision calls on emails whose text actually mentions the
+        # missing account (e.g. 'Privy' first appears in the 260911 email, 11
+        # days after the 8/31 month-end). Falls back to all candidates.
+        words = set()
+        for lab in unmatched_labels.values():
+            m0 = re.match(r'\s*([A-Za-z]{3,})', str(lab or ''))
+            if m0:
+                words.add(m0.group(1))
+        if words:
+            q2 = 'subject:"CICO- Daily balances" after:{} before:{} ({})'.format(
+                after, before, ' OR '.join(sorted(words)))
+            hit = {m['id'] for m in service.users().messages().list(
+                userId='me', maxResults=100, q=q2).execute().get('messages', [])}
+            narrowed = [c for c in cands if c[2] in hit]
+            if narrowed:
+                cands = narrowed
+        out, left = {}, dict(unmatched_labels)
+        for _, d, mid, subj in cands[:max_emails]:
+            if not left:
+                break
+            try:
+                bal, _, _ = fetch_cico(mid)
+            except Exception as e:
+                print('  CICO fill: skip {!r} ({})'.format(subj, e), file=sys.stderr)
+                continue
+            got, _miss = match_cico_to_rows(left, bal)
+            for row, (key, val) in got.items():
+                out[row] = (key, val, '{} ({})'.format(subj.strip(), d.isoformat()))
+                left.pop(row, None)
+        return out
+    return _fill
+
+
 def _norm(s):
     return re.sub(r'[^0-9a-zA-Z]', '', str(s or '')).lower()
 
@@ -173,7 +235,8 @@ def match_cico_to_rows(labels, balances):
 
 
 # ── workbook ───────────────────────────────────────────────────────────────
-def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None):
+def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
+          cico_fill=None):
     import openpyxl
     from openpyxl.cell.cell import MergedCell
     from openpyxl.formula.translate import Translator
@@ -290,6 +353,18 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None):
         for row, label, prior in kept:
             print('  CICO: row {} {!r} not in the email (documented not in use) — '
                   'retained prior value {}'.format(row, label, prior))
+        filled = {}
+        if unmatched and cico_fill:
+            filled = cico_fill({row: label for row, label, _ in unmatched})
+            unmatched = [u for u in unmatched if u[0] not in filled]
+            from openpyxl.comments import Comment
+            for row, (key, val, src) in filled.items():
+                ba.cell(row=row, column=17).value = val
+                ba.cell(row=row, column=17).comment = Comment(
+                    'Not in the as-of CICO email; filled from closest-date email: ' + src,
+                    'DeerFlow')
+                print('  CICO FILLED row {}: {!r} = {} from {}'.format(
+                    row, ba.cell(row=row, column=16).value, val, src))
         if unmatched:
             for row, label, reason in unmatched:
                 print('  CICO UNMATCHED row {}: {!r} — {}'.format(row, label, reason),
@@ -537,6 +612,8 @@ def main():
     ap.add_argument('--tape-csv', default=None, help='reuse an already-pulled tape CSV')
     ap.add_argument('--cico-msg', default=None)
     ap.add_argument('--skip-cico', action='store_true')
+    ap.add_argument('--cico-fill-nearest', action='store_true',
+                    help='fill accounts missing from the as-of CICO email from the closest-dated one')
     a = ap.parse_args()
 
     tape = load_tape_csv(a.tape_csv) if a.tape_csv else pull_tape(a.as_of)
@@ -556,18 +633,20 @@ def main():
     print('FX (USD per 1 local, tape spot_rate median):',
           {k: round(v, 6) for k, v in sorted(fx.items())})
 
-    cico = meta = None
+    cico = meta = filler = None
     if not a.skip_cico:
         cico, subj, date_hdr = fetch_cico(a.cico_msg)
         m = re.match(r'\s*(\d{2})(\d{2})(\d{2})', subj)
         meta = '{}-{}-{}'.format(m.group(3), dt.date(2000, int(m.group(2)), 1).strftime('%b'),
                                  m.group(1)) if m else subj
         print('CICO email: {!r} | {} | {} accounts'.format(subj, date_hdr, len(cico)))
+        if a.cico_fill_nearest:
+            filler = nearest_cico_filler(a.as_of, a.cico_msg)
 
     out_date = a.out_date or dt.date.today().strftime('%Y%m%d')
     out = os.path.join(os.environ['OUTPUTS_PATH'],
                        'Jeeves NB Borrowing Base - Form - {}.xlsx'.format(out_date))
-    stats = build(tape, a.template, out, a.as_of, cico, meta, fx)
+    stats = build(tape, a.template, out, a.as_of, cico, meta, fx, cico_fill=filler)
     print('STATS:', stats)
 
 

@@ -76,7 +76,7 @@ STATE_PATH = _BACKEND / '.deer-flow' / 'action_learner_state.json'
 OBS_LOG_PATH = _BACKEND / '.deer-flow' / 'action_observations.jsonl'
 
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-SYNTHESIZER_MODEL = 'claude-opus-5'
+SYNTHESIZER_MODEL = 'claude-opus-5-5'
 
 OWNER_EMAIL = 'brian.mauck@tryjeeves.com'
 OWNER_LOCAL = OWNER_EMAIL.split('@')[0]

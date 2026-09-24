@@ -5,11 +5,11 @@ Sonnet-5 migrations each meant 13 separate edits. New code imports the
 tier constants; the next migration is one env var (or one line here).
 
 Tiers (consolidated to Opus 5 for everything, 2026-07-24):
-- SONNET / HAIKU / OPUS all resolve to `claude-opus-5` by default.
+- SONNET / HAIKU / OPUS all resolve to `claude-opus-5-5` by default.
   The three names are kept so the ~9 importing scripts need no edits and
   a future re-split is one env var each (DEERFLOW_{SONNET,HAIKU,OPUS}_MODEL).
 
-`claude-opus-5` is adaptive-thinking-only: no budget_tokens, no
+`claude-opus-5-5` is adaptive-thinking-only: no budget_tokens, no
 temperature-with-thinking, and responses may lead with a ThinkingBlock —
 ALWAYS use text_from_response(), never resp.content[0].text (that crashed
 the proposal synthesizer and the CICO vision extractor).
@@ -18,9 +18,9 @@ the proposal synthesizer and the CICO vision extractor).
 import os
 
 # All tiers point at Opus 5. Override any one via its env var to re-split later.
-SONNET = os.environ.get("DEERFLOW_SONNET_MODEL", "claude-opus-5")
-HAIKU = os.environ.get("DEERFLOW_HAIKU_MODEL", "claude-opus-5")
-OPUS = os.environ.get("DEERFLOW_OPUS_MODEL", "claude-opus-5")
+SONNET = os.environ.get("DEERFLOW_SONNET_MODEL", "claude-opus-5-5")
+HAIKU = os.environ.get("DEERFLOW_HAIKU_MODEL", "claude-opus-5-5")
+OPUS = os.environ.get("DEERFLOW_OPUS_MODEL", "claude-opus-5-5")
 
 
 def text_from_response(resp) -> str:

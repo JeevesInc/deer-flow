@@ -84,6 +84,19 @@ sending that, don't ever draft an email like that."*
   -> the four DACA'd accounts), costing 76 turns on one thread. Pull every account off the current
   CICO file, add them all, and state which ones carry `controlled_acct = Yes` and why — the DACA
   scope drives the cash pool and Section 7.01(a), so the flag matters more than the row.
+- **"New controlled account" on a certificate = a control agreement Jeeves actually granted since
+  Schedule 5.22 — never a diff of workbook columns.** 2026-09-23: the Aug month-end cert listed rows
+  22-38 as new / no-longer-excluded because the `excluded_acct` column read that way; Brian: *"BOFA i
+  agree with but we didn't give control on the others"* — only BofA 1273 belonged. Before any account
+  appears as new/controlled on a lender cert, tie it to an executed DACA/ACA in
+  `.deer-flow/wiki/deals/nb_facility_closing.md` or Brian's sent mail; otherwise it stays off.
+- **Month-end cert data gaps: fill from the closest available date and say so in one line** (Brian,
+  2026-09-23: *"Use the closest date and just fill from that"*; Privy from 9/11 data). Do not stop
+  to ask, and do not leave explanatory comments on the lender-facing certificate itself — Brian had
+  to say *"Remove errant comments."* Notes go in the Slack delivery, never in the artifact.
+- **There is no LibreOffice/soffice on this box** — do not write recalc/convert scripts that shell
+  out to it (two failed attempts 2026-09-23, `recalc.py` and `rc.py`). Recompute in Python; for PDF
+  page images use a Python PDF library.
 
 ---
 

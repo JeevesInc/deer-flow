@@ -313,6 +313,19 @@ class SlackChannel(Channel):
                     thread_ts=msg.thread_ts,
                     chars=len(getattr(msg, "text", "") or ""),
                 )
+                # Jev shadow audit of the final reply (2026-09-23): narration /
+                # padding / unneeded-permission scores -> .deer-flow/jev_presend.jsonl.
+                # Background thread, never blocks or alters the post. JEV_PRESEND=0 off.
+                if msg.is_final and os.environ.get("JEV_PRESEND", "1") != "0":
+                    try:
+                        import sys as _sys
+                        _shared = str(Path(__file__).resolve().parents[3] / "skills" / "custom" / "_shared")
+                        if _shared not in _sys.path:
+                            _sys.path.insert(0, _shared)
+                        from jev_presend import audit_async
+                        audit_async(getattr(msg, "text", "") or "", msg.thread_ts)
+                    except Exception as _e:
+                        logger.debug("[Slack] jev presend audit skipped: %s", _e)
                 if msg.thread_ts:
                     if is_assistant:
                         # Assistant thread: clear status (auto-clears, but be explicit)

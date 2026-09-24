@@ -746,7 +746,7 @@ def run_mx_bb():
         raise
 
 
-def run_nb_bb():
+def run_nb_bb(as_of=None, variant='weekly', cico_msg=None):
     """Build the NB Borrowing Base — WEEKLY, MONDAYS, as of the prior Sunday.
 
     Cadence set by Brian 2026-08-11 and re-confirmed 2026-08-17 ("it needs to run
@@ -762,15 +762,27 @@ def run_nb_bb():
     """
     import subprocess, re as _re
 
-    yesterday   = (datetime.now().date() - timedelta(days=1)).isoformat()
-    today_stamp = datetime.now().date().strftime('%Y%m%d')
+    # variant='month_end' (2026-09-23, Brian: "I want all of it done before the
+    # requirement"): Section 6.02(b)(y) month-end BBC + 6.02(f) cash report,
+    # called from nb_monthly_reporting_cron with as_of = month end and the
+    # month-end CICO balances message. Same build + same fail-closed covenant
+    # gate; the Gmail draft is NOT built here -- the month-end certifications
+    # (account delta, SPV Effective Advance Rates, Immaterial Subsidiary test)
+    # are added by the agent first. Returns a result dict for the caller.
+    is_me       = (variant == 'month_end')
+    yesterday   = as_of or (datetime.now().date() - timedelta(days=1)).isoformat()
+    today_stamp = (yesterday.replace('-', '') if is_me
+                   else datetime.now().date().strftime('%Y%m%d'))
     yyyymm      = yesterday.replace('-', '')[:6]
+    result      = {'variant': variant, 'as_of': yesterday, 'gate_ok': False,
+                   'final_wb': None, 'drive_link': '', 'cov_res': None, 'build_out': ''}
+    _label      = 'NB Month-End Borrowing Base' if is_me else 'NB Borrowing Base'
     outputs_dir = os.environ.get('OUTPUTS_PATH', '').replace(chr(92), '/')
     skills_dir  = os.path.dirname(os.path.abspath(__file__))
     NB_REPORTING_FOLDER = '17Eji0ZgVcaAZcdoPDKNNJaClN8PKuTLW'
 
     log.info(f"run_nb_bb: building NB BB as of {yesterday}")
-    _post_slack(f":bank: Running scheduled *NB Borrowing Base* as of {yesterday}...")
+    _post_slack(f":bank: Running scheduled *{_label}* as of {yesterday}...")
 
     def _run(cmd, step, timeout=900):
         log.info(f"  [{step}] {' '.join(str(c) for c in cmd)}")
@@ -823,6 +835,10 @@ def run_nb_bb():
         build_script = os.path.join(skills_dir, 'build_nb.py')
         cmd = [sys.executable, build_script, '--as-of', yesterday,
                '--template', template, '--out-date', today_stamp]
+        if cico_msg:
+            cmd += ['--cico-msg', cico_msg]
+        if is_me:
+            cmd += ['--cico-fill-nearest']  # Brian 2026-09-23: closest date fills gaps
         try:
             build_out = _run(cmd, 'build_nb', timeout=1800)
         except RuntimeError as build_err:
@@ -882,6 +898,9 @@ def run_nb_bb():
         class _CovenantGate(Exception):
             pass
 
+        class _MonthEndHandoff(Exception):
+            pass
+
         cov_res = None
         cov_err = ''
         try:
@@ -901,6 +920,8 @@ def run_nb_bb():
             if not cov_res['ok']:
                 raise _CovenantGate('; '.join(
                     '{} -- {}'.format(t['name'], t['detail']) for t in cov_res['failures']))
+            if is_me:
+                raise _MonthEndHandoff()
             import shutil as _shutil, base64 as _b64
             sys.path.insert(0, os.path.join(skills_dir, '..', 'gmail'))
             import gmail_tool as _gt
@@ -935,6 +956,10 @@ def run_nb_bb():
             log.info('  [covenant_check] all tests pass -- ' + _cov_line)
             draft_note = (f"\n:email: Draft ready in Gmail: *{_subject}* "
                           f"(To: {len(_cfg['to'])}, Cc: {len(_cfg.get('cc', []))}) -- review and send.")
+        except _MonthEndHandoff:
+            result['gate_ok'] = True
+            draft_note = ('\n:white_check_mark: Covenant gate passed. Month-end certifications '
+                          '+ Gmail draft are being prepared by the agent (not sent).')
         except _CovenantGate as _cg:
             log.error(f'  [gmail_draft] WITHHELD -- covenant gate: {_cg}')
             draft_note = ('\n:rotating_light: *COVENANT FAILURE -- Gmail draft WITHHELD.* '
@@ -953,7 +978,7 @@ def run_nb_bb():
         if m_cico:
             bits.append(f"Bank balances from *{m_cico.group(1)}*")
         _post_slack(
-            f":white_check_mark: *NB Borrowing Base -- as of {yesterday}*\n"
+            f":white_check_mark: *{_label} -- as of {yesterday}*\n"
             + ("\n".join(bits) + "\n" if bits else "")
             + (f"<{drive_link}|Open in Drive>" if drive_link
                else f"Uploaded to Drive/Neuberger Berman/Reporting/{yyyymm}/")
@@ -961,11 +986,14 @@ def run_nb_bb():
             + draft_note
         )
         log.info('run_nb_bb: done.')
+        result.update(final_wb=final_wb, drive_link=drive_link, cov_res=cov_res,
+                      build_out=build_out)
+        return result
 
     except Exception as exc:
         log.error(f"run_nb_bb failed: {exc}", exc_info=True)
         _post_slack(
-            f":warning: *NB Borrowing Base -- as of {yesterday}* failed to generate.\n"
+            f":warning: *{_label} -- as of {yesterday}* failed to generate.\n"
             f"`{str(exc)[:400]}`\n"
             f"Run manually: `build_nb.py --as-of {yesterday} --template <prior form>`"
         )

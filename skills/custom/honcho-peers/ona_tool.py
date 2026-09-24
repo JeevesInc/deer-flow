@@ -395,7 +395,7 @@ def cmd_query(question: str):
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             resp = client.messages.create(
-                model='claude-opus-5',
+                model='claude-opus-5-5',
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )

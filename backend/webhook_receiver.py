@@ -90,8 +90,8 @@ ANALYST_QUEUE_CHANNEL_ID = os.environ.get('ANALYST_QUEUE_CHANNEL_ID', '')
 SLACK_SIGNING_SECRET = os.environ.get('SLACK_SIGNING_SECRET', '')
 PUBSUB_VERIFICATION_TOKEN = os.environ.get('PUBSUB_VERIFICATION_TOKEN', '')
 MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
-CLASSIFIER_MODEL = 'claude-opus-5'  # Opus 5 everywhere (2026-07-24)
-DRAFTER_MODEL = 'claude-opus-5'     # Opus 5 everywhere (2026-07-24)
+CLASSIFIER_MODEL = 'claude-opus-5-5'  # Opus 5 everywhere (2026-07-24)
+DRAFTER_MODEL = 'claude-opus-5-5'     # Opus 5 everywhere (2026-07-24)
 RUN_TIMEOUT = 20 * 60  # seconds
 
 # Proposal feedback loop — paths and config
@@ -278,6 +278,29 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
         log.error('No ANTHROPIC_API_KEY — cannot classify, defaulting to non-actionable')
         return _default_classification('No API key configured')
 
+    # --- Jev decides `actionable` for Gmail (2026-09-23, Brian: "do 1-5") ---------
+    # Golden set (60 cases): Opus-alone recall 0.50 / precision 0.94 / F1 0.65;
+    # Jev at 0.5 recall 0.87 / precision 0.84 / F1 0.85, 441ms median vs 8.5s.
+    # Below the threshold Opus is skipped entirely. At/above it Opus still runs to
+    # write summary / proposed_action. Gmail only: an actionable Slack message
+    # AUTO-DISPATCHES an agent run, so Slack keeps the Opus-only decision.
+    # Any Jev failure -> Opus-only path, exactly as before. JEV_EMAIL_GATE=0 disables.
+    jev_p = None
+    if source == 'gmail' and os.environ.get('JEV_EMAIL_GATE', '1') != '0':
+        try:
+            from jev_classifier import p_actionable, GATE_THRESHOLD  # _shared
+            jev_p = p_actionable(sender, subject, body_preview, to, cc)
+        except Exception as e:
+            log.warning('Jev gate unavailable, Opus-only: %s', e)
+            jev_p = None
+        if jev_p is not None and jev_p < GATE_THRESHOLD:
+            r = _default_classification('')
+            r['category'] = 'jev-gated'
+            r['reasoning'] = f'Jev P(actionable)={jev_p:.2f} < {GATE_THRESHOLD}'
+            r['jev_p'] = jev_p
+            log.info('Jev gate: skip Opus | p=%.2f | %s', jev_p, subject[:80])
+            return r
+
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
     # Pull mem0-learned proposal patterns relevant to this sender/subject.
@@ -361,6 +384,13 @@ Be decisive. Outbound legal work from Jeeves' counsel and calendar/Zoom invites 
             if not m:
                 raise
             result = json.loads(m.group(0))
+        if jev_p is not None:
+            result['jev_p'] = jev_p
+            if not result.get('actionable'):
+                result['opus_actionable'] = False
+                result['actionable'] = True
+                result['reasoning'] = (f'Jev P(actionable)={jev_p:.2f} overrode Opus=false. '
+                                       + str(result.get('reasoning', '')))
         log.info('LLM classification: actionable=%s | priority=%s | category=%s | %s',
                  result.get('actionable'), result.get('priority'),
                  result.get('category', ''), result.get('reasoning', '')[:80])

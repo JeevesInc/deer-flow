@@ -155,6 +155,19 @@ def extract_lesson(task: str, response: str, outcome: str) -> str | None:
 
 
 def classify_sentiment(task: str, response: str, user_reply: str) -> str:
+    # Jev first (2026-09-23): 5-way Choice, ~0.5s, agrees with Opus on 69% of a
+    # 171-turn stratified sample; the disagreements are mostly Jev catching
+    # bare '?', 'wtf?', 'you never reported anything' that Opus left as
+    # no_signal. Low confidence or any error -> the Opus path below.
+    import os
+    if os.environ.get("SLL_JEV", "1") != "0":
+        try:
+            from jev_sll import sentiment as _jev_sentiment  # _shared
+            label, conf = _jev_sentiment(task, response, user_reply)
+            if label in SENTIMENT_RULES and conf >= 0.30:
+                return label
+        except Exception as e:
+            log.warning("Jev sentiment failed, Opus fallback: %s", e)
     client = storage.anthropic_client()
     prompt = SENTIMENT_PROMPT.format(
         task=storage.truncate(task, 400),

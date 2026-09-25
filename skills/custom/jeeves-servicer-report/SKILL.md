@@ -266,6 +266,8 @@ NB Borrowing Base Certificate
 
 ## NB Monthly Reporting (the 14th) — `nb_monthly_reporting_cron.py`
 
+**HARD RULE — signature/status tracking lives ONLY in `check_cert_watches()` + `_nb_cert_watch.json` (added 2026-09-24).** Never write a standalone watcher script for a Box Sign or lender send. Before ANY "still not signed / still unsent" alert or reply: (1) `find_executed_cert()` on the signed area, (2) Gmail `in:sent (to:nb.com OR to:wilmingtontrust.com)` for the subject, (3) the watch entry status. An orphan watcher timed out and told Brian the July certification was missing 22h after Alex signed and Brian had sent the package; the first correction reply then repeated the error by skipping in:sent.
+
 Scope set by Brian 2026-09-14, from the executed NB Credit Agreement, Article VI. The cron fires on
 the **14th of each month** (`NB_MONTHLY_DAY` / `NB_MONTHLY_HOUR`).
 

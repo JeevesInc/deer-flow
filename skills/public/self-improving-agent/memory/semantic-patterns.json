@@ -4303,6 +4303,22 @@
       "target_skills": [
         "jeeves-servicer-report"
       ]
+    },
+    "pat-2026-09-24-270": {
+      "id": "pat-2026-09-24-270",
+      "name": "Monex Power-Trust e-signature notices (ti_firma.digital@mone",
+      "source": "ep-2026-09-24-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-24",
+      "last_applied": "2026-09-24T17:32:48.861927+00:00",
+      "category": "general",
+      "pattern": "Monex Power-Trust e-signature notices (ti_firma.digital@monex.com.mx, Inicio proceso de firma, F12339 docs) are not for Brian and not important - do not surface as cards",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
     }
   }
 }

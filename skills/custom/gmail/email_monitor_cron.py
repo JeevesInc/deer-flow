@@ -65,6 +65,7 @@ _IGNORED_DOMAINS = {
     'notify@',
     'mailer-daemon@',
     'postmaster@',
+    'ti_firma.digital@monex.com.mx',  # Monex Power-Trust e-sign notices -- Brian 2026-09-24: not for him
     # Google
     '@google.com',
     '@googlemail.com',

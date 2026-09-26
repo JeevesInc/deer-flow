@@ -4319,6 +4319,38 @@
       "target_skills": [
         "gmail"
       ]
+    },
+    "pat-2026-09-25-271": {
+      "id": "pat-2026-09-25-271",
+      "name": "when disabling a job, grep for other gates that depend on it",
+      "source": "ep-2026-09-25-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-25",
+      "last_applied": "2026-09-25T15:59:05.278258+00:00",
+      "category": "general",
+      "pattern": "when disabling a job, grep for other gates that depend on its state key",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-26-272": {
+      "id": "pat-2026-09-26-272",
+      "name": "Cron modules (email_monitor_cron, report_scheduler_cron) loa",
+      "source": "ep-2026-09-26-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-26",
+      "last_applied": "2026-09-26T09:08:16.240269+00:00",
+      "category": "general",
+      "pattern": "Cron modules (email_monitor_cron, report_scheduler_cron) load once at gateway start; an edit is not live until restart. Before explaining why a filtered email still surfaced, compare the edit mtime to the last CronSupervisor started line. 2026-09-25 Monex e-sign notice surfaced 08:49 after the 02:11 ignore-list edit but before the 09:02 restart and was misattributed to a Jev 0.57 score.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
     }
   }
 }

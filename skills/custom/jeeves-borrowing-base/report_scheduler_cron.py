@@ -169,14 +169,29 @@ def _wait_for_bb_pipeline(today_str: str, max_wait_seconds: int = 600, poll_inte
     already-handled -- correct for preventing double-launch, wrong for
     "is the data actually ready").
     """
+    # 2026-09-25: the gate still required 'last_bb' (CIM US Bridge BB), which was
+    # DISABLED 2026-08-10 -- so it could never be satisfied and the brief waited the
+    # full 10 min and posted a false "still building" warning every single day.
+    # Only wait on the BB jobs that are actually scheduled today.
+    required = ['last_mx_bb']
+    if os.environ.get('BRIDGE_BB_ENABLED') == '1':
+        required.append('last_bb')
+    if datetime.strptime(today_str, '%Y-%m-%d').weekday() == 0:
+        required.append('last_nb_bb')   # NB BB runs Mondays only
     waited = 0
+    vals = []
     while waited < max_wait_seconds:
         with _state_lock:
             state = load_state()
-        if state.get('last_bb') == today_str and state.get('last_mx_bb') == today_str:
+        vals = [state.get(k, '') for k in required]
+        if all(v == today_str for v in vals):
             return True
+        if any(v == f"{today_str}_failed" for v in vals):
+            log.warning(f"BB gate: a required build failed today ({dict(zip(required, vals))})")
+            return False
         time.sleep(poll_interval)
         waited += poll_interval
+    log.warning(f"BB gate timed out; state = {dict(zip(required, vals))}")
     return False
 
 

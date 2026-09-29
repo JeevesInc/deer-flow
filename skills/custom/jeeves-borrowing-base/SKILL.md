@@ -549,3 +549,19 @@ DPD>30 must be exactly 0 because `elig_iv_dpd30` already excludes it.
 
 <!-- Evolution: 2026-08-19 | source: self-improving-agent -->
 
+
+
+## Section 7.01 test date — month-end only (Brian, 2026-09-28)
+Executed CA 8/10/26: 7.01(a) Liquidity is tested "on the last Business Day of each month"; 7.01(b) DQ30
+"as of the last day of any calendar month"; 7.01(c) on the last Business Day of a month. Brian: "in the
+borrowing base, when it's built, I want the test as of the end of the previous month."
+- `build_nb.py` computes the test date (`liquidity_test_date`: last NY Business Day of the as-of month if
+  as-of is on/after it, else of the prior month), pulls that date's `<YYMMDD> CICO- Daily balances` email
+  plus that date's tape FX, and writes bank_accts cols S (local bal) / T (FX) / U (Liquidity contribution).
+  liquidity!E7 = SUM(col U); E15/E16 memo and B22 label point at the test date.
+- The BB cash pool (clause (i), col K) stays on the as-of balances — only Liquidity moves.
+- `nb_covenant_check.py` uses S*T when bank_accts U1 says "month-end"; detail prints "as of DD-Mon-YY".
+- No test-date CICO email, or a controlled account missing from it after nearest-date fill -> build fails
+  (fail-closed). Never substitute another date.
+- Draw weeks: the CA 4.02(d)-style Delayed Draw condition still needs pro forma 7.01 compliance
+  immediately before/after the draw on the latest data — not covered by the month-end test.

@@ -133,6 +133,28 @@ def _alert_once_per_boot(key: str, msg: str) -> bool:
     return True
 
 
+def _hand_off_to_monitor(wait_s: int = 240) -> None:
+    """The continuous monitor holds the singleton lock, so our --once child
+    exited without doing anything (2026-09-28: that turned into a false
+    'reauth ran but Redshift is still unreachable' alert). Drop the out-of-band
+    request file the monitor honours (Step 1.6 in run_reauth_cycle) and give it
+    time to do the reauth before we judge the outcome."""
+    req = r"C:\Jeeves\redshift-bot\tmp\zscaler_force_reauth.request"
+    try:
+        with open(req, "w", encoding="utf-8") as f:
+            f.write("skill reauth.py (lock held by monitor)")
+        print(f"Monitor holds the lock -- requested reauth via {req}; waiting up to {wait_s}s")
+    except Exception as e:
+        print(f"could not write reauth request: {e}", file=sys.stderr)
+        return
+    deadline = time.time() + wait_s
+    while time.time() < deadline:
+        time.sleep(20)
+        if check_redshift_connectivity():
+            print("Monitor completed the reauth.")
+            return
+
+
 def main():
     # Step 1: Verify the problem — maybe it's a transient blip
     print("Checking Redshift connectivity...")
@@ -201,6 +223,8 @@ def main():
         if out:
             print(out[-4000:])
         print(f"Session-{sid} reauth exited rc={rc}")
+        if out and "already running" in out:
+            _hand_off_to_monitor()
     else:
         subprocess.run(reauth_cmd, timeout=300, capture_output=False)
 

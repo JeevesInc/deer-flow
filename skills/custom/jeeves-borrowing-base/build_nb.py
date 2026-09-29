@@ -95,6 +95,166 @@ def group_key(r):
     return str(ein) if ein not in (None, '', 'None') else '(no EIN) {}'.format(r['company_id'])
 
 
+# ── Section 7.01(a) test date ─────────────────────────────────────────────
+# Brian, 2026-09-28: Section 7.01 is tested only "on the last Business Day of
+# each month" (executed CA 8/10/26), not weekly. "In the borrowing base, when
+# it's built, I want the test as of the end of the previous month." The BB cash
+# pool (clause (i), bank_accts col K) stays on the as-of balances; Liquidity
+# (col U -> liquidity!E7) is recomputed on the test-date CICO balances and
+# test-date FX. Test date = last NY Business Day of the as-of month if the
+# as-of date is on/after it (month-end builds), else of the prior month.
+def _observed(d):
+    if d.weekday() == 5:
+        return d - dt.timedelta(days=1)
+    if d.weekday() == 6:
+        return d + dt.timedelta(days=1)
+    return d
+
+
+def _nth_weekday(y, m, wd, n):
+    d = dt.date(y, m, 1)
+    d += dt.timedelta(days=(wd - d.weekday()) % 7)
+    return d + dt.timedelta(weeks=n - 1)
+
+
+def _month_last_day(y, m):
+    return (dt.date(y + 1, 1, 1) if m == 12 else dt.date(y, m + 1, 1)) - dt.timedelta(days=1)
+
+
+def ny_bank_holidays(y):
+    out = {_observed(d) for d in (dt.date(y, 1, 1), dt.date(y, 6, 19), dt.date(y, 7, 4),
+                                  dt.date(y, 11, 11), dt.date(y, 12, 25))}
+    last_may = _month_last_day(y, 5)
+    out |= {_nth_weekday(y, 1, 0, 3), _nth_weekday(y, 2, 0, 3),
+            last_may - dt.timedelta(days=(last_may.weekday() - 0) % 7),
+            _nth_weekday(y, 9, 0, 1), _nth_weekday(y, 10, 0, 2), _nth_weekday(y, 11, 3, 4)}
+    return out
+
+
+def last_business_day_of_month(y, m):
+    d, hol = _month_last_day(y, m), ny_bank_holidays(y)
+    while d.weekday() >= 5 or d in hol:
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def liquidity_test_date(as_of):
+    d = _d(as_of).date()
+    lbd = last_business_day_of_month(d.year, d.month)
+    if d >= lbd:
+        return lbd
+    pm = d.replace(day=1) - dt.timedelta(days=1)
+    return last_business_day_of_month(pm.year, pm.month)
+
+
+def tape_fx(tape):
+    ccy_map = {986: 'BRL', 170: 'COP', 484: 'MXN', 840: 'USD', 826: 'GBP',
+               978: 'EUR', 124: 'CAD'}
+    rates = collections.defaultdict(list)
+    for r in tape:
+        sr, c = _f(r.get('spot_rate')), _i(r.get('currency'))
+        if sr and c in ccy_map:
+            rates[ccy_map[c]].append(sr)
+    out = {}
+    for k, v in rates.items():
+        v.sort()
+        out[k] = v[len(v) // 2]
+    return out
+
+
+def fetch_month_end_cico(test_date):
+    """The '<YYMMDD> CICO- Daily balances' email for the test date. Never falls
+    back to another date -- the covenant must carry test-date balances."""
+    import cico_fetch_balances as cico
+    service = cico._get_gmail_service()
+    stamp = test_date.strftime('%y%m%d')
+    msgs = service.users().messages().list(
+        userId='me', q='subject:"{} CICO" newer_than:400d'.format(stamp),
+        maxResults=5).execute().get('messages', [])
+    if not msgs:
+        raise RuntimeError("no '{} CICO- Daily balances' email -- cannot test Section 7.01(a) "
+                           "as of {}".format(stamp, test_date))
+    bal, subj, _ = fetch_cico(msgs[0]['id'])
+    return bal, subj, msgs[0]['id']
+
+
+def write_month_end_liquidity(wb, me):
+    ba = wb['bank_accts']
+    rows = [r for r in range(2, ba.max_row + 1) if ba.cell(row=r, column=1).value not in (None, '')]
+    lbl = me['date'].strftime('%d-%b-%y')
+    if me.get('same_as_current'):
+        vals = {r: _f(ba.cell(row=r, column=17).value) or 0.0 for r in rows}
+        fxv = {r: _f(ba.cell(row=r, column=18).value) or 0.0 for r in rows}
+        src = 'same CICO email as the as-of balances'
+    else:
+        labels = {r: ba.cell(row=r, column=16).value for r in rows}
+        matched, unmatched = match_cico_to_rows(labels, me['balances'])
+        vals = {r: v for r, (k, v) in matched.items()}
+        ctrl = lambda r: (str(ba.cell(row=r, column=8).value).strip() == 'Yes'
+                          and str(ba.cell(row=r, column=9).value).strip() != 'Yes')
+        # rows outside Liquidity (not controlled / excluded) cannot move the test
+        for item in list(unmatched):
+            row = item[0]
+            if not ctrl(row) or 'not in use' in str(item[1]).lower():
+                vals[row] = _f(ba.cell(row=row, column=17).value) or 0.0
+                unmatched.remove(item)
+        if unmatched and me.get('filler'):
+            got = me['filler']({row: label for row, label, _ in unmatched})
+            for row, (key, val, s2) in got.items():
+                vals[row] = val
+                print('  7.01(a) {} FILLED row {}: {!r} = {} from {}'.format(
+                    lbl, row, ba.cell(row=row, column=16).value, val, s2))
+            unmatched = [u for u in unmatched if u[0] not in got]
+        if unmatched:
+            for row, label, reason in unmatched:
+                print('  7.01(a) {} UNMATCHED row {}: {!r} -- {}'.format(lbl, row, label, reason),
+                      file=sys.stderr)
+            raise RuntimeError('{} controlled account(s) missing from the {} CICO email -- '
+                               'refusing to test Section 7.01(a)'.format(len(unmatched), lbl))
+        fxv = {}
+        for r in rows:
+            ccy = ba.cell(row=r, column=3).value
+            if ccy == 'USD':
+                fxv[r] = 1.0
+            elif ccy in me['fx']:
+                fxv[r] = round(me['fx'][ccy], 6)
+            else:
+                fxv[r] = _f(ba.cell(row=r, column=18).value) or 0.0
+                print('  7.01(a) {}: no tape FX for {} (row {}) -- used as-of rate'.format(lbl, ccy, r))
+        src = me.get('subj', '')
+    ba.cell(row=1, column=19).value = ('balance in original currency -- month-end {} '
+                                       '(Section 7.01(a) test date; {})'.format(lbl, src.strip()))
+    ba.cell(row=1, column=20).value = 'FX rate, USD per 1 unit (tape spot_rate {})'.format(lbl)
+    ba.cell(row=1, column=21).value = ('counted toward Liquidity at month-end {} '
+                                       '(Section 7.01(a) test, after 20% haircut)'.format(lbl))
+    for r in range(2, ba.max_row + 1):
+        if r in vals or r in rows:
+            ba.cell(row=r, column=19).value = vals.get(r, 0.0)
+            ba.cell(row=r, column=20).value = fxv.get(r, 0.0)
+            ba.cell(row=r, column=21).value = (
+                '=IF($A{0}="",0,IF(AND($H{0}="Yes",$I{0}<>"Yes"),IF(AND($C{0}<>"USD",$J{0}<>"Y"),'
+                '0.8*$S{0}*$T{0},$S{0}*$T{0}),0))'.format(r))
+            ba.cell(row=r, column=19).number_format = '#,##0.00'
+            ba.cell(row=r, column=21).number_format = '#,##0.00'
+    n = ba.max_row
+    rng = lambda c: 'bank_accts!${0}$2:${0}${1}'.format(c, n)
+    lq = wb['liquidity']
+    lq['B6'] = 'Build-up -- balances as of {} (Section 7.01(a) tests the last Business Day of each month)'.format(lbl)
+    lq['B7'] = 'Unrestricted Cash in Controlled Accounts -- Borrower and Guarantors, as of ' + lbl
+    lq['E7'] = '=SUM({})'.format(rng('U'))
+    lq['F7'] = 'auto -- bank_accts col U (balances as of {})'.format(lbl)
+    base = '({0}="Yes")*({1}<>"Yes")'.format(rng('H'), rng('I'))
+    bal = '{0}*{1}'.format(rng('S'), rng('T'))
+    lq['E15'] = '=SUMPRODUCT({0}*((({1}="USD")+({2}="Y"))>0)*{3})'.format(base, rng('C'), rng('J'), bal)
+    lq['E16'] = '=SUMPRODUCT({0}*({1}<>"USD")*({2}="N")*{3})'.format(base, rng('C'), rng('J'), bal)
+    lq['B22'] = 'Liquidity as of {} (last Business Day of the month -- Section 7.01(a) test date)'.format(lbl)
+    tot = sum((0.8 if (ba.cell(row=r, column=3).value != 'USD' and ba.cell(row=r, column=10).value != 'Y') else 1.0)
+              * vals.get(r, 0.0) * fxv.get(r, 0.0) for r in rows
+              if str(ba.cell(row=r, column=8).value).strip() == 'Yes'
+              and str(ba.cell(row=r, column=9).value).strip() != 'Yes')
+    print('liquidity: Section 7.01(a) tested as of {} -- controlled-account cash ${:,.2f}'.format(lbl, tot))
+
+
 # ── tape pull ──────────────────────────────────────────────────────────────
 def pull_tape(as_of):
     from redshift import connect
@@ -224,6 +384,26 @@ def match_cico_to_rows(labels, balances):
         nlabel = _norm(label)
         hits = [k for k in keys if _norm(k) and _norm(k) in nlabel]
         if not hits:
+            # 2026-09-28: vision OCR drifts on long alphanumeric IDs (Privy
+            # '2t9caHmQvf' came back '2t9caHmQv' one run, unreadable the next).
+            # Fuzzy fallback for keys of 6+ chars, only when exactly one key wins.
+            import difflib
+            toks = [_norm(t) for t in re.split(r'[\s/()]+', str(label or '')) if len(_norm(t)) >= 6]
+            scored = []
+            for k in keys:
+                nk = _norm(k)
+                if len(nk) < 6 or nk.isdigit():
+                    continue
+                s = max([difflib.SequenceMatcher(None, nk, t).ratio() for t in toks] or [0])
+                if s >= 0.85:
+                    scored.append((s, k))
+            scored.sort(reverse=True)
+            if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+                k = scored[0][1]
+                print('  CICO FUZZY row {}: {!r} ~ key {!r} ({:.2f})'.format(
+                    row, label, k, scored[0][0]), file=sys.stderr)
+                matched[row] = (k, balances[k])
+                continue
             unmatched.append((row, label, 'no CICO key found in label'))
             continue
         best = [k for k in hits if len(_norm(k)) == len(_norm(hits[0]))]
@@ -236,7 +416,7 @@ def match_cico_to_rows(labels, balances):
 
 # ── workbook ───────────────────────────────────────────────────────────────
 def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
-          cico_fill=None):
+          cico_fill=None, me_liq=None):
     import openpyxl
     from openpyxl.cell.cell import MergedCell
     from openpyxl.formula.translate import Translator
@@ -357,14 +537,24 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
         if unmatched and cico_fill:
             filled = cico_fill({row: label for row, label, _ in unmatched})
             unmatched = [u for u in unmatched if u[0] not in filled]
-            from openpyxl.comments import Comment
+            # No cell comments on the lender artifact (Brian, 2026-09-23:
+            # "Remove errant comments") — the fill note goes to the log/Slack only.
             for row, (key, val, src) in filled.items():
                 ba.cell(row=row, column=17).value = val
-                ba.cell(row=row, column=17).comment = Comment(
-                    'Not in the as-of CICO email; filled from closest-date email: ' + src,
-                    'DeerFlow')
                 print('  CICO FILLED row {}: {!r} = {} from {}'.format(
                     row, ba.cell(row=row, column=16).value, val, src))
+        # 2026-09-28: a NON-controlled account (col H = No) feeds neither the BB
+        # cash pool (col K) nor Section 7.01(a) Liquidity (col L), so a missing CICO
+        # balance cannot move either test. Retain the prior value instead of
+        # killing the whole weekly build (Privy 2t9caHmQvf, 2026-09-28).
+        # Controlled accounts still hard-fail below.
+        for item in list(unmatched):
+            row, label, reason = item
+            if str(ba.cell(row=row, column=8).value).strip().lower() == 'no':
+                prior = ba.cell(row=row, column=17).value
+                unmatched.remove(item)
+                print('  CICO: row {} {!r} unmatched but NOT controlled (no BB/Liquidity '
+                      'effect) — retained prior value {}'.format(row, label, prior))
         if unmatched:
             for row, label, reason in unmatched:
                 print('  CICO UNMATCHED row {}: {!r} — {}'.format(row, label, reason),
@@ -385,6 +575,9 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
                     ba.cell(row=row, column=18).value = round(fx[ccy], 6)
                     n += 1
             print('bank_accts: refreshed {} FX rates from tape spot_rate'.format(n))
+
+    if me_liq is not None:
+        write_month_end_liquidity(wb, me_liq)
 
     # ── dq30 spot memo ──
     dq = wb['dq30']
@@ -612,8 +805,12 @@ def main():
     ap.add_argument('--tape-csv', default=None, help='reuse an already-pulled tape CSV')
     ap.add_argument('--cico-msg', default=None)
     ap.add_argument('--skip-cico', action='store_true')
-    ap.add_argument('--cico-fill-nearest', action='store_true',
+    # Default ON for weekly and month-end runs (Brian 2026-09-23: "Use the closest
+    # date and just fill from that"). The weekly job never passed the flag, so a
+    # single OCR miss on one account killed the 2026-09-28 run.
+    ap.add_argument('--cico-fill-nearest', action='store_true', default=True,
                     help='fill accounts missing from the as-of CICO email from the closest-dated one')
+    ap.add_argument('--no-cico-fill-nearest', dest='cico_fill_nearest', action='store_false')
     a = ap.parse_args()
 
     tape = load_tape_csv(a.tape_csv) if a.tape_csv else pull_tape(a.as_of)
@@ -643,10 +840,26 @@ def main():
         if a.cico_fill_nearest:
             filler = nearest_cico_filler(a.as_of, a.cico_msg)
 
+    me_liq = None
+    if not a.skip_cico:
+        tdate = liquidity_test_date(a.as_of)
+        if m and (m.group(1) + m.group(2) + m.group(3)) == tdate.strftime('%y%m%d'):
+            me_liq = {'date': tdate, 'same_as_current': True}
+        else:
+            me_bal, me_subj, me_id = fetch_month_end_cico(tdate)
+            print('7.01(a) test date {} | CICO {!r} | {} accounts'.format(tdate, me_subj, len(me_bal)))
+            me_tape = pull_tape(tdate.isoformat())
+            me_liq = {'date': tdate, 'balances': me_bal, 'subj': me_subj,
+                      'fx': tape_fx(me_tape),
+                      'filler': (nearest_cico_filler(tdate.isoformat(), me_id)
+                                 if a.cico_fill_nearest else None)}
+            print('7.01(a) FX @ {}:'.format(tdate), {k: round(v, 6) for k, v in sorted(me_liq['fx'].items())})
+
     out_date = a.out_date or dt.date.today().strftime('%Y%m%d')
     out = os.path.join(os.environ['OUTPUTS_PATH'],
                        'Jeeves NB Borrowing Base - Form - {}.xlsx'.format(out_date))
-    stats = build(tape, a.template, out, a.as_of, cico, meta, fx, cico_fill=filler)
+    stats = build(tape, a.template, out, a.as_of, cico, meta, fx, cico_fill=filler,
+                  me_liq=me_liq)
     print('STATS:', stats)
 
 

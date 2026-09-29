@@ -4351,6 +4351,70 @@
       "target_skills": [
         "gmail"
       ]
+    },
+    "pat-2026-09-28-273": {
+      "id": "pat-2026-09-28-273",
+      "name": "CA tests 7.01 on last Business Day of month; weekly BB tests",
+      "source": "ep-2026-09-28-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-28",
+      "last_applied": "2026-09-28T16:58:43.018057+00:00",
+      "category": "general",
+      "pattern": "CA tests 7.01 on last Business Day of month; weekly BB tests Liquidity on prior month-end CICO + tape FX (cols S/T/U); BB cash pool stays as-of",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-09-29-274": {
+      "id": "pat-2026-09-29-274",
+      "name": "Never say a draft exists until drafts().get(<id>) succeeds i",
+      "source": "ep-2026-09-29-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-29",
+      "last_applied": "2026-09-29T09:08:04.500932+00:00",
+      "category": "general",
+      "pattern": "Never say a draft exists until drafts().get(<id>) succeeds in the same turn; quote the draft ID and subject from that read-back, not from the create call's intent. Existing verify rule was violated \u2014 treat create-without-readback as a failed deliverable.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-09-29-275": {
+      "id": "pat-2026-09-29-275",
+      "name": "Migration = byte-exact copy of the source SQL, one Metabase ",
+      "source": "ep-2026-09-29-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-29",
+      "last_applied": "2026-09-29T09:08:04.591421+00:00",
+      "category": "general",
+      "pattern": "Migration = byte-exact copy of the source SQL, one Metabase card per source query, nothing added. If the .twbx has no Custom SQL (published datasource), say so and ask Brian for the SQL on turn 1 \u2014 never assert where SQL lives without having extracted it. Metabase ok:true only means queued: confirm receipt with the recipient before saying 'sent'. If the bot is not in the named chat, ask before creating a new one.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-09-29-276": {
+      "id": "pat-2026-09-29-276",
+      "name": "When a counterparty says a scheduled delivery didn't arrive:",
+      "source": "ep-2026-09-29-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-29",
+      "last_applied": "2026-09-29T09:08:04.679933+00:00",
+      "category": "general",
+      "pattern": "When a counterparty says a scheduled delivery didn't arrive: (1) deliver it now, (2) fix the job, (3) only then explain. Proof-of-send logs are not a deliverable. The AIG weekly invoice job had been writing locally only since 2026-09-08; it now uploads to Aronova /puts with a size check (first auto run Mon 2026-10-05).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
     }
   }
 }

@@ -82,6 +82,13 @@ def check_workbook(path):
     #      J fx_hedged, Q local balance, R fx rate)
     ba = wb['bank_accts']
     bb_cash = liquidity = total_cash = 0.0
+    # 2026-09-28: Section 7.01 is tested on the last Business Day of the month.
+    # build_nb writes test-date balances to cols S/T (Liquidity in col U); when
+    # present, Liquidity uses them and the BB cash pool stays on as-of balances.
+    _u1 = str(ba.cell(1, 21).value or '')
+    me_mode = 'month-end' in _u1.lower()
+    _td = re.search(r'(\d{2}-[A-Za-z]{3}-\d{2})', _u1)
+    liq_date = _td.group(1) if (me_mode and _td) else 'as-of date (no month-end columns)'
     for r in range(2, ba.max_row + 1):
         if ba.cell(r, 1).value in (None, ''):
             continue
@@ -93,7 +100,8 @@ def check_workbook(path):
         if typ in ('Collections', 'Origination') and ctrl == 'Yes' and excl != 'Yes':
             bb_cash += haircut * usd
         if ctrl == 'Yes' and excl != 'Yes':
-            liquidity += haircut * usd
+            liquidity += haircut * (_f(ba.cell(r, 19).value) * _f(ba.cell(r, 20).value)
+                                    if me_mode else usd)
     liq = wb['liquidity']
     trust_co = _f(liq['E8'].value)      # Colombian Security Trust (manual input)
     trust_mx = _f(liq['E9'].value)      # Mexican Trustee (manual input)
@@ -157,8 +165,8 @@ def check_workbook(path):
     tests.append({
         'name': 'Section 7.01(a) Minimum Liquidity',
         'ok': liquidity >= floor,
-        'detail': 'Liquidity ${:,.0f} vs floor ${:,.0f} (cushion ${:,.0f})'.format(
-            liquidity, floor, cushion)})
+        'detail': 'Liquidity ${:,.0f} as of {} vs floor ${:,.0f} (cushion ${:,.0f})'.format(
+            liquidity, liq_date, floor, cushion)})
     tests.append({
         'name': 'Section 7.01(b) DQ30 Rate',
         'ok': (dq_avg is not None and dq_avg < DQ30_CAP),
@@ -187,7 +195,7 @@ def check_workbook(path):
             'eligible_receivables': elig_bal, 'excess_concentration': excess,
             'receivables_counted': counted, 'total_cash': total_cash,
             'bb_cash': bb_cash, 'liquidity': liquidity, 'liquidity_floor': floor,
-            'liquidity_cushion': cushion, 'trust_co': trust_co, 'trust_mx': trust_mx,
+            'liquidity_cushion': cushion, 'liquidity_test_date': liq_date, 'trust_co': trust_co, 'trust_mx': trust_mx,
             'drawn': drawn, 'advance_request': adv_req, 'borrowings': borrowings,
             'dq30_monthly': monthly, 'dq30_avg': dq_avg, 'step_up': step_up,
             'advance_rate': rate, 'borrowing_base': bb, 'bb_excess_deficit': deficit,

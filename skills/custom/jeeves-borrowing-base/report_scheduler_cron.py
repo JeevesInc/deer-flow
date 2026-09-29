@@ -1390,6 +1390,27 @@ def run_aig_tex_file():
         if errors:
             raise RuntimeError('TEX validation failed, file NOT posted: ' + '; '.join(errors))
 
+        # -- 3.5 Upload to Aronova SFTP /puts and verify remote size -------------
+        # Added 2026-09-28: the job previously stopped at Slack and nothing reached
+        # Aronova from 9/8 to 9/28. A failure here raises -> :warning: to Brian.
+        import paramiko
+        sftp_dir  = os.environ.get('AIG_SFTP_REMOTE_DIR', 'puts')
+        remote    = sftp_dir + '/' + os.path.basename(txt_path)
+        local_sz  = os.path.getsize(txt_path)
+        tr = paramiko.Transport((os.environ['AIG_SFTP_HOST'], int(os.environ.get('AIG_SFTP_PORT', '22'))))
+        try:
+            tr.connect(username=os.environ['AIG_SFTP_USER'], password=os.environ['AIG_SFTP_PASSWORD'])
+            sf = paramiko.SFTPClient.from_transport(tr)
+            sf.put(txt_path, remote)
+            remote_sz = sf.stat(remote).st_size
+            sf.close()
+        finally:
+            tr.close()
+        if remote_sz != local_sz:
+            raise RuntimeError('SFTP size mismatch for ' + remote + ': local '
+                               + str(local_sz) + ' vs remote ' + str(remote_sz))
+        log.info('run_aig_tex_file: SFTP upload OK ' + remote + ' (' + str(remote_sz) + ' bytes)')
+
         # -- 4. Per-currency breakdown (amounts are mixed currency, never summed) --
         num = df.copy()
         num['invoicedamount'] = pd.to_numeric(num['invoicedamount'], errors='coerce')
@@ -1409,8 +1430,8 @@ def run_aig_tex_file():
             + str(stats.get('zip_populated_pct', 0)) + '%, ' + format(open_rows, ',')
             + ' open invoices.' + chr(10)
             + 'Invoiced by currency (local, no FX): ' + ccy_txt + chr(10)
-            + '_Upload to Aronova /puts -- no SFTP credentials on this machine, so this step '
-            + 'is still manual until the Airflow DAG gets its connection._'
+            + ':white_check_mark: Uploaded to Aronova SFTP `' + remote + '` -- remote size '
+            + format(remote_sz, ',') + ' bytes matches local.'
         )
 
         up = os.path.join(skills_dir, '..', 'slack-search', 'slack_tool.py')
@@ -1426,7 +1447,7 @@ def run_aig_tex_file():
     except Exception as exc:
         log.error('run_aig_tex_file failed: ' + str(exc), exc_info=True)
         _post_slack(
-            ':warning: *AIG / TEX weekly file* failed to build -- nothing was produced.'
+            ':warning: *AIG / TEX weekly file* FAILED -- check whether it reached Aronova SFTP.'
             + chr(10) + '`' + str(exc)[:600] + '`'
         )
 

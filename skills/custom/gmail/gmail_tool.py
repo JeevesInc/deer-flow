@@ -384,6 +384,15 @@ def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, c
         return [email.utils.formataddr(pair) for pair in email.utils.getaddresses([field]) if pair[1]]
 
     explicit = to_override is not None or cc_override is not None
+    dropped = []
+    if explicit:
+        # Compute who the reply-all default would have included but the override drops.
+        _inh = _parse_addrs(orig_from) + _parse_addrs(orig_to) + _parse_addrs(orig_cc)
+        _kept = ' '.join([to_override or orig_from, cc_override or '']).lower()
+        for a in _inh:
+            addr = email.utils.parseaddr(a)[1].lower()
+            if addr and addr != my_email.lower() and addr not in _kept and a not in dropped:
+                dropped.append(a)
     if explicit:
         # Explicit recipients: --to/--cc fully control who receives the reply.
         to_str = to_override if to_override else orig_from
@@ -435,10 +444,16 @@ def cmd_draft_reply(message_id, body_text, attachments=None, to_override=None, c
     print("=" * 60)
     print("RECIPIENTS" + ("  (INHERITED from thread — every To/Cc on the" if inherited else "  (explicit via --to/--cc)"))
     if inherited:
-        print("            original message gets this reply. If that is not")
-        print("            intended, delete-draft and redo with --to/--cc.)")
+        print("            original message gets this reply. This is the")
+        print("            DEFAULT Brian wants -- only narrow it if he named recipients.)")
     print(f"  To: {to_str}")
     print(f"  Cc: {cc_str if cc_str else '(none)'}")
+    if dropped:
+        print("!! NARROWED REPLY -- these thread participants were DROPPED by --to/--cc:")
+        for a in dropped:
+            print(f"     - {a}")
+        print("!! Brian's standing rule is reply-all. Unless he explicitly named these")
+        print("!! recipients, delete-draft and redo WITHOUT --to/--cc. Report this list.")
     print("=" * 60)
     print(f"\nThe draft is now in your Gmail Drafts folder. Review and send when ready.")
 

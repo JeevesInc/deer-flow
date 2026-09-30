@@ -4415,6 +4415,22 @@
       "target_skills": [
         "jeeves-capital-markets"
       ]
+    },
+    "pat-2026-09-29-277": {
+      "id": "pat-2026-09-29-277",
+      "name": "Never override the inherited reply-all recipient list with -",
+      "source": "ep-2026-09-29-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-09-29",
+      "last_applied": "2026-09-29T18:16:34.863926+00:00",
+      "category": "general",
+      "pattern": "Never override the inherited reply-all recipient list with --to/--cc unless Brian explicitly names recipients. If the inherited list looks odd, keep it and flag it in the report instead of narrowing it.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
     }
   }
 }

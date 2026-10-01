@@ -302,7 +302,7 @@ This cron exists so the month-end variant is never silently skipped behind the w
 |---|---|---|
 | 6.02(b)(y) month-end BBC + 6.02(f) cash report | BD+3 (`NB_ME_BBC_BD`), as of month end, month-end CICO email (`YYMMDD CICO` of last BD) via `run_nb_bb(variant='month_end')`; fail-closed covenant gate; agent adds certifications + draft | BD+15 |
 | 6.01(c) package (NB workbook + officer cert → Box → `_nb_cert_watch.json`) | the day Accounting's package lands (daily Gmail probe from ME+5) | ME+40 |
-| 6.01(c) escalation draft to Kacper/Shalom/Alex | due − 10 days | ME+40 |
+| 6.01(c) escalation draft to Kacper/Shalom/Alex | due − 10 days — **REJECTED by Brian 2026-09-30** (Aug draft built 9/30 for a 10/10 due date: *"No it's too early, get rid of it"*, draft deleted). Until Brian picks a new lead time in the cron, do NOT build this draft; the due − 3 BD deadline guard DM below is the only nudge | ME+40 |
 | Deadline guard DM to Brian | daily from due − 3 BD while Gmail Sent lacks it | — |
 
 Manual: `nb_monthly_reporting_cron.py month-end-bbc --period YYYY-MM-DD`, `dates`, `guard`, `status`. Month-end subject: `Jeeves Monthly Borrowing Base Certificate - As of {Month D, YYYY}`. build_nb refuses to zero-fill an unmatched Schedule 5.22 row — a month-end CICO file missing an account is a hard stop, not a default.

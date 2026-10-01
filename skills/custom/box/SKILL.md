@@ -47,6 +47,15 @@ do not burn turns retrying `create_sign_request`. **Fix (Brian / IT):** Box Admi
 Custom Apps Manager → the Capital-Markets-Analyst app → enable the **"Manage Signature Requests"**
 application scope, then **re-authorize** the app (scope changes require re-authorization; the existing
 client credentials keep working).
+**Re-verified 2026-09-30: still 403** on the NB $2MM Borrowing Request + 4.02(d) certificate — the Sign
+request had to be started from the Box web UI.
+
+### DOCX -> PDF before upload: there is NO LibreOffice/soffice on this host (re-confirmed 2026-09-30)
+`shutil.which('soffice')` is None and neither Program Files LibreOffice path exists — never write a
+`subprocess.run([soffice, ...])` step. Use Word COM (`win32com.client.Dispatch('Word.Application')`)
+and pass it an **absolute real Windows path** (`os.path.abspath` of a path built from `OUTPUTS_PATH` /
+`WORKSPACE_PATH`), never a virtual `mnt/user-data` path or a relative one — on 2026-09-30 Word returned
+*"Sorry, we couldn't find your file"* and box_up.py fell back to uploading the .docx.
 
 ## One-time setup (Brian / IT, in Box Developer Console)
 1. Create a Custom App -> Authentication Method = Client Credentials Grant.

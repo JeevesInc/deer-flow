@@ -732,6 +732,7 @@ class ChannelManager:
                 thread_id = None
 
         # No existing thread found — create a new one
+        _jev_new_thread = thread_id is None
         if thread_id is None:
             thread_id = await self._create_thread(client, msg)
 
@@ -750,6 +751,17 @@ class ChannelManager:
         assistant_id, run_config, run_context = self._resolve_run_params(msg, thread_id)
         if extra_context:
             run_context.update(extra_context)
+        # Jev shadow routing (2026-09-30): log what Jev WOULD pick; never alters the run.
+        try:
+            from app.channels import jev_shadow
+            jev_shadow.fire(
+                thread_id=thread_id, text=msg.text, channel=msg.channel_name,
+                has_image=bool((msg.metadata or {}).get("image_blocks")),
+                has_files=bool(getattr(msg, "files", None)),
+                new_thread=_jev_new_thread,
+            )
+        except Exception as _jev_exc:
+            logger.warning("[JevShadow] hook failed: %s", _jev_exc)
         if self._channel_supports_streaming(msg.channel_name):
             await self._handle_streaming_chat(
                 client,

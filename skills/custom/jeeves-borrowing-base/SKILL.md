@@ -159,7 +159,7 @@ When asked to run the SOFOM distribution tape for Axel's daily distribution emai
 
 - **Filename:** `tape_sofom_daterange_{start_YYYYMMDD}_{end_YYYYMMDD}.xlsx`
 - **How:** Run `data_tape_sofom.sql` (one query per day using `'{}'\ format placeholder) for each of the 3 days: yesterday-2, yesterday-1, yesterday. Concat all rows. Save as above.
-- **Draft reply:** Gmail message ID from Axel's email, body = "tape attached, please review", attach the raw tape file.
+- **SEND reply-all (Brian, 2026-09-30: "can be sent directly now, no need to draft and wait for me to send"):** reply on the OLDEST distribution email, body = "tape attached, please review", attach the raw tape. The cron creates the draft via gmail_tool (attach gate) then sends it via drafts().send. Fail-closed: if any of the 3 days returns 0 rows or the send errors, the draft is left and Slack says why. SOFOM_AUTO_SEND=0 reverts to draft-only. Manual runs follow the same rule: send, don't draft. Before sending by hand, check the thread for a reply Brian already sent that day.
 - **Never** attach `Jeeves SOFOM Borrowing Base - Master - *.xlsx` to this thread. That is a separate product.
 
 **IT IS AUTOMATIC — do not tell Brian it needs a manual run (he corrected exactly that, 2026-08-17:

@@ -19,7 +19,7 @@ models:
     use: langchain_anthropic:ChatAnthropic
     model: claude-opus-5-5
     api_key: $ANTHROPIC_API_KEY
-    fallback: claude-sonnet  # step down to Sonnet 5 only if Opus 5.5 errors
+    fallback: claude-sonnet  # step down to Sonnet 5.5 only if Opus 5.5 errors
     max_tokens: 64000
     # Opus 5.5 is adaptive-thinking ONLY: {type: enabled,
     # budget_tokens} 400s ("use thinking.type.adaptive"); sampling params
@@ -32,9 +32,9 @@ models:
   # Retained ONLY as the resilience fallback if Opus 5.5 errors. No role points
   # here directly — it is reached solely via claude-opus's fallback chain.
   - name: claude-sonnet
-    display_name: Claude Sonnet 5
+    display_name: Claude Sonnet 5.5
     use: langchain_anthropic:ChatAnthropic
-    model: claude-sonnet-5
+    model: claude-sonnet-5-5   # 2026-09-30 Brian: Sonnet 5.5 replaces Sonnet 5 (verified on key, adaptive+effort OK)
     api_key: $ANTHROPIC_API_KEY
     fallback: claude-opus   # step back up to Opus 5.5 if Sonnet 5 fails
     max_tokens: 64000
@@ -44,7 +44,7 @@ models:
     thinking:
       type: adaptive
 
-# All roles run Opus 5.5 (claude-opus). Sonnet 5 (claude-sonnet) is the resilience
+# All roles run Opus 5.5 (claude-opus). Sonnet 5.5 (claude-sonnet) is the resilience
 # fallback only, reached via the fallback chain — never selected directly.
 basic_model: claude-opus
 reasoning_model: claude-opus

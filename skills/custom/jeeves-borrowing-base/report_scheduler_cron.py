@@ -448,7 +448,7 @@ _find_axel_distribution_email = _find_sofom_distribution_email
 # ---------------------------------------------------------------------------
 
 def run_sofom_distribution(message_id: str, subject: str):
-    """Generate SOFOM data tape and draft reply to Axel's distribution thread.
+    """Generate SOFOM data tape and SEND reply-all on the distribution thread.
 
     Runs directly (SQL → Excel → Gmail draft) with no LangGraph agent,
     so it cannot time out or silently fail.
@@ -526,11 +526,41 @@ def run_sofom_distribution(message_id: str, subject: str):
         if result.returncode != 0:
             raise RuntimeError(f'Gmail draft failed: {result.stderr}')
 
-        _post_slack(
-            f':white_check_mark: *SOFOM tape — {subject}*\n'
-            f'`{fname}` ({total_rows:,} rows, {three_days_ago} → {yesterday})\n'
-            f'Draft reply ready in Gmail. Review and send.'
-        )
+        # AUTO-SEND (Brian, 2026-09-30: "The SOFOM distribution can be sent
+        # directly now, no need to draft and wait for me to send").
+        # Fail-closed: send only if every one of the 3 days returned rows;
+        # otherwise the draft stays in Gmail for Brian and Slack says why.
+        # SOFOM_AUTO_SEND=0 reverts to draft-only.
+        _per_day = [len(x) for x in dfs]
+        _complete = len(_per_day) == 3 and all(n > 0 for n in _per_day)
+        _auto = os.environ.get('SOFOM_AUTO_SEND', '1') != '0'
+        _draft_id = None
+        for _ln in result.stdout.splitlines():
+            if 'Draft ID:' in _ln:
+                _draft_id = _ln.split('Draft ID:', 1)[1].strip()
+        _hdr = (f':white_check_mark: *SOFOM tape — {subject}*\n'
+                f'`{fname}` ({total_rows:,} rows, {three_days_ago} → {yesterday}; '
+                f'per day {"/".join(str(n) for n in _per_day)})\n')
+        if _auto and _complete and _draft_id:
+            try:
+                _gdir = str(Path(__file__).resolve().parent.parent / 'gmail')
+                if _gdir not in _sys.path:
+                    _sys.path.insert(0, _gdir)
+                import gmail_tool as _gt
+                _sent = _gt._get_service().users().drafts().send(
+                    userId='me', body={'id': _draft_id}).execute()
+                log.info(f"SOFOM reply SENT: message {_sent.get('id')} (draft {_draft_id})")
+                _post_slack(_hdr + 'Sent reply-all on the distribution thread.')
+            except Exception as _se:
+                log.error(f'SOFOM auto-send failed, draft left: {_se}', exc_info=True)
+                _post_slack(_hdr + f':warning: Auto-send failed (`{str(_se)[:150]}`) '
+                            '-- draft left in Gmail. Review and send.')
+        else:
+            _why = ('SOFOM_AUTO_SEND=0' if not _auto else
+                    'a day returned 0 rows' if not _complete else
+                    'draft id not found in gmail_tool output')
+            log.warning(f'SOFOM auto-send skipped: {_why}')
+            _post_slack(_hdr + f':warning: NOT sent ({_why}) -- draft reply in Gmail. Review and send.')
         log.info('SOFOM distribution completed.')
         return True
 

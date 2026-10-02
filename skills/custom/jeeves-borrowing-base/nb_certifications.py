@@ -349,6 +349,11 @@ def render(out_path, as_of, variant, cov_res, cfg, inputs, delta=None, ears=None
             items = ([('Opened', c) for c in delta['opened']] +
                      [('Ceased to be an Excluded Account', c) for c in delta['ceased_excluded']] +
                      [('Closed', c) for c in delta['closed']])
+            # Per-period manual disclosures (nb_cert_inputs.json -> <as_of>.exhibit_b_additional:
+            # [{acct, currency, purpose, change}]). Added 2026-10-01 for the BTG 003526540 MC
+            # cash-collateral conversion, which the bank_accts diff cannot see (it only detects
+            # opened / closed / ceased-to-be-Excluded, not a scheduled account changing use).
+            items += [(e.get('change', ''), e) for e in per.get('exhibit_b_additional', [])]
             if not items:
                 p('None.')
             else:

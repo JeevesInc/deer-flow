@@ -125,6 +125,7 @@ After running `build_portfolio_report.py`, always:
 3. **Two tie-outs must both hold before upload** — `SUM(rollforward!T:T) - L50 = 0.00` (L56) and
    the `loc` DQ-bucket total = `L52` (EOP excl. negative balances) **to the cent**. Both held
    for August 2026 at $224,219,947.93.
+4. **Third tie-out: BOP continuity — this period's BOP must equal the prior report's EOP (L52 of the template), and any gap is TRACED BEFORE delivery, never just reported.** 2026-10-02 the Sept report shipped flagging a $93,805.28 BOP-vs-Aug-EOP gap as 'worth knowing'; Brian: *"So trace the break"*. Trace = company-level diff of template `loc` (prior EOP) vs this run's BOP rows; for each mover check `is_in_repayment` / RPP start date in GWC (`loan_reference_number LIKE 'RPP%'`), charge-off flag and restated balances. Known cause: accounts flagged into an RPP retroactively AFTER the prior report ran (Sept: companies 30957 + 28826, RPPJVLCOP3251/3250, flagged from 8/26-27) drop out of BOP and are not caught by the in-period Modification line. Deliver the explanation table with the report.
 
 Known, pre-existing and NOT introduced by the build: 6 error literals on `Summary (2)`
 (`L5 =loc!#REF!` plus five `ARRAY_CONSTRAIN`/`ARRAYFORMULA` Google-Sheets leftovers). `Summary`
@@ -132,8 +133,8 @@ itself is clean. Also: **the builder does NOT refresh the `loans` tab** (nor `Sh
 carries the prior month's rows, which is why Summary rows 21-25 read 0.00 every month.
 
 `Portfolio Reporting/202609/` folder id `1x4_CJ566Lx8ntLIPZTp9ymJ8ZmThkLZb` (created 2026-09-01).
-Template of record for the September build (August period) is now
-`Portfolio Report - 20260901.xlsx`, id `1ys-RpbS9XwoKPB725ZxZRliY7_mTG5dl`.
+Template of record for the November build (October period) is now
+`Portfolio Report - 20261001.xlsx`, id `1ocnfvrXah-naXrJzVmiI6hpt1ygP_8JB`, in `202610/` (folder id `1mof8L-Cv3XQ9O1Rrxr9bgUiQcXrADZLu`). 2026-10-02: builder crashed on missing `sql/` dir (left in jeeves-borrowing-base at the 9/14 move) - patched to fall back to that dir. The 20260901 template HAD cached col-L values (opened in Excel 9/23), so the MoM shift worked and N4/N5 were correct - still verify every month.
 
 ---
 

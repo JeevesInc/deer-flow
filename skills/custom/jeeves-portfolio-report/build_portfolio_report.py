@@ -181,9 +181,14 @@ def main():
     print(f"Portfolio Report: report_date={report_date}, BOP={date_beg}, EOP={date_end}")
 
     # ── Step 1: Query LOC tape + rollforward ───────────────────────
-    tape_sql = Path(SCRIPT_DIR, 'sql', 'data_tape.sql').read_text()
-    rf_sql = Path(SCRIPT_DIR, 'sql', 'loc_acct_rollforward.sql').read_text()
-    mods_sql = Path(SCRIPT_DIR, 'sql', 'gwc_mods.sql').read_text()
+    # SQL templates stayed in jeeves-borrowing-base/sql when this script moved
+    # here on 2026-09-14; fall back to that shared dir if no local sql/ exists.
+    sql_dir = Path(SCRIPT_DIR, 'sql')
+    if not sql_dir.exists():
+        sql_dir = Path(SCRIPT_DIR, '..', 'jeeves-borrowing-base', 'sql')
+    tape_sql = Path(sql_dir, 'data_tape.sql').read_text()
+    rf_sql = Path(sql_dir, 'loc_acct_rollforward.sql').read_text()
+    mods_sql = Path(sql_dir, 'gwc_mods.sql').read_text()
 
     con = connect()
     try:

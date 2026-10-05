@@ -1348,6 +1348,34 @@ def run_receivable_forecast():
     log.info(f"run_receivable_forecast: OK\n{out[-800:]}")
 
 
+def run_mission_control():
+    """Daily Capital Markets Mission Control snapshot (Streamlit :8100, deerflow-dashboard service).
+
+    backend/scripts/mission_control_snapshot.py writes analytics_sandbox.cm_mc_* (facility, waterfall,
+    tests, loans, obligors, recycling, MX Exhibit B performance). On Mondays it also re-runs the
+    receivable balance forecast to a 26-week horizon for the forward view (about 16 min).
+    """
+    import subprocess
+
+    script = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..',
+                                          'backend', 'scripts', 'mission_control_snapshot.py'))
+    env = os.environ.copy()
+    env['PYTHONIOENCODING'] = 'utf-8'
+    r = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=5400,
+                       encoding='utf-8', errors='replace', env=env, stdin=subprocess.DEVNULL)
+    out = ((r.stdout or '') + (r.stderr or '')).strip()
+    if r.returncode != 0:
+        raise RuntimeError(f"mission control snapshot failed (rc={r.returncode}):\n{out[-1500:]}")
+    log.info(f"run_mission_control: OK\n{out[-600:]}")
+    # Publish to the hosted Streamlit Community Cloud app (JeevesInc/cm-mission-control)
+    pub = os.path.join(os.path.dirname(script), 'mc_export.py')
+    r = subprocess.run([sys.executable, pub], capture_output=True, text=True, timeout=1800,
+                       encoding='utf-8', errors='replace', env=env, stdin=subprocess.DEVNULL)
+    if r.returncode != 0:
+        raise RuntimeError(f"mission control publish failed (rc={r.returncode}):\n{((r.stdout or '') + (r.stderr or ''))[-1500:]}")
+    log.info(f"run_mission_control: published\n{(r.stdout or '')[-300:]}")
+
+
 def run_aig_tex_file():
     """Build the weekly AIG/Aronova TEX invoice-history file and post it to Brian's DM.
 
@@ -1574,6 +1602,15 @@ def run_loop():
                         and not state.get('last_aig_tex', '').endswith('_running')):
                     _launch_background('aig_tex_file', run_aig_tex_file,
                                        'last_aig_tex', today_str)
+
+                # -- Mission Control snapshot (Streamlit :8100) --------------
+                # Daily from 11:00 PT, after the MX BB (8:30), NB BB (Mon 8:30), receivable
+                # forecast (Mon 9:30) and AIG file (Mon 10:30) so the Redshift pulls do not overlap.
+                if ((now.hour >= 11)
+                        and not _state_completed_today(state, 'last_mission_control', today_str)
+                        and not state.get('last_mission_control', '').endswith('_running')):
+                    _launch_background('mission_control', run_mission_control,
+                                       'last_mission_control', today_str)
 
                 # ── Morning Capital Markets Brief ─────────────────────────
                 # Weekdays only, once per day at 8am — posts BB + CICO snapshot to Brian.

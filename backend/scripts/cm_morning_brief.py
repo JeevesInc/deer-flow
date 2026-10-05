@@ -213,6 +213,23 @@ def _spawn_dq30_reading() -> None:
         log.error("Could not spawn DQ30 reading: %s", e)
 
 
+def _spawn_mission_control() -> None:
+    """Refresh the Capital Markets Mission Control snapshot (Metabase dashboard 11645,
+    built for Alex 2026-10-04). Runs after the brief, so the BB pipeline and the
+    cap-markets state refresh have already completed. Detached for the same reason
+    as the DQ30 reading; the snapshot posts its own failure DM to Brian."""
+    import subprocess
+    script = Path(__file__).resolve().parent / "mission_control_snapshot.py"
+    if not script.exists():
+        log.error("mission_control_snapshot.py missing at %s", script)
+        return
+    try:
+        subprocess.Popen([sys.executable, str(script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        log.info("Mission Control snapshot spawned")
+    except Exception as e:
+        log.error("Could not spawn Mission Control snapshot: %s", e)
+
+
 def send_brief():
     msg = build_brief()
     log.info("Brief built (%d chars)", len(msg))
@@ -228,6 +245,7 @@ def send_brief():
         return False
     log.info("Brief sent to Brian: %s", result.stdout.strip()[:100])
     _spawn_dq30_reading()
+    _spawn_mission_control()
     return True
 
 

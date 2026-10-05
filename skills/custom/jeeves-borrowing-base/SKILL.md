@@ -403,6 +403,10 @@ simple message that I can forward internally."
 
 ---
 
+## HARD RULE — dashboards Brian or lenders/Alex consume are HOSTED, on Streamlit (Brian, 2026-10-04)
+
+Mission Control lives at https://cm-mission-control-cx3gi2efhutrkdtmix7ens.streamlit.app/ (private Streamlit Community Cloud app, private personal repo `brian-tryjeeves/cm-mission-control`, daily Redshift snapshot push). Never propose Metabase as the home for a dashboard Brian asked for (*"This should be hosted on streamlit, not on metabase"*). The JeevesInc org blocks Streamlit OAuth and repo transfer, so deploy from the personal account. **Do every deploy/login step yourself** (Playwright + creds from Gmail) — Brian had to log in, press Deploy, and reply *"you do it"* before the agent took over. Payment rate and yield are CALCULATED from data, never manual inputs. No viewer invites (e.g. Alex) until Brian OKs. In Windows paths inside python strings use raw strings (`r'C:\Jeeves...'`) — a `'\J'` escape warning burned a turn.
+
 ## HARD RULE — "use X as a starting point" means CLONE X, not redesign
 
 When Brian names an existing artifact as the starting point (e.g. "use the CIM bridge

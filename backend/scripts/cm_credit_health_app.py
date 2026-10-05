@@ -1,610 +1,33 @@
 #!/usr/bin/env python3
-"""cm_credit_health_app.py
-===========================
-Streamlit credit health dashboard for Jeeves Capital Markets.
-Served at localhost:8100.
+"""cm_credit_health_app.py - Capital Markets Mission Control (Streamlit, :8100).
 
-Sections:
-  1. Borrowing Base snapshot (US Bridge + MX SOFOM)
-  2. DQ rate trend — 24 months (Redshift)
-  3. Roll rate matrix — last month-end (Redshift)
-  4. Portfolio breakdown — by DPD bucket, country, product
-  5. Covenant tracker
+Replaces the 2026-06 credit-health app (US bridge BB, since retired). Every chart is a live Redshift
+query whose SQL lives in ONE place: cfo-org-kb scripts/mission_control/mc_cards.py. Facility, waterfall,
+test and loan data come from analytics_sandbox.cm_mc_*, written daily by
+backend/scripts/mission_control_snapshot.py (NB workbook + nb_covenant_check, CIM MX master,
+servicer-report Exhibit B, receivable balance forecast).
 
-Run:
-  streamlit run cm_credit_health_app.py --server.port 8100 --server.headless true
+Run:  streamlit run scripts/cm_credit_health_app.py --server.port 8100 --server.headless true
+Service: deerflow-dashboard (deploy/winsw/deerflow-dashboard.xml).
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
-from datetime import date, datetime
 from pathlib import Path
 
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import streamlit as st
-
-# ── Path setup ────────────────────────────────────────────────────────────────
 BACKEND_DIR = Path(__file__).resolve().parent.parent
-STATE_FILE  = BACKEND_DIR / ".deer-flow" / "_cap_markets_state.json"
-CICO_FILE   = BACKEND_DIR / ".deer-flow" / "_cico_state.json"
-
-# Load Redshift/API creds from .env so the dashboard is self-sufficient. Under
-# the old gateway cron it inherited the gateway's already-loaded environment;
-# now that it runs as a standalone supervised service (start.sh), redshift_util
-# (which reads os.environ['REDSHIFT_*'] directly) needs these populated here.
-try:
-    from dotenv import load_dotenv
-    load_dotenv(BACKEND_DIR / ".env")
-except Exception:
-    pass
-
-SKILLS_DIR  = Path(os.environ.get("SKILLS_PATH", str(BACKEND_DIR.parent / "deer-flow" / "skills")))
-sys.path.insert(0, str(SKILLS_DIR / "custom" / "jeeves-borrowing-base"))
-sys.path.insert(0, str(SKILLS_DIR / "custom" / "jeeves-redshift"))
-
-# ── Page config ───────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Jeeves · Capital Markets",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
-st.markdown("""
-<style>
-  .block-container { padding-top: 1rem; padding-bottom: 1rem; }
-  .metric-card { background: #1e1e2e; border-radius: 8px; padding: 12px 16px; margin: 4px 0; }
-  .red-val { color: #f38ba8; font-weight: 700; }
-  .yellow-val { color: #f9e2af; font-weight: 700; }
-  .green-val { color: #a6e3a1; font-weight: 700; }
-  h3 { margin-top: 0.5rem !important; }
-  div[data-testid="metric-container"] { background: #1e1e2e; border-radius: 8px; padding: 8px 12px; }
-</style>
-""", unsafe_allow_html=True)
-
-
-# ── Data loaders ──────────────────────────────────────────────────────────────
-
-@st.cache_data(ttl=300)
-def load_state():
-    if STATE_FILE.exists():
-        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    return {}
-
-
-@st.cache_data(ttl=300)
-def load_cico():
-    if CICO_FILE.exists():
-        return json.loads(CICO_FILE.read_text(encoding="utf-8"))
-    return {}
-
-
-@st.cache_data(ttl=600, show_spinner="Querying Redshift…")
-def load_dq_history() -> pd.DataFrame:
-    """24-month monthly DQ30+ rate from loc_tape."""
-    sql = """
-    with dq30 as (
-        select
-            date_trunc('month', dt) as month,
-            avg(daily_balance) as avg_dq_balance
-        from (
-            select dt, sum(balance_usd) as daily_balance
-            from capital_markets_dm.loc_tape
-            where charge_off_flag is false
-              and is_in_repayment is false
-              and dt >= dateadd(month, -24, date_trunc('month', current_date))
-              and dq_bucket = 2
-            group by dt
-        ) d
-        group by 1
-    ),
-    adb as (
-        select
-            date_trunc('month', dt) as month,
-            avg(daily_balance) as avg_total_balance
-        from (
-            select dt, sum(balance_usd) as daily_balance
-            from capital_markets_dm.loc_tape
-            where charge_off_flag is false
-              and is_in_repayment is false
-              and dt >= dateadd(month, -24, date_trunc('month', current_date))
-            group by dt
-        ) d
-        group by 1
-    )
-    select
-        a.month,
-        a.avg_total_balance as total_adb_usd,
-        coalesce(d.avg_dq_balance, 0) as dq30_adb_usd,
-        case when a.avg_total_balance > 0
-             then coalesce(d.avg_dq_balance, 0) / a.avg_total_balance * 100
-             else 0 end as dq30_rate_pct
-    from adb a
-    left join dq30 d on a.month = d.month
-    order by 1
-    """
-    try:
-        from redshift_util import connect
-        conn = connect()
-        df = pd.read_sql(sql, conn)
-        conn.close()
-        df["month"] = pd.to_datetime(df["month"])
-        return df
-    except Exception as e:
-        st.warning(f"Redshift unavailable: {e}")
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=600, show_spinner="Loading roll rates...")
-def load_roll_rate() -> pd.DataFrame:
-    """Last two month-ends roll rate matrix — count-weighted, live accounts only.
-
-    Excludes:
-    - charge_off_flag=true at BOM (already charged off, trivially stay in CO bucket)
-    - is_in_repayment=true (not at risk of rolling)
-    Percentages = % of BOM *accounts* (not balance) — consistent with NCO and BB.
-    """
-    sql = """
-    with d as (
-        select dt, company_id, balance_usd,
-               coalesce(dq_bucket_daily, 0) as bucket
-        from capital_markets_dm.loc_tape
-        where dt = last_day(dt)
-          and charge_off_flag is false
-          and is_in_repayment is false
-          and dt >= dateadd(month, -2, date_trunc('month', current_date))
-    ),
-    with_lead as (
-        select dt, company_id, balance_usd as bom_balance,
-               bucket as bom_bucket,
-               lead(bucket) over (partition by company_id order by dt) as eom_bucket
-        from d
-    )
-    select
-        dt as bom_dt, bom_bucket, eom_bucket,
-        count(*) as accounts,
-        sum(bom_balance) as total_balance_usd
-    from with_lead
-    where eom_bucket is not null
-    group by 1, 2, 3
-    order by 1, 2, 3
-    """
-    try:
-        from redshift_util import connect
-        conn = connect()
-        df = pd.read_sql(sql, conn)
-        conn.close()
-        df["bom_dt"] = pd.to_datetime(df["bom_dt"])
-        return df
-    except Exception as e:
-        st.warning(f"Redshift unavailable for roll rates: {e}")
-        return pd.DataFrame()
-
-
-@st.cache_data(ttl=600, show_spinner="Loading NCO history…")
-def load_nco_history() -> pd.DataFrame:
-    """Monthly net charge-off rate for past 18 months."""
-    # Flow NCO: new charge-offs in month / avg portfolio balance that month
-    # charge_off_dt identifies when an account was first written off
-    sql = """
-    with new_cos as (
-        select
-            date_trunc('month', charge_off_dt::date) as month,
-            sum(balance_usd) as co_flow_usd
-        from capital_markets_dm.loc_tape
-        where charge_off_flag is true
-          and charge_off_dt is not null
-          and dt = last_day(charge_off_dt::date)
-          and charge_off_dt >= dateadd(month, -18, date_trunc('month', current_date))
-        group by 1
-    ),
-    adb as (
-        select
-            date_trunc('month', dt) as month,
-            avg(bal) as avg_balance
-        from (
-            select dt, sum(balance_usd) as bal
-            from capital_markets_dm.loc_tape
-            where charge_off_flag is false
-              and is_in_repayment is false
-              and dt >= dateadd(month, -18, date_trunc('month', current_date))
-            group by dt
-        ) d
-        group by 1
-    )
-    select
-        a.month,
-        coalesce(c.co_flow_usd, 0) as co_flow_usd,
-        a.avg_balance,
-        case when a.avg_balance > 0
-             then coalesce(c.co_flow_usd, 0) / a.avg_balance * 100
-             else 0 end as nco_rate_pct
-    from adb a
-    left join new_cos c on a.month = c.month
-    order by 1
-    """
-    try:
-        from redshift_util import connect
-        conn = connect()
-        df = pd.read_sql(sql, conn)
-        conn.close()
-        df["month"] = pd.to_datetime(df["month"])
-        return df
-    except Exception as e:
-        return pd.DataFrame()
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-BUCKET_LABELS = {0: "Current", 1: "1-30 DPD", 2: "31-60 DPD", 3: "61-90 DPD", 4: "90+ / CO"}
-
-
-def _m(v, d=1) -> str:
-    if v is None: return "--"
-    if abs(v) >= 1_000_000: return f"${v/1e6:.{d}f}M"
-    if abs(v) >= 1_000: return f"${v/1e3:.0f}K"
-    return f"${v:.0f}"
-
-
-def _mxn(v, d=1) -> str:
-    if v is None: return "--"
-    return f"MXN {v/1e6:.{d}f}M"
-
-
-def _pct(v) -> str:
-    return f"{v:.2f}%" if v is not None else "—"
-
-
-def avail_color(v):
-    if v is None: return "normal"
-    if v < 0: return "inverse"
-    if v < 3_000_000: return "off"
-    return "normal"
-
-
-# ── Header ────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    state = load_state()
-    cico  = load_cico()
-    us    = state.get("us_bridge", {})
-    mx    = state.get("mx_sofom", {})
-    port  = state.get("portfolio", {})
-
-    updated = state.get("updated_at", "")[:16].replace("T", " ")
-
-    st.markdown(f"## 📊 Jeeves Capital Markets")
-    st.caption(f"State as of {updated} · Auto-refresh: state changes ≤1 min, full every 5 min · [localhost:8100](http://localhost:8100)")
-
-    st.divider()
-
-    # ── Section 1: Borrowing Base Snapshot ───────────────────────────────────────
-    st.markdown("### 🏦 Borrowing Base")
-
-    bb_col1, bb_col2 = st.columns(2)
-
-    with bb_col1:
-        st.markdown("**US Bridge**")
-        us_recv   = us.get("total_receivables")
-        us_elig_g = us.get("eligible_gross") or us.get("eligible")
-        us_inelig = (us_recv - us_elig_g) if (us_recv and us_elig_g) else None
-        us_elig   = us_elig_g
-        us_bb     = us.get("borrowing_base")
-        us_cash   = (us.get("us_cash") or 0) + (us.get("ex_us_cash") or 0)
-        us_drawn  = us.get("total_drawn")
-        us_avail  = us.get("availability")
-        us_dt     = (us.get("tape_as_of") or "")[:10]
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Recv", _m(us_recv))
-        c2.metric("Ineligible", _m(us_inelig), delta=None)
-        c3.metric("Eligible", _m(us_elig))
-        c4.metric("Final BB", _m(us_bb), help=f"Incl. {_m(us_cash)} cash")
-
-        c5, c6 = st.columns(2)
-        c5.metric("Drawn", _m(us_drawn))
-        avail_delta = f"{'⚠️ TIGHT' if us_avail and us_avail < 3e6 else ''}"
-        c6.metric("Availability", _m(us_avail), delta=avail_delta,
-                  delta_color=avail_color(us_avail))
-        st.caption(f"Tape: {us_dt} · {us.get('source_file','')}")
-
-    with bb_col2:
-        st.markdown("**MX SOFOM**")
-        mx_recv_mxn   = mx.get("total_receivables_mxn")
-        mx_inelig_mxn = mx.get("ineligible_mxn")
-        mx_elig_mxn   = mx.get("eligible_mxn")
-        mx_bb_usd     = mx.get("borrowing_base")
-        mx_drawn      = mx.get("total_drawn")
-        mx_avail      = mx.get("availability")
-        mx_dt         = (mx.get("tape_as_of") or "")[:10]
-
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Recv", _mxn(mx_recv_mxn))
-        c2.metric("Ineligible", _mxn(mx_inelig_mxn))
-        c3.metric("Eligible", _mxn(mx_elig_mxn))
-        c4.metric("Final BB", _m(mx_bb_usd))
-
-        c5, c6 = st.columns(2)
-        c5.metric("Drawn", _m(mx_drawn))
-        avail_delta = "⚠️ NEGATIVE" if mx_avail and mx_avail < 0 else ""
-        c6.metric("Availability", _m(mx_avail), delta=avail_delta,
-                  delta_color=avail_color(mx_avail))
-        st.caption(f"Tape: {mx_dt} · {mx.get('source_file','')}")
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Row 2: DQ Trend (left) | Roll Rate Matrix (right)
-    # ═══════════════════════════════════════════════════════════════════════════
-    row2_left, row2_right = st.columns([1, 1])
-
-    with row2_left:
-        st.markdown("**📉 DQ 30+ Rate**")
-        dq_df = load_dq_history()
-        if not dq_df.empty:
-            fig_dq = px.line(
-                dq_df, x="month", y="dq30_rate_pct",
-                labels={"month": "", "dq30_rate_pct": "DQ 30+ (%)"},
-                template="plotly_dark", height=200,
-            )
-            fig_dq.add_hline(y=3.0, line_dash="dot", line_color="#f9e2af",
-                             annotation_text="3%", annotation_position="bottom right")
-            fig_dq.add_hline(y=5.0, line_dash="dot", line_color="#f38ba8",
-                             annotation_text="5%", annotation_position="bottom right")
-            fig_dq.update_traces(line_color="#89b4fa", line_width=2)
-            fig_dq.update_layout(margin=dict(l=0, r=0, t=4, b=0),
-                                 plot_bgcolor="#1e1e2e", paper_bgcolor="#1e1e2e")
-            st.plotly_chart(fig_dq, use_container_width=True)
-            latest = dq_df.iloc[-1]
-            prev   = dq_df.iloc[-2] if len(dq_df) > 1 else None
-            dq_c1, dq_c2, dq_c3 = st.columns(3)
-            dq_c1.metric("DQ 30+", _pct(latest["dq30_rate_pct"]),
-                         delta=f"{latest['dq30_rate_pct'] - prev['dq30_rate_pct']:+.2f}pp" if prev is not None else None)
-            dq_c2.metric("DQ ADB", _m(latest["dq30_adb_usd"]))
-            dq_c3.metric("Total ADB", _m(latest["total_adb_usd"]))
-
-    with row2_right:
-        st.markdown("**🔄 Roll Rate Matrix**")
-        roll_df = load_roll_rate()
-        if not roll_df.empty:
-            latest_dt  = roll_df["bom_dt"].max()
-            roll_latest = roll_df[roll_df["bom_dt"] == latest_dt].copy()
-
-            roll_latest["bom_label"] = roll_latest["bom_bucket"].map(BUCKET_LABELS)
-            roll_latest["eom_label"] = roll_latest["eom_bucket"].map(BUCKET_LABELS)
-
-            bom_totals = roll_latest.groupby("bom_bucket")["total_balance_usd"].sum().rename("bom_total")
-            roll_latest = roll_latest.join(bom_totals, on="bom_bucket")
-            roll_latest["pct"] = (roll_latest["total_balance_usd"] / roll_latest["bom_total"] * 100).round(1)
-
-            pivot_pct = roll_latest.pivot_table(
-                index="bom_label", columns="eom_label", values="pct", aggfunc="sum", fill_value=0
-            )
-            order     = [l for l in BUCKET_LABELS.values() if l in pivot_pct.index]
-            col_order = [l for l in BUCKET_LABELS.values() if l in pivot_pct.columns]
-            pivot_pct   = pivot_pct.reindex(index=order, columns=col_order, fill_value=0)
-            pivot_accts = roll_latest.pivot_table(
-                index="bom_label", columns="eom_label", values="accounts", aggfunc="sum", fill_value=0
-            ).reindex(index=order, columns=col_order, fill_value=0)
-
-            bucket_order = list(BUCKET_LABELS.values())
-            rows_list    = list(pivot_pct.index)
-            cols_list    = list(pivot_pct.columns)
-
-            def _blend(h1, h2, t):
-                def _p(h): return tuple(int(h.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
-                t = max(0.0, min(1.0, t))
-                r1,g1,b1 = _p(h1); r2,g2,b2 = _p(h2)
-                return "#{:02x}{:02x}{:02x}".format(
-                    max(0,min(255,int(r1+(r2-r1)*t))),
-                    max(0,min(255,int(g1+(g2-g1)*t))),
-                    max(0,min(255,int(b1+(b2-b1)*t))))
-
-            BG="#1e1e2e"; GRN_LO="#1a3328"; GRN_HI="#27a060"
-            RED_LO="#3a1a1a"; RED_HI="#c0392b"; NEU_LO="#313244"; NEU_HI="#5a5a8a"; CO_CLR="#7d0000"
-
-            col_fill, col_text = [], []
-            for ci, col_label in enumerate(cols_list):
-                eom_idx = bucket_order.index(col_label) if col_label in bucket_order else 99
-                fill_col, text_col = [], []
-                for ri, row_label in enumerate(rows_list):
-                    bom_idx = bucket_order.index(row_label) if row_label in bucket_order else 0
-                    val = float(pivot_pct.iat[ri, ci])
-                    t   = min(val / 100.0, 1.0)
-                    if col_label == "90+ / CO":
-                        color = _blend(BG, CO_CLR, max(t * 2.5, 0.3 if val > 0 else 0))
-                    elif eom_idx < bom_idx:
-                        color = _blend(GRN_LO, GRN_HI, t) if val > 0 else BG
-                    elif eom_idx == bom_idx:
-                        color = _blend(NEU_LO, NEU_HI, t) if val > 0 else BG
-                    else:
-                        color = _blend(RED_LO, RED_HI, min(t * 4, 1.0)) if val > 0 else BG
-                    fill_col.append(color)
-                    try:
-                        n = int(pivot_accts.iat[ri, ci])
-                    except Exception:
-                        n = 0
-                    text_col.append(f"{val:.1f}%<br><sub>{n}ac</sub>" if val >= 0.1 else "--")
-                col_fill.append(fill_col)
-                col_text.append(text_col)
-
-            _row_h = 34
-            _hdr_h = 32
-            fig_heat = go.Figure(go.Table(
-                columnwidth=[90] + [70] * len(cols_list),
-                header=dict(
-                    values=["<b>BOM/EOM</b>"] + [f"<b>{c}</b>" for c in cols_list],
-                    fill_color="#2a2a3e", font=dict(color="#cdd6f4", size=11),
-                    align="center", height=_hdr_h,
-                ),
-                cells=dict(
-                    values=[[f"<b>{r}</b>" for r in rows_list]] + col_text,
-                    fill_color=[["#252538"] * len(rows_list)] + col_fill,
-                    font=dict(color="#cdd6f4", size=11),
-                    align="center", height=_row_h,
-                ),
-            ))
-            fig_heat.update_layout(
-                template="plotly_dark",
-                height=_hdr_h + len(rows_list) * _row_h + 48,
-                margin=dict(l=0, r=0, t=4, b=0),
-                paper_bgcolor="#1e1e2e",
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
-
-            legend_html = (
-                '<small style="opacity:0.7">'
-                '<span style="background:#27a060;padding:1px 6px;border-radius:3px">&nbsp;</span> Cure &nbsp;'
-                '<span style="background:#5a5a8a;padding:1px 6px;border-radius:3px">&nbsp;</span> Stable &nbsp;'
-                '<span style="background:#c0392b;padding:1px 6px;border-radius:3px">&nbsp;</span> Roll &nbsp;'
-                '<span style="background:#7d0000;padding:1px 6px;border-radius:3px">&nbsp;</span> CO'
-                '</small>'
-            )
-            st.markdown(legend_html, unsafe_allow_html=True)
-
-            kpi_defs = [
-                ("1-30 DPD", "Current",   "1-30 Cure"),
-                ("1-30 DPD", "31-60 DPD", "1-30 Roll"),
-                ("31-60 DPD","Current",   "31-60 Cure"),
-                ("31-60 DPD","61-90 DPD", "31-60 Roll"),
-            ]
-            kc = st.columns(4)
-            for i, (rk, ck, lbl) in enumerate(kpi_defs):
-                try:
-                    kc[i].metric(lbl, f"{pivot_pct.loc[rk, ck]:.1f}%")
-                except KeyError:
-                    pass
-            st.caption(f"{latest_dt.strftime('%b %Y')} -> {(latest_dt + pd.offsets.MonthEnd(1)).strftime('%b %Y')} · balance-weighted · excl. charged-off BOM")
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Row 3: Portfolio DPD (left) | Country (center) | NCO (right)
-    # ═══════════════════════════════════════════════════════════════════════════
-    row3_l, row3_m, row3_r = st.columns(3)
-
-    with row3_l:
-        st.markdown("**By DPD Bucket**")
-        dpd_data = port.get("by_dpd_bucket") or {}
-        if dpd_data:
-            dpd_df = pd.DataFrame([
-                {"Bucket": k, "Balance ($M)": v.get("balance", 0) / 1e6}
-                for k, v in dpd_data.items()
-            ]).sort_values("Balance ($M)", ascending=False)
-            colors = {"Current":"#a6e3a1","1-30 DPD":"#f9e2af",
-                      "31-60 DPD":"#fab387","61-90 DPD":"#f38ba8","90+ DPD":"#cba6f7"}
-            fig_dpd = px.bar(dpd_df, x="Bucket", y="Balance ($M)",
-                             color="Bucket", color_discrete_map=colors,
-                             template="plotly_dark", height=200, text="Balance ($M)")
-            fig_dpd.update_traces(texttemplate="$%{text:.1f}M", textposition="outside")
-            fig_dpd.update_layout(showlegend=False, margin=dict(l=0,r=0,t=4,b=0),
-                                  plot_bgcolor="#1e1e2e", paper_bgcolor="#1e1e2e")
-            st.plotly_chart(fig_dpd, use_container_width=True)
-
-    with row3_m:
-        st.markdown("**By Country**")
-        country_data = port.get("by_country") or {}
-        if country_data:
-            cdf = pd.DataFrame([
-                {"Country": k, "Balance ($M)": v.get("balance", 0) / 1e6}
-                for k, v in country_data.items() if v.get("balance", 0) > 100_000
-            ]).sort_values("Balance ($M)", ascending=True)
-            fig_c = px.bar(cdf, y="Country", x="Balance ($M)", orientation="h",
-                           template="plotly_dark", height=200,
-                           color="Balance ($M)", color_continuous_scale="Blues",
-                           text="Balance ($M)")
-            fig_c.update_traces(texttemplate="$%{text:.1f}M", textposition="outside")
-            fig_c.update_layout(showlegend=False, coloraxis_showscale=False,
-                                margin=dict(l=0,r=0,t=4,b=0),
-                                plot_bgcolor="#1e1e2e", paper_bgcolor="#1e1e2e")
-            st.plotly_chart(fig_c, use_container_width=True)
-
-    with row3_r:
-        st.markdown("**Monthly Charge-Off Rate**")
-        nco_df = load_nco_history()
-        if not nco_df.empty:
-            fig_nco = px.bar(nco_df, x="month", y="nco_rate_pct",
-                             labels={"month":"","nco_rate_pct":"NCO %"},
-                             template="plotly_dark", height=200)
-            fig_nco.update_traces(marker_color="#cba6f7")
-            fig_nco.update_layout(margin=dict(l=0,r=0,t=4,b=0),
-                                  plot_bgcolor="#1e1e2e", paper_bgcolor="#1e1e2e")
-            st.plotly_chart(fig_nco, use_container_width=True)
-
-    # ═══════════════════════════════════════════════════════════════════════════
-    # Row 4: Covenants
-    # ═══════════════════════════════════════════════════════════════════════════
-    st.markdown("**📋 Covenants**")
-    cov_col1, cov_col2 = st.columns(2)
-
-    with cov_col1:
-        st.caption("US Bridge")
-        us_covs = us.get("covenants", [])
-        if us_covs:
-            cov_rows = []
-            for c in us_covs:
-                excess   = c.get("excess_usd", 0) or 0
-                headroom = c.get("limit_pct", 0) - c.get("actual_pct", 0)
-                status   = "🔴 BREACH" if excess > 0 else ("🟡 Close" if headroom < 2 else "🟢 OK")
-                cov_rows.append({
-                    "Test":   c.get("test","")[:50] + "…",
-                    "Limit":  f"{c.get('limit_pct',0):.0f}%",
-                    "Actual": f"{c.get('actual_pct',0):.1f}%",
-                    "Excess": _m(excess) if excess else "—",
-                    "Status": status,
-                })
-            st.dataframe(pd.DataFrame(cov_rows), use_container_width=True, hide_index=True)
-
-    with cov_col2:
-        st.caption("MX SOFOM")
-        mx_covs = mx.get("covenants", [])
-        if mx_covs:
-            cov_rows = []
-            for c in mx_covs:
-                excess   = c.get("excess_mxn", 0) or 0
-                headroom = c.get("limit_pct", 0) - c.get("actual_pct", 0)
-                status   = "🔴 BREACH" if excess > 0 else ("🟡 Close" if headroom < 2 else "🟢 OK")
-                cov_rows.append({
-                    "Test":   c.get("test","")[:50] + "…",
-                    "Limit":  f"{c.get('limit_pct',0):.0f}%",
-                    "Actual": f"{c.get('actual_pct',0):.1f}%",
-                    "Excess": _mxn(excess) if excess else "—",
-                    "Status": status,
-                })
-            st.dataframe(pd.DataFrame(cov_rows), use_container_width=True, hide_index=True)
-
-    # ── Footer / auto-refresh ──────────────────────────────────────────────────────
-    st.caption(f"Jeeves Capital Markets Dashboard · {date.today():%B %d, %Y} · Data from BB state files + Redshift")
-
-
-    # Auto-refresh: fragment polls every 60s server-side; full-page rerun when a
-    # state file changes or 5 minutes have passed. (A plain time-check at module
-    # level never fires — Streamlit only reruns the script on an event.)
-    import time
-
-
-    @st.fragment(run_every="60s")
-    def _auto_refresh():
-        mtimes = tuple(f.stat().st_mtime if f.exists() else 0 for f in (STATE_FILE, CICO_FILE))
-        marker = st.session_state.setdefault("_refresh_marker", (mtimes, time.time()))
-        if mtimes != marker[0] or time.time() - marker[1] > 300:
-            st.session_state._refresh_marker = (mtimes, time.time())
-            st.cache_data.clear()
-            st.rerun(scope="app")
-
-
-    _auto_refresh()
-
-
-# ── Cron supervisor entry point ───────────────────────────────────────────────
+SKILLS_DIR = Path(os.environ.get("SKILLS_PATH", str(BACKEND_DIR.parent / "skills")))
+MC_DIR = SKILLS_DIR / "custom" / "cfo-org-kb" / "scripts" / "mission_control"
+for p in (SKILLS_DIR / "custom" / "jeeves-borrowing-base", MC_DIR, Path(__file__).resolve().parent):
+    sys.path.insert(0, str(p))
+
+
+# ---------------------------------------------------------------------------------------------
+# Supervisor hooks (kept for the 2026-06-16 import-safety test - must not query at import)
+# ---------------------------------------------------------------------------------------------
 def _kill_stale_dashboards(log) -> None:
-    """Kill leftover dashboard processes from previous gateway lifetimes.
-
-    A gateway restart orphans the Streamlit subprocess, which keeps port 8100
-    bound; every relaunch then wedges in a bind-retry loop behind it (2026-06-10:
-    four queued instances). Sweep by command line so the wedged non-listeners
-    die too, not just the port holder.
-    """
+    """Kill leftover dashboard processes from previous lifetimes (port 8100 bind-retry wedge)."""
     import subprocess
 
     ps = (
@@ -613,10 +36,7 @@ def _kill_stale_dashboards(log) -> None:
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $_.ProcessId }"
     )
     try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, timeout=30,
-        )
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=30)
         pids = [p for p in out.stdout.split() if p.strip().isdigit()]
         if pids:
             log.warning("killed stale dashboard process(es): %s", ", ".join(pids))
@@ -625,40 +45,318 @@ def _kill_stale_dashboards(log) -> None:
 
 
 def run_loop():
-    """Launch the Streamlit dashboard as a subprocess on port 8100.
-    Called by cron_supervisor — runs as a supervised daemon.
-    If the process dies, the supervisor restarts it.
-    """
-    import subprocess, time, os, sys
+    """Launch the dashboard as a subprocess on :8100 (legacy supervisor entry point)."""
+    import logging
+    import subprocess
+    import time
 
-    cmd = [
-        sys.executable, "-m", "streamlit", "run",
-        str(Path(__file__)),
-        "--server.port", "8100",
-        "--server.headless", "true",
-        "--server.address", "localhost",
-        "--browser.gatherUsageStats", "false",
-        "--server.fileWatcherType", "none",
-    ]
+    cmd = [sys.executable, "-m", "streamlit", "run", str(Path(__file__)), "--server.port", "8100",
+           "--server.headless", "true", "--server.address", "localhost",
+           "--browser.gatherUsageStats", "false", "--server.fileWatcherType", "none"]
     env = os.environ.copy()
     env["PYTHONUTF8"] = "1"
-    env["STREAMLIT_SERVER_ENABLE_CORS"] = "false"
-
-    import logging
-    _kill_stale_dashboards(logging.getLogger("cm-dashboard"))
-
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(Path(__file__).parent.parent),  # backend/
-        env=env,
-    )
-    import logging
     log = logging.getLogger("cm-dashboard")
-    log.info("Streamlit credit health dashboard started (PID %d) on :8100", proc.pid)
-
-    # Block until process exits (supervisor will restart if it crashes)
+    _kill_stale_dashboards(log)
+    proc = subprocess.Popen(cmd, cwd=str(BACKEND_DIR), env=env)
+    log.info("Mission Control dashboard started (PID %d) on :8100", proc.pid)
     proc.wait()
-    log.warning("Streamlit dashboard exited with code %d", proc.returncode)
-    # Small delay before supervisor restarts
     time.sleep(5)
     raise RuntimeError(f"Streamlit exited with code {proc.returncode}")
+
+
+# ---------------------------------------------------------------------------------------------
+# Shared by the app and the hosted-data exporter (mc_export.py)
+# ---------------------------------------------------------------------------------------------
+FWD_BASE_SQL = """select as_of, eligible, excess_concentration, excess_pct_stepdown, advance_rate, cash_bb, commitment,
+       drawn, fx_exposed_share
+from analytics_sandbox.cm_mc_facility_daily
+where facility = 'NB' and as_of = (select max(as_of) from analytics_sandbox.cm_mc_facility_daily where facility = 'NB')"""
+FWD_FC_SQL = "select dt, nb_pool, total, total_p10 from analytics_sandbox.cm_mc_receivable_forecast order by dt"
+STEPDOWN_DATE = "2027-02-10"
+
+
+def mc_export_name(card, key=None):
+    return card + ("" if key is None else "__" + "".join(ch if ch.isalnum() else "_" for ch in str(key))) + ".parquet"
+
+
+def forward_path(base, fc, weeks=13, funding_need_mm=None, dpd_shock_pct=0.0, conc_shock_pct=0.0, fx_move_pct=0.0,
+                 growth_wk_pct=None):
+    """NB forward view. Book path = receivable balance forecast (US+CO+BR series) indexed to its first day and
+    applied to today's NB eligible; P10 path scales by TOTAL P10 / forecast. Growth override replaces the model."""
+    import datetime as dt
+    import pandas as pd
+    b = base.iloc[0]
+    fc = fc.copy()
+    fc["dt"] = pd.to_datetime(fc["dt"]).dt.date
+    fc = fc.set_index("dt")
+    nb0 = float(fc["nb_pool"].iloc[0])
+    as_of = pd.to_datetime(b["as_of"]).date()
+    funding = (funding_need_mm * 1e6) if funding_need_mm is not None else float(b["drawn"])
+    rows = []
+    for w in range(1, int(weeks) + 1):
+        d = as_of + dt.timedelta(weeks=w)
+        if d not in fc.index:
+            continue
+        r = fc.loc[d]
+        factor = (1 + w * growth_wk_pct / 100.0) if growth_wk_pct not in (None, "") else float(r["nb_pool"]) / nb0
+        elig = float(b["eligible"]) * factor * (1 - (dpd_shock_pct or 0) / 100.0)             * (1 - (fx_move_pct or 0) / 100.0 * float(b["fx_exposed_share"] or 0))
+        exc = (float(b["excess_pct_stepdown"]) if d > dt.date.fromisoformat(STEPDOWN_DATE)
+               else float(b["excess_concentration"]) / float(b["eligible"])) + (conc_shock_pct or 0) / 100.0
+        p10 = float(r["total_p10"]) / float(r["total"])
+        bb = elig * (1 - exc) * float(b["advance_rate"]) + float(b["cash_bb"])
+        bb10 = elig * p10 * (1 - exc) * float(b["advance_rate"]) + float(b["cash_bb"])
+        cm = float(b["commitment"])
+        rows.append(dict(week_ending=d, eligible=elig, borrowing_base=bb, borrowing_base_p10=bb10, commitment=cm,
+                         funding_need=funding, availability=min(bb, cm) - funding, availability_p10=min(bb10, cm) - funding))
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------------------------
+def main():
+    import datetime as dt
+    import warnings
+
+    import pandas as pd
+    import plotly.express as px
+    import plotly.graph_objects as go
+    import streamlit as st
+
+    warnings.filterwarnings("ignore")
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(BACKEND_DIR / ".env")
+    except Exception:
+        pass
+    import mc_cards
+    import mc_sql
+
+    st.set_page_config(page_title="Jeeves - Capital Markets Mission Control", page_icon="📊", layout="wide")
+    st.markdown("<style>.block-container{padding-top:1rem}</style>", unsafe_allow_html=True)
+
+    HERE = Path(__file__).resolve().parent
+    DATA = HERE / "data"
+    MODE = "files" if (DATA / "meta.json").exists() else "live"
+    FILE_KEYS = {  # card -> the parameter its exported file is split by (None = single file)
+        "facility_table": None, "kpi_avail": None, "heatmap": None, "obligors": None, "recycling": None,
+        "waterfall_steps": "facility_req", "reasons": "facility_req", "bb_trend": "facility_req",
+        "loans": "facility_req", "test_trend": "facility_req",
+        "dq_mix": "pool", "roll_rates": "pool", "epd": "pool", "vintage": "pool", "risk_migration": "pool",
+        "collections": "pool"}
+
+    @st.cache_data(ttl=900, show_spinner=False)
+    def q(card: str, params: tuple) -> pd.DataFrame:
+        p = dict(params)
+        if MODE == "files":
+            key = FILE_KEYS[card]
+            df = pd.read_parquet(DATA / mc_export_name(card, p.get(key) if key else None))
+            if card == "loans":
+                if p.get("reason"):
+                    df = df[df["reason"] == p["reason"]]
+                if p.get("company"):
+                    df = df[df["name"].str.contains(p["company"], case=False, na=False, regex=False)]
+                if p.get("min_dpd"):
+                    df = df[df["dpd"] >= p["min_dpd"]]
+            if card == "test_trend" and p.get("test"):
+                df = df[df["test"].str.contains(p["test"], case=False, na=False, regex=False)]
+            return df.reset_index(drop=True)
+        import redshift_util as ru
+        sql = mc_sql.render(mc_cards.CARDS[card]["sql"], p) if card in mc_cards.CARDS else p["_sql"]
+        conn = ru.connect()
+        try:
+            return pd.read_sql(sql, conn)
+        finally:
+            conn.close()
+
+    def run(card, **params):
+        if MODE == "files":
+            params.pop("as_of", None)
+        try:
+            return q(card, tuple(sorted(params.items())))
+        except Exception as e:  # show the failure on the card, never a blank page
+            st.error(f"{mc_cards.CARDS[card]['name'] if card in mc_cards.CARDS else card}: query failed - {str(e)[:300]}")
+            return pd.DataFrame()
+
+    def forward_inputs():
+        if MODE == "files":
+            return pd.read_parquet(DATA / "forward_base.parquet"), pd.read_parquet(DATA / "forecast.parquet")
+        b = run("_fwd_base", _sql=FWD_BASE_SQL)
+        f = run("_fwd_fc", _sql=FWD_FC_SQL)
+        return b, f
+
+    def title(card):
+        st.markdown(f"#### {mc_cards.CARDS[card]['name'].split(' - ', 1)[-1]}")
+
+    def chart(card, df, pct=False, height=360):
+        if df.empty:
+            st.info("No rows.")
+            return
+        viz = mc_cards.CARDS[card].get("viz", {})
+        dims = viz.get("graph.dimensions") or [df.columns[0]]
+        mets = viz.get("graph.metrics") or [c for c in df.columns if c not in dims and pd.api.types.is_numeric_dtype(df[c])]
+        if len(dims) > 1:
+            fig = px.line(df, x=dims[0], y=mets[0], color=dims[1], markers=False)
+        else:
+            long = df.melt(id_vars=dims[0], value_vars=mets, var_name="series", value_name="value")
+            fig = px.line(long, x=dims[0], y="value", color="series", markers=True)
+        fig.update_layout(height=height, margin=dict(l=10, r=10, t=10, b=10), legend_title_text="")
+        if pct:
+            fig.update_yaxes(tickformat=".1%")
+        st.plotly_chart(fig, width="stretch")
+
+    usd = lambda v: "-" if v is None or pd.isna(v) else ("-$" if v < 0 else "$") + f"{abs(v):,.0f}"
+    usd_mm = lambda v: "-" if v is None or pd.isna(v) else ("-$" if v < 0 else "$") + f"{abs(v) / 1e6:,.1f}MM"
+
+    # ---- sidebar ----
+    with st.sidebar:
+        st.header("Mission Control")
+        as_of = st.date_input("Snapshot as of (blank = latest)", value=None) if MODE == "live" else None
+        pool = st.radio("Credit-quality pool", ["NB", "MX", "All"], horizontal=True,
+                        help="NB = US/CO/BR receivables; MX = Mexico; All = whole book")
+        if st.button("Refresh data now"):
+            st.cache_data.clear()
+        st.caption("Live Redshift, cached 15 min." if MODE == "live" else
+                   "Hosted copy: data published daily at about 11:00 PT from the Redshift snapshot.")
+        st.caption("Snapshot sources: NB workbook, CIM MX master, servicer-report Exhibit B, receivable forecast.")
+    base = {"as_of": as_of} if as_of else {}
+
+    fac = run("facility_table", **base)
+    hm = run("heatmap", **base)
+    snap = fac["data_as_of"].iloc[0] if not fac.empty else "n/a"
+    st.title("Capital Markets Mission Control")
+    st.caption(f"Snapshot: {snap}")
+
+    # ---- headline ----
+    if not fac.empty:
+        cols = st.columns(len(fac))
+        for c, (_, r) in zip(cols, fac.iterrows()):
+            with c:
+                st.subheader(r["facility"])
+                a, b, d = st.columns(3)
+                a.metric("Borrowing base", usd_mm(r["borrowing_base"]))
+                b.metric("Drawn", usd_mm(r["drawn"]))
+                d.metric("Availability", usd_mm(r["availability"]))
+                st.caption(f"Binding: **{r['binding_constraint'] or '-'}**  |  {r['status']}")
+    if not hm.empty:
+        bad = hm[hm["status"].isin(["BREACH", "EXCESS", "WATCH", "NO DATA"])]
+        if (bad["status"] == "BREACH").any():
+            for _, r in bad[bad["status"] == "BREACH"].iterrows():
+                st.error(f"**{r['facility']} - {r['test']}**: {r['current']} vs {r['threshold']} ({r['distance']}). {r['consequence']}")
+
+    t1, t2, t3, t4, t5 = st.tabs(["Facilities", "Waterfall & drill", "Triggers & covenants", "Credit quality", "Forward view"])
+
+    # ---- 1. facilities ----
+    with t1:
+        title("facility_table")
+        if not fac.empty:
+            show = fac.copy()
+            for c in ["commitment", "drawn", "borrowing_base", "availability", "undrawn_commitment", "bb_excess_deficit",
+                      "gross_receivables", "eligible", "excess_concentration", "cash_bb"]:
+                show[c] = show[c].map(usd)
+            show["advance_rate"] = show["advance_rate"].map(lambda v: "-" if pd.isna(v) else f"{v:.0%}")
+            st.dataframe(show, hide_index=True, width="stretch")
+        f = st.selectbox("Facility", [x for x in fac["facility"]] if not fac.empty else ["NB"], key="bbf")
+        title("bb_trend")
+        chart("bb_trend", run("bb_trend", facility_req=f))
+        title("recycling")
+        rec = run("recycling")
+        st.dataframe(rec, hide_index=True, width="stretch")
+
+    # ---- 2. waterfall ----
+    with t2:
+        f = st.selectbox("Facility", [x for x in fac["facility"]] if not fac.empty else ["NB"], key="wff")
+        steps = run("waterfall_steps", facility_req=f, **base)
+        title("waterfall")
+        if not steps.empty:
+            measure = ["absolute" if k == "total" and i == 0 else ("total" if k == "total" else "relative")
+                       for i, k in enumerate(steps["kind"])]
+            fig = go.Figure(go.Waterfall(x=steps["step"], y=steps["amount_usd"], measure=measure,
+                                         text=[usd_mm(v) for v in steps["amount_usd"]], textposition="outside"))
+            fig.update_layout(height=460, margin=dict(l=10, r=10, t=10, b=10), showlegend=False)
+            st.plotly_chart(fig, width="stretch")
+        c1, c2 = st.columns([2, 3])
+        with c1:
+            title("reasons")
+            rs = run("reasons", facility_req=f, **base)
+            st.dataframe(rs.assign(balance_usd=rs.get("balance_usd", pd.Series(dtype=float)).map(usd)),
+                         hide_index=True, width="stretch")
+        with c2:
+            title("loans")
+            a, b, d = st.columns(3)
+            reason = a.selectbox("Reason", ["(all)"] + (rs["reason"].tolist() if not rs.empty else []))
+            company = b.text_input("Company contains")
+            min_dpd = d.number_input("Min DPD", 0, 999, 0)
+            ln = run("loans", facility_req=f, reason=None if reason == "(all)" else reason,
+                     company=company or None, min_dpd=min_dpd or None, **base)
+            st.dataframe(ln, hide_index=True, width="stretch", height=380)
+            st.download_button("Download loans (CSV)", ln.to_csv(index=False), file_name=f"Loans - {f} - {snap}.csv")
+        if f == "NB":
+            title("obligors")
+            st.dataframe(run("obligors", **base), hide_index=True, width="stretch")
+
+    # ---- 3. triggers ----
+    with t3:
+        title("heatmap")
+        colors = {"BREACH": "#f8d7da", "EXCESS": "#fde2c8", "WATCH": "#fff3cd", "NO DATA": "#e2e3e5", "OK": "#d4edda", "INFO": "#e7f1ff"}
+        if not hm.empty:
+            ff = st.multiselect("Facility", sorted(hm["facility"].unique()), default=sorted(hm["facility"].unique()))
+            view = hm[hm["facility"].isin(ff)]
+            st.dataframe(view.style.apply(lambda r: [f"background-color:{colors.get(r['status'], '')}"] * len(r), axis=1),
+                         hide_index=True, width="stretch", height=600)
+        a, b = st.columns(2)
+        f = a.selectbox("Trend: facility", sorted(hm["facility"].unique()) if not hm.empty else ["NB"], key="ttf")
+        tt = b.text_input("Trend: test contains", "DQ30")
+        title("test_trend")
+        chart("test_trend", run("test_trend", facility_req=f, test=tt or None), pct=True)
+
+    # ---- 4. credit quality ----
+    with t4:
+        st.caption(f"Pool: **{pool}** (change in the sidebar). Live from capital_markets_dm.loc_tape.")
+        c1, c2 = st.columns(2)
+        with c1:
+            title("dq_mix"); chart("dq_mix", run("dq_mix", pool=pool), pct=True)
+            title("epd"); chart("epd", run("epd", pool=pool))
+            title("collections"); chart("collections", run("collections", pool=pool))
+        with c2:
+            title("roll_rates"); chart("roll_rates", run("roll_rates", pool=pool), pct=True)
+            title("vintage"); chart("vintage", run("vintage", pool=pool), pct=True)
+            st.caption("Vintage = quarter of first positive balance. Cumulative charge-offs (balance on charge_off_dt) "
+                       "/ the vintage's peak month-end balance. Benchmark = all vintages pooled.")
+        title("risk_migration")
+        st.dataframe(run("risk_migration", pool=pool), hide_index=True, width="stretch")
+
+    # ---- 5. forward ----
+    with t5:
+        st.caption("Book path = receivable balance forecast by country x product (pooled XGBoost, retrained Mondays), "
+                   "US/CO/BR summed for the NB pool; dotted = P10. Advance rate and controlled cash held flat; concentration "
+                   "limits tighten after 2027-02-10. Availability = min(BB, $100MM commitment) - funding need.")
+        a, b, c = st.columns(3)
+        weeks = a.slider("Weeks", 4, 26, 13)
+        funding = a.number_input("Funding need ($MM)", 0.0, 100.0, 79.5, 0.5, help="Default $77.5MM drawn + $2MM 10/9 draw")
+        dpd = b.slider("DPD shock: % of eligible lost", 0.0, 30.0, 0.0, 0.5)
+        conc = b.slider("Concentration shock (pp of eligible)", 0.0, 20.0, 0.0, 0.5)
+        fx = c.slider("FX move vs USD (%)", 0.0, 40.0, 0.0, 1.0)
+        growth = c.number_input("Growth override (%/wk, blank = forecast)", value=None, step=0.25)
+        fb, ffc = forward_inputs()
+        fw = forward_path(fb, ffc, weeks, funding, dpd, conc, fx, growth) if not (fb.empty or ffc.empty) else pd.DataFrame()
+        title("forward")
+        if not fw.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=fw["week_ending"], y=fw["borrowing_base_p10"], name="Borrowing base (P10)", line=dict(dash="dot")))
+            fig.add_trace(go.Scatter(x=fw["week_ending"], y=fw["borrowing_base"], name="Borrowing base (forecast)", fill="tonexty"))
+            fig.add_trace(go.Scatter(x=fw["week_ending"], y=fw["commitment"], name="Commitment", line=dict(dash="dash")))
+            fig.add_trace(go.Scatter(x=fw["week_ending"], y=fw["funding_need"], name="Funding need", line=dict(color="red")))
+            fig.update_layout(height=420, margin=dict(l=10, r=10, t=10, b=10), yaxis_tickprefix="$")
+            st.plotly_chart(fig, width="stretch")
+            low = fw["availability_p10"].min()
+            st.metric("Lowest availability in window (P10 path)", usd_mm(low),
+                      delta="SHORTFALL" if low < 0 else None, delta_color="inverse")
+            show = fw.copy()
+            for col in show.columns[1:]:
+                show[col] = show[col].map(usd)
+            st.dataframe(show, hide_index=True, width="stretch")
+
+
+if __name__ == "__main__":
+    main()

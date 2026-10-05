@@ -676,17 +676,20 @@ def _read_mx_sofom(wb) -> dict:
         # SOFOM concentration covenants (Exhibit A rows 40-50)
         # H = Actual ($ MXN), I = Percentage, J = Limit (decimal), K = Limit $, L = Excess ($)
         _SOFOM_TEST_LABELS = {
-            40: "Credit limit > $1.5M",
+            # Re-mapped 2026-10-04 to Exhibit A column B of the SOFOM master: row 40 is (a) Named
+            # Account Debtors, so every label from row 45 down was one test off, and (i) was unread.
+            40: "(a) Named Account Debtors",
             41: "Single Obligor (<$40M pool)",
             42: "Single Obligor (otherwise)",
             43: "Top 3 Obligors (<$40M pool)",
             44: "Top 3 Obligors (otherwise)",
-            45: "Risk Score D",
-            46: "Start-Ups",
-            47: "Single Industry",
-            48: "High-Risk Industry",
-            49: "High-Risk Provinces",
-            50: "Onboarded last 6 months",
+            45: "Non-named CL > $2M",
+            46: "Risk Score D",
+            47: "Start-Ups",
+            48: "Single Industry",
+            49: "High-Risk Industry",
+            50: "High-Risk Provinces",
+            51: "Onboarded last 6 months",
         }
         covenants = []
         for r, label in _SOFOM_TEST_LABELS.items():

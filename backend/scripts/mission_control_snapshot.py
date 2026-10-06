@@ -54,7 +54,7 @@ FACILITY_TERMS = {
         maturity=dt.date(2028, 8, 10),          # "Maturity Date"
         source='Executed NB Credit Agreement 2026-08-10'),
     'CIM MX SOFOM': dict(
-        lender='CIM (MX SPV)', status='Active - wind-down',
+        lender='CIM (MX SPV)', status='Active',
         commitment=150_000_000.0,   # "Maximum Loan Amount" $100MM -> $150MM, Second Amendment 2026-08-10
         cost='1M Term SOFR (3.00% floor) + 9.25% (<= $50MM) / 9.00% (> $50MM)',
         draw_period_end=dt.date(2029, 12, 11),  # "Draw Period" (a), as amended 2026-08-10

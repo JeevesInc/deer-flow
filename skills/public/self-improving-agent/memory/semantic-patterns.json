@@ -4431,6 +4431,54 @@
       "target_skills": [
         "gmail"
       ]
+    },
+    "pat-2026-10-05-278": {
+      "id": "pat-2026-10-05-278",
+      "name": "UI review = render the app (streamlit run locally from the r",
+      "source": "ep-2026-10-05-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-05",
+      "last_applied": "2026-10-05T16:27:04.724858+00:00",
+      "category": "general",
+      "pattern": "UI review = render the app (streamlit run locally from the repo clone + playwright screenshots, 1600 and 1280 widths) and critique what is on screen; never deliver a code review. view_image: one call at a time, crop to <=1150px JPEG chunks - parallel or tall images get interrupted. Streamlit markdown/st.error turns two $ into LaTeX - escape as backslash-$ or &#36; in HTML.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "web-design-guidelines"
+      ]
+    },
+    "pat-2026-10-05-279": {
+      "id": "pat-2026-10-05-279",
+      "name": "Metabase API via requests fails CERTIFICATE_VERIFY_FAILED be",
+      "source": "ep-2026-10-05-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-05",
+      "last_applied": "2026-10-05T17:09:30.543652+00:00",
+      "category": "general",
+      "pattern": "Metabase API via requests fails CERTIFICATE_VERIFY_FAILED behind Zscaler; import truststore; truststore.inject_into_ssl() fixes it. List all pulses (GET api pulse) and check recipients before archiving (PUT archived true).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-10-06-280": {
+      "id": "pat-2026-10-06-280",
+      "name": "A factual correction to a dashboard is a sweep, not a point-",
+      "source": "ep-2026-10-06-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-06",
+      "last_applied": "2026-10-06T09:11:25.847250+00:00",
+      "category": "general",
+      "pattern": "A factual correction to a dashboard is a sweep, not a point-fix: grep the whole mission_control dir AND GET the live Metabase dashboard text cards for the term before saying fixed. mbx.py now vendored in scripts/mission_control.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
     }
   }
 }

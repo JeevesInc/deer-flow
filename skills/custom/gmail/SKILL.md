@@ -125,6 +125,8 @@ python action_learner.py --consolidate --force
 ```
 ## Rules
 
+- **HARD RULE — replying about a document means opening that document first.** When asked to respond to counsel/a lender about a joinder, schedule, certificate or agreement, `download` the attachment(s) on that thread (and the executed version in Drive) and read them before drafting. 2026-10-06, Nathalie/Goodwin post-closing: *"So why don't you look at the joinder?"* — the draft was written from memory and missed that the UK joinder schedules were blank `[●]` placeholders.
+
 - **HARD RULE — there is NO `gmail_tool.get_service()`.** The accessor is private: `_get_service()`
   (and `_get_drive_service()`). Calling the public-looking name raised
   `AttributeError: module 'gmail_tool' has no attribute 'get_service'` in two separate threads on

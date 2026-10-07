@@ -207,6 +207,10 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves 
 
 ---
 
+## HARD RULE — a Borrowing Request email carries the source Excel (Brian, 2026-10-06)
+
+An NB draw / Borrowing Request draft to the agent (WTNA) attaches **the borrowing base workbook .xlsx it was built from** alongside the signed PDFs — never PDFs alone. 2026-10-06, $2M draw: *"You need to attach the actual Excel file to the request as well"*. Before calling the draft ready, list its attachments in the Slack reply and confirm one is the .xlsx.
+
 ## NB borrowing base certificate — facility-specific rules (2026-07-28, Brian)
 
 1. **Collateral is NOT netted out of eligible receivables.** Credit support (AIG

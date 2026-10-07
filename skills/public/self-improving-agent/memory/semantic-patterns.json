@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 268,
+      "applications": 270,
       "created": "2026-04-07",
-      "last_applied": "2026-10-05T09:10:54.418272+00:00",
+      "last_applied": "2026-10-07T09:12:26.544299+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4478,6 +4478,22 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-07-281": {
+      "id": "pat-2026-10-07-281",
+      "name": "2026-10-06: 3 runs died with InvalidUpdateError at key viewe",
+      "source": "ep-2026-10-07-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-07",
+      "last_applied": "2026-10-07T09:12:26.621073+00:00",
+      "category": "general",
+      "pattern": "2026-10-06: 3 runs died with InvalidUpdateError at key viewed_images (two view_image calls in one step). Fix is on disk in view_image_middleware.py (10/05) but LangGraph (port 2024) has not restarted since 10/01, so it is not live. Until a restart is confirmed, call view_image ONE AT A TIME. Separately, a workspace script named inspect.py shadowed stdlib inspect and broke `import fitz` - never name scripts inspect.py/types.py/json.py/etc.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
       ]
     }
   }

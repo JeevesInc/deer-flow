@@ -470,7 +470,13 @@ class ChannelManager:
             import asyncio as _aio
 
             POLL_INTERVAL = 30   # seconds between checks
-            STUCK_THRESHOLD = 600  # 10 min with no state update → stuck
+            # Checkpoints land per graph superstep, so ONE long tool batch (Redshift
+            # query, workbook build) shows zero progress until it returns. 600s killed
+            # healthy runs: 2026-10-05 run 01a10d1d was "cancelled" at 22 min idle and
+            # went on to succeed at 65 min; 2026-10-07 run 01a117f8 was killed with 3
+            # tool calls still in flight. Brian got "interrupted, reply continue"
+            # several times a day. 45 min default; RUN_MAX_SECONDS stays the backstop.
+            STUCK_THRESHOLD = int(os.environ.get("STUCK_RUN_THRESHOLD_SECONDS", 45 * 60))
 
             async def _run():
                 import httpx
@@ -507,7 +513,13 @@ class ChannelManager:
 
                             try:
                                 runs = await client.runs.list(tid)
-                                active_runs = [r for r in runs if r["status"] in ("running", "pending")]
+                                # Only a RUNNING run can be stuck. A pending run is the
+                                # user's next message queued behind it; it starts on its
+                                # own once the running one ends. Cancelling it (2026-10-07,
+                                # run 01a117f9) silently dropped a message.
+                                active_runs = [r for r in runs if r["status"] == "running"]
+                                if not active_runs and any(r["status"] == "pending" for r in runs):
+                                    continue
                                 if active_runs:
                                     # Before cancelling, check if any active run was
                                     # updated recently.  The thread-level timestamp can

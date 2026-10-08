@@ -21,6 +21,10 @@ models:
     api_key: $ANTHROPIC_API_KEY
     fallback: claude-sonnet  # step down to Sonnet 5.5 only if Opus 5.5 errors
     max_tokens: 64000
+    # 2026-10-07: a hung API call sat silent until the stuck-run monitor killed the run
+    # (thread d3878e0d, 13:18-13:28). Fail the attempt after 300s and retry instead.
+    default_request_timeout: 300
+    max_retries: 2
     # Opus 5.5 is adaptive-thinking ONLY: {type: enabled,
     # budget_tokens} 400s ("use thinking.type.adaptive"); sampling params
     # (temperature/top_p/top_k) are also rejected. Same surface as Opus 4.8.
@@ -38,6 +42,10 @@ models:
     api_key: $ANTHROPIC_API_KEY
     fallback: claude-opus   # step back up to Opus 5.5 if Sonnet 5 fails
     max_tokens: 64000
+    # 2026-10-07: a hung API call sat silent until the stuck-run monitor killed the run
+    # (thread d3878e0d, 13:18-13:28). Fail the attempt after 300s and retry instead.
+    default_request_timeout: 300
+    max_retries: 2
     # Adaptive-thinking ONLY, same constraints as Opus 5.5.
     supports_vision: true
     supports_thinking: true

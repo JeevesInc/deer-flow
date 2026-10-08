@@ -4495,6 +4495,22 @@
       "target_skills": [
         "self-improving-agent"
       ]
+    },
+    "pat-2026-10-07-282": {
+      "id": "pat-2026-10-07-282",
+      "name": "When Brian asks for a reminder to review or discuss results,",
+      "source": "ep-2026-10-07-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-07",
+      "last_applied": "2026-10-07T20:48:00.666314+00:00",
+      "category": "general",
+      "pattern": "When Brian asks for a reminder to review or discuss results, a calendar block is not enough. Also schedule the analysis itself as a report_scheduler job, or a one-shot cron, that runs before the slot and posts findings to the Slack thread. The calendar event is only the meeting slot.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "google-calendar"
+      ]
     }
   }
 }

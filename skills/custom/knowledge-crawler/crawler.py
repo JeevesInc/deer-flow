@@ -839,7 +839,7 @@ def run_crawl(source: str = None, force: bool = False, counterparty: str = None)
             log.info(f"Discovered {len(new_parties)} new counterparties: {', '.join(new_parties)}")
         save_state(state)
 
-    sources = [source] if source else ["drive", "email", "slack", "repos"]
+    sources = [source] if source else ["drive", "email", "slack", "repos", "gemini"]
 
     if "drive" in sources:
         drive_files = crawl_drive(state, force=force, counterparty=counterparty)
@@ -857,6 +857,14 @@ def run_crawl(source: str = None, force: bool = False, counterparty: str = None)
                 log.info(f"Repo connector: {repos_updated} repo wiki page(s) updated")
         except Exception as e:
             log.warning(f"Repo connector crawl failed: {e}")
+
+    if "gemini" in sources and not counterparty and (force or should_crawl(state, "gemini", interval_hours=24)):
+        try:
+            import gemini_crawler
+            n = gemini_crawler.crawl_gemini(state, force=force)
+            mark_crawled(state, "gemini", n)
+        except Exception as e:
+            log.warning(f"Gemini notes crawl failed: {e}")
 
     save_state(state)
 
@@ -908,7 +916,7 @@ def show_status():
 
 def main():
     parser = argparse.ArgumentParser(description="Knowledge crawler — strategic intelligence builder")
-    parser.add_argument("--source", choices=["drive", "email", "slack", "repos"], help="Crawl specific source only")
+    parser.add_argument("--source", choices=["drive", "email", "slack", "repos", "gemini"], help="Crawl specific source only")
     parser.add_argument("--force", action="store_true", help="Ignore last-crawled timestamps")
     parser.add_argument("--counterparty", help="Crawl specific counterparty only")
     parser.add_argument("--status", action="store_true", help="Show crawl status")

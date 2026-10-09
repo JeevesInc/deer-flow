@@ -958,6 +958,48 @@ class SlackChannel(Channel):
             return False
         return True
 
+    _CICO_TRIGGER_USERS = {"U075NLRHYBX": "Axel", "U0A5AT863BL": "William", "U09AGT85RSN": "Mariana"}
+
+    def _handle_cico_trigger(self, event: dict, user_id: str) -> None:
+        import subprocess
+        import sys as _sys
+        text = (event.get("text") or "").lower()
+        ch, ts = event.get("channel", ""), event.get("ts", "")
+        name = self._CICO_TRIGGER_USERS.get(user_id, user_id)
+
+        def reply(msg: str) -> None:
+            if self._web_client:
+                try:
+                    self._web_client.chat_postMessage(channel=ch, text=msg)
+                except Exception as exc:
+                    logger.warning("[Slack][CICO] reply failed: %s", exc)
+
+        if not re.search(r"cico|balance|saldo", text):
+            logger.info("[Slack][CICO] DM from %s without trigger keyword: %r", name, text[:120])
+            reply("Hi " + name + " - message me *CICO* once today's balances are in the CICO and I'll send "
+                  "the daily balances email. (*CICO resend* re-sends a date that already went out.)")
+            return
+        df_root = Path(__file__).resolve().parents[3]
+        script = df_root / "skills" / "custom" / "jeeves-borrowing-base" / "cico_daily_email.py"
+        py = df_root / "backend" / ".venv" / "Scripts" / "python.exe"
+        args = [str(py if py.exists() else _sys.executable), str(script), "--send", "--trigger-user", user_id]
+        if "resend" in text or "re-send" in text:
+            args.append("--force")
+        env = os.environ.copy()
+        env["SKILLS_PATH"] = str(df_root / "skills")
+        try:
+            subprocess.Popen(args, cwd=str(script.parent), env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception as exc:
+            logger.exception("[Slack][CICO] launch failed")
+            reply("Couldn't start the CICO email (" + type(exc).__name__ + "). Brian has been notified.")
+            return
+        logger.info("[Slack][CICO] triggered by %s (%s) args=%s", name, user_id, args[2:])
+        self._add_reaction(ch, ts, "eyes")
+        reply("On it - pulling the latest CICO from OneDrive and sending the daily balances email "
+              "(about 2-3 min). I'll confirm here with the date and total.")
+
     def _handle_message_event(self, event: dict) -> None:
         # Ignore our own messages (loop prevention)
         msg_bot_id = event.get("bot_id")
@@ -1036,6 +1078,14 @@ class SlackChannel(Channel):
             }
 
         user_id = event.get("user", "") or event.get("bot_id", "")
+
+        # CICO daily-balances trigger (Brian, 2026-10-08). A DM from Axel / William
+        # Filho / Mariana runs ONLY cico_daily_email.py --send -- no agent turn -- so
+        # these senders stay off the general DM allowlist (no inbox/agent access).
+        if (not msg_bot_id and event.get("channel_type", "") == "im"
+                and user_id in self._CICO_TRIGGER_USERS):
+            self._handle_cico_trigger(event, user_id)
+            return
 
         # Check allowed users (bot-forwarded messages bypass this check)
         if self._allowed_users and user_id not in self._allowed_users and not msg_bot_id:

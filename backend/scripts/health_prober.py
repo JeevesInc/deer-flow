@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import json
 import subprocess
 import sys
 import time
@@ -173,6 +174,148 @@ def check_venv_integrity() -> None:
         log.warning("venv check skipped: %s", e)
 
 
+
+# ---------------------------------------------------------------------------
+# 2026-10-08 hardening (Brian: "that all needs to never happen again")
+#  1. Every LangGraph/Gateway restart -> owner DM, whoever caused it.
+#  2. checkpoints.db self-heal: stuck WAL reader -> restart LangGraph;
+#     >50% free pages -> VACUUM; dead (error/interrupted) threads -> deleted.
+#  All silent when there is nothing to fix.
+# ---------------------------------------------------------------------------
+
+WATCHED_SERVICES = ("deerflow-langgraph", "deerflow-gateway")
+_CKPT_DB = _BACKEND / ".deer-flow" / "checkpoints.db"
+_CHANNEL_STORE = _BACKEND / ".deer-flow" / "channels" / "store.json"
+_LG = "http://localhost:2024"
+_GW = "http://localhost:8001"
+_DB_STATE = {"stuck_wal_strikes": 0}
+
+
+def service_pid(service: str) -> int | None:
+    try:
+        out = subprocess.run(["sc", "queryex", service], capture_output=True, text=True, timeout=20).stdout
+        for line in out.splitlines():
+            if line.strip().startswith("PID"):
+                pid = int(line.split(":")[1].strip())
+                return pid or None
+    except Exception:
+        pass
+    return None
+
+
+def watch_restarts(known: dict, mon) -> None:
+    for svc in WATCHED_SERVICES:
+        pid = service_pid(svc)
+        prev = known.get(svc)
+        known[svc] = pid
+        if prev is None or pid is None or pid == prev:
+            continue
+        mine = mon.last_restart.get(svc)
+        who = "by the health prober" if (mine is not None and mon.clock() - mine < 600) else "externally (not the prober)"
+        notify_owner(f":arrows_counterclockwise: {svc} restarted {who} at "
+                     f"{time.strftime('%H:%M')} (PID {prev} -> {pid}). In-flight runs on it were cut off.")
+
+
+def _busy_runs() -> int | None:
+    try:
+        import httpx
+        r = httpx.post(f"{_LG}/threads/search", json={"status": "busy", "limit": 50}, timeout=15)
+        return len(r.json())
+    except Exception:
+        return None
+
+
+def _delete_dead_threads() -> None:
+    import httpx
+    from datetime import datetime, timezone
+    protected = set()
+    try:
+        for e in json.loads(_CHANNEL_STORE.read_text(encoding="utf-8")).values():
+            if isinstance(e, dict) and isinstance(e.get("thread_id"), str):
+                protected.add(e["thread_id"])
+    except Exception:
+        return  # can't tell what's mapped to Slack -> delete nothing
+    cutoff = time.time() - 3600
+    failed = []
+    deleted = 0
+    for st in ("error", "interrupted"):
+        try:
+            batch = httpx.post(f"{_LG}/threads/search", json={"status": st, "limit": 500}, timeout=30).json()
+        except Exception:
+            return
+        for t in batch:
+            tid = t.get("thread_id")
+            if not tid or tid in protected:
+                continue
+            try:
+                upd = datetime.fromisoformat(t["updated_at"].replace("Z", "+00:00")).timestamp()
+            except Exception:
+                continue
+            if upd > cutoff:
+                continue
+            r = httpx.delete(f"{_LG}/threads/{tid}", timeout=30)
+            if r.status_code in (200, 204, 404):
+                deleted += 1
+                try:
+                    httpx.delete(f"{_GW}/api/threads/{tid}", timeout=30)
+                except Exception:
+                    pass
+            else:
+                failed.append(tid[:8])
+    if deleted:
+        log.info("dead-thread sweep: deleted %d", deleted)
+    if len(failed) >= 3:
+        notify_owner(f":warning: Dead-thread sweep: {len(failed)} LangGraph DELETEs failed "
+                     f"({', '.join(failed[:5])}) — checkpoint DB likely wedged; next DB check will act.")
+
+
+def check_checkpoint_db(mon) -> None:
+    import sqlite3
+    if not _CKPT_DB.exists():
+        return
+    wal = Path(str(_CKPT_DB) + "-wal")
+    try:
+        con = sqlite3.connect(str(_CKPT_DB), timeout=10)
+        con.execute("PRAGMA busy_timeout=10000")
+        busy_flag = con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
+        pages = con.execute("PRAGMA page_count").fetchone()[0]
+        free = con.execute("PRAGMA freelist_count").fetchone()[0]
+        con.close()
+    except Exception as e:
+        log.warning("checkpoint DB check failed: %s", e)
+        return
+    wal_mb = wal.stat().st_size / 1e6 if wal.exists() else 0.0
+    db_mb = _CKPT_DB.stat().st_size / 1e6
+
+    # (a) A reader pinned in LangGraph blocks WAL checkpoints; writers then die
+    #     with 'database is locked' and DELETE /threads 500s. Two strikes -> restart.
+    if busy_flag and wal_mb > 50:
+        _DB_STATE["stuck_wal_strikes"] += 1
+    else:
+        _DB_STATE["stuck_wal_strikes"] = 0
+    if _DB_STATE["stuck_wal_strikes"] >= 2 and _busy_runs() == 0:
+        mon.last_restart["deerflow-langgraph"] = mon.clock()
+        ok = restart_windows_service("deerflow-langgraph")
+        _DB_STATE["stuck_wal_strikes"] = 0
+        notify_owner(f":wrench: checkpoints.db WAL stuck at {wal_mb:.0f} MB (LangGraph held a stale read) — "
+                     f"restarted deerflow-langgraph: {'OK' if ok else 'FAILED, needs a look'}. No runs were active.")
+        return
+
+    # (b) Bloat: deletes leave free pages; never let it reach 1.2 GB again.
+    if pages and free / pages > 0.5 and db_mb > 300 and _busy_runs() == 0:
+        try:
+            con = sqlite3.connect(str(_CKPT_DB), timeout=30)
+            con.execute("PRAGMA busy_timeout=30000")
+            con.execute("VACUUM")
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            con.close()
+            notify_owner(f":broom: checkpoints.db was {db_mb:.0f} MB ({free * 100 // pages}% free pages) — "
+                         f"VACUUMed to {_CKPT_DB.stat().st_size / 1e6:.0f} MB.")
+        except Exception as e:
+            log.warning("VACUUM skipped: %s", e)
+
+    _delete_dead_threads()
+
 # ---------------------------------------------------------------------------
 # Decision core (pure-ish; fully injected)
 # ---------------------------------------------------------------------------
@@ -238,6 +381,8 @@ def main() -> None:
     check_venv_integrity()
     mon = Monitor(checks=default_checks())
     tick_n = 0
+    known_pids: dict = {}
+    db_every = max(1, int(1800 // TICK_SECONDS))  # checkpoint DB check every ~30 min
     while True:
         try:
             mon.tick()
@@ -246,6 +391,15 @@ def main() -> None:
                 ensure_docker_monitoring()
         except Exception:
             log.exception("prober tick failed")
+        try:
+            watch_restarts(known_pids, mon)
+        except Exception:
+            log.exception("restart watch failed")
+        if tick_n % db_every == 0:
+            try:
+                check_checkpoint_db(mon)
+            except Exception:
+                log.exception("checkpoint DB check failed")
         time.sleep(TICK_SECONDS)
 
 

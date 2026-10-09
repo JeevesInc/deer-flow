@@ -94,7 +94,7 @@ had no user token, so reauth was genuinely impossible -- that alert was TRUE, un
 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon` plus the Policies\System
 mirror, and `ARSOUserConsent=1` inside Brian's NTUSER hive. Windows now signs the last
 interactive user back in (locked) after an update restart, so ZSATray returns by itself and
-the session-1 headless reauth path works with no human. It does NOT cover cold power-off.
+the session-1 headless reauth path works with no human. It does NOT cover cold power-off, NOR a back-to-back double update restart: on 2026-10-07 MoUsoCoreWorker restarted at 22:53Z and TrustedInstaller again at 22:59Z, and the box came up at the sign-in screen (s1 Connected user=none, ZSATray absent, AutoAdminLogon=0, no DefaultPassword). With no stored Windows credential the agent cannot sign in; a remote sign-in (RDP or Chrome Remote Desktop) or Brian-approved LSA-stored autologon is the only fix.
 
 **Code hardening shipped with it:**
 - `find_active_session()` now accepts **WTSDisconnected** sessions that have a username, not

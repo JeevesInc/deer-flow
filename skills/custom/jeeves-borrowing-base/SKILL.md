@@ -409,6 +409,8 @@ simple message that I can forward internally."
 
 ## HARD RULE — dashboards Brian or lenders/Alex consume are HOSTED, on Streamlit (Brian, 2026-10-04)
 
+**[Scoped 2026-10-08] This rule covers the EXISTING Mission Control app only.** Any NEW app or tool (Cash Planner, CICO challenger, anything users plan/approve/edit in) is production SaaS software — React/TS + FastAPI/Postgres per the Cash Planner stack — NEVER Streamlit (*"Needs to be production quality software, not streamlit. Like a SaaS fpa tool"*), and never anchored on the borrowing-base app's look (*"The borrowing base app sucks"*, 2026-10-08).
+
 Mission Control lives at https://cm-mission-control-cx3gi2efhutrkdtmix7ens.streamlit.app/ (private Streamlit Community Cloud app, private personal repo `brian-tryjeeves/cm-mission-control`, daily Redshift snapshot push). Never propose Metabase as the home for a dashboard Brian asked for (*"This should be hosted on streamlit, not on metabase"*). The JeevesInc org blocks Streamlit OAuth and repo transfer, so deploy from the personal account. **Do every deploy/login step yourself** (Playwright + creds from Gmail) — Brian had to log in, press Deploy, and reply *"you do it"* before the agent took over. Payment rate and yield are CALCULATED from data, never manual inputs. No viewer invites (e.g. Alex) until Brian OKs. In Windows paths inside python strings use raw strings (`r'C:\Jeeves...'`) — a `'\J'` escape warning burned a turn.
 
 ## HARD RULE — "use X as a starting point" means CLONE X, not redesign
@@ -573,3 +575,9 @@ borrowing base, when it's built, I want the test as of the end of the previous m
   (fail-closed). Never substitute another date.
 - Draw weeks: the CA 4.02(d)-style Delayed Draw condition still needs pro forma 7.01 compliance
   immediately before/after the draw on the latest data — not covered by the month-end test.
+
+
+## CICO daily balances email (LIVE 2026-10-08, approved by Brian)
+- Trigger: a Slack DM to the bot containing "CICO"/"balance"/"saldo" from Axel (U075NLRHYBX), William Filho (U0A5AT863BL) or Mariana (U09AGT85RSN). Hook: `backend/app/channels/slack.py` `_handle_cico_trigger` -> spawns `cico_daily_email.py --send --trigger-user <id>` (no agent turn; they are deliberately NOT on the DM allowlist). "CICO resend" adds `--force`. Same three IDs are in `slack_dm_monitor_cron.py` IGNORED_USERS (no holding note). slack.py edits need a GATEWAY restart.
+- Script pulls the newest `YYMMDD Jeeves - CICO.xlsx` from Axel's OneDrive (FinOps V3/CICO, top level) via Edge+Okta; from session 0 it hops to the desktop session (`zscaler-reauth/session_launcher.py`). Render logic is byte-identical to the approved 10/7 test (table verified identical). Date = latest Bank-balances column with >30 filled rows; subject `{yymmdd} CICO - Daily balances`.
+- Sends from Brian's Gmail to Mariana's 10/7 distribution list (12). One send per balance date (`_cico_email_state.json`); a repeat trigger for the same date tells the sender the latest date is unchanged. Confirmation (date, total cash, $1M+ moves) goes to the trigger user and Brian; failures too. Manual test: `cico_daily_email.py --send --no-fetch --to brian.mauck@tryjeeves.com`.

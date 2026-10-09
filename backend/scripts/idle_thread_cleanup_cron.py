@@ -80,22 +80,27 @@ def _parse_ts(raw: str | None) -> datetime | None:
         return None
 
 
+# 2026-10-08: error/interrupted threads were never swept, so dead runs piled up.
+SWEEP_STATUSES = ("idle", "error", "interrupted")
+
+
 def _list_idle_threads(client: httpx.Client) -> list[dict]:
     out: list[dict] = []
-    offset = 0
-    while True:
-        resp = client.post(
-            f"{LANGGRAPH_URL}/threads/search",
-            json={"status": "idle", "limit": PAGE_SIZE, "offset": offset},
-        )
-        resp.raise_for_status()
-        batch = resp.json()
-        if not isinstance(batch, list) or not batch:
-            break
-        out.extend(batch)
-        if len(batch) < PAGE_SIZE:
-            break
-        offset += PAGE_SIZE
+    for status in SWEEP_STATUSES:
+        offset = 0
+        while True:
+            resp = client.post(
+                f"{LANGGRAPH_URL}/threads/search",
+                json={"status": status, "limit": PAGE_SIZE, "offset": offset},
+            )
+            resp.raise_for_status()
+            batch = resp.json()
+            if not isinstance(batch, list) or not batch:
+                break
+            out.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                break
+            offset += PAGE_SIZE
     return out
 
 

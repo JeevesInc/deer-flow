@@ -34,7 +34,9 @@ log = logging.getLogger('slack_dm_monitor')
 POLL_INTERVAL = int(os.environ.get('SLACK_DM_MONITOR_INTERVAL', '120'))   # 2 min
 SUMMARY_INTERVAL = int(os.environ.get('SLACK_DM_SUMMARY_INTERVAL', '3600'))  # 1 hour
 
-IGNORED_USERS = {'USLACKBOT'}
+# Axel / William Filho / Mariana: their DMs are the CICO email trigger, handled in
+# app/channels/slack.py _handle_cico_trigger (2026-10-08) -- no holding note here.
+IGNORED_USERS = {'USLACKBOT', 'U075NLRHYBX', 'U0A5AT863BL', 'U09AGT85RSN'}
 BRIAN_USER_ID = os.environ.get('SLACK_OWNER_USER_ID', 'U05B5HGNCN9')
 
 

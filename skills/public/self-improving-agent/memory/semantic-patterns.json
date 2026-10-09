@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 270,
+      "applications": 273,
       "created": "2026-04-07",
-      "last_applied": "2026-10-07T09:12:26.544299+00:00",
+      "last_applied": "2026-10-09T09:09:09.685794+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4510,6 +4510,70 @@
       "solution": "",
       "target_skills": [
         "google-calendar"
+      ]
+    },
+    "pat-2026-10-08-283": {
+      "id": "pat-2026-10-08-283",
+      "name": "Registry autologon cannot survive reboot on this box: Intune",
+      "source": "ep-2026-10-08-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-08",
+      "last_applied": "2026-10-08T15:34:47.425012+00:00",
+      "category": "general",
+      "pattern": "Registry autologon cannot survive reboot on this box: Intune MDM policy ADMX_MSS-legacy Pol_MSS_AutoAdminLogon is applied by GPClient at boot (Winlogon key LastWrite = boot+0s) and resets AutoAdminLogon=0 and deletes DefaultPassword. Do not claim autologon is fixed until a post-reboot console session is observed. Loopback RDP via aardwolf: NTLM CredSSP fails 0xc000006d for AzureAD accounts; non-NLA connects but no session. Real fixes: IT exclusion from the policy, or Parsec shared-mode for lock-screen access.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-08-284": {
+      "id": "pat-2026-10-08-284",
+      "name": "Services run under WinSW (deerflow-*), not start.sh. Restart",
+      "source": "ep-2026-10-08-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-08",
+      "last_applied": "2026-10-08T18:00:42.833388+00:00",
+      "category": "general",
+      "pattern": "Services run under WinSW (deerflow-*), not start.sh. Restarting LangGraph or Gateway from inside a run kills the reply path - put restart and self-heal logic in deerflow-prober (independent service, restart it freely). Stuck WAL reader in LangGraph = locked writes + DELETE 500; fix is LG restart, not more deletes. One-shot schtasks as SYSTEM cannot send DMs via slack_tool; use prober notify_owner.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "sll"
+      ]
+    },
+    "pat-2026-10-08-285": {
+      "id": "pat-2026-10-08-285",
+      "name": "Restarting deerflow-gateway inside a Slack-originated run dr",
+      "source": "ep-2026-10-08-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-08",
+      "last_applied": "2026-10-08T19:39:12.605692+00:00",
+      "category": "general",
+      "pattern": "Restarting deerflow-gateway inside a Slack-originated run drops the run reply (outbound Slack lives in the gateway). Before any gateway restart: post the status to Brian via slack_tool.py send FIRST, restart, then send a second slack_tool message confirming health. Never let the restart be the last visible event.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-09-286": {
+      "id": "pat-2026-10-09-286",
+      "name": "Before saying an input cannot be forecast or is separate, qu",
+      "source": "ep-2026-10-09-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-09",
+      "last_applied": "2026-10-09T09:10:43.825493+00:00",
+      "category": "general",
+      "pattern": "Before saying an input cannot be forecast or is separate, query Redshift for it. The goal is to BEAT CICO on every operating input, not explain why it cannot be beaten.",
+      "problem": "CICO challenger forecast build 2026-10-08",
+      "solution": "Every CICO OPERATING input (Jeeves Pay, card, all transactions, booked revenue) is in Redshift; CICO consolidated INCLUDES Mexico; benchmark revenue = Redshift booked revenue; scope = operating flows only, debt/equity are recommendations. Only bank BALANCES are not in Redshift.",
+      "target_skills": [
+        "jeeves-analytics"
       ]
     }
   }

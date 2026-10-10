@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 273,
+      "applications": 275,
       "created": "2026-04-07",
-      "last_applied": "2026-10-09T09:09:09.685794+00:00",
+      "last_applied": "2026-10-10T09:09:38.826034+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4574,6 +4574,86 @@
       "solution": "Every CICO OPERATING input (Jeeves Pay, card, all transactions, booked revenue) is in Redshift; CICO consolidated INCLUDES Mexico; benchmark revenue = Redshift booked revenue; scope = operating flows only, debt/equity are recommendations. Only bank BALANCES are not in Redshift.",
       "target_skills": [
         "jeeves-analytics"
+      ]
+    },
+    "pat-2026-10-09-287": {
+      "id": "pat-2026-10-09-287",
+      "name": "Cash Planner capacity must come from signed facility commitm",
+      "source": "ep-2026-10-09-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-09",
+      "last_applied": "2026-10-09T17:09:19.779390+00:00",
+      "category": "general",
+      "pattern": "Cash Planner capacity must come from signed facility commitments (NB 100 + CIM MX 150 = 250MM), never the CICO Available debt row, which assumes uncommitted debt (to 517.6MM by Dec-27). Planning tools should surface such CICO assumptions in a watchlist and model levers (equity, facility, collateral, SBLC) as toggleable events with impact.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-09-288": {
+      "id": "pat-2026-10-09-288",
+      "name": "CICO Bank balances tab: rows 9-279 are USD, rows 321-572 are",
+      "source": "ep-2026-10-09-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-09",
+      "last_applied": "2026-10-09T19:29:47.849425+00:00",
+      "category": "general",
+      "pattern": "CICO Bank balances tab: rows 9-279 are USD, rows 321-572 are LOCAL currency (incl. JC wallets 463-531, Jeeves collateral 532+, JC client pools 543+). Section headers repeat in the local block, so never sum by section name; split by row. USD universe 10/8 = Total cash+restricted 70.34M + client balances 21.91M = 92.25M. Internal JC wallets = master_customer_dm.daily_balances (58/66 tie to the cent on the freeze date). Provider-own balances are NOT in Redshift; treasury_accounts is a flow ledger.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-10-289": {
+      "id": "pat-2026-10-10-289",
+      "name": "When Brian asks whether the Cash Planner can do an analysis ",
+      "source": "ep-2026-10-10-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-10",
+      "last_applied": "2026-10-10T02:43:18.585065+00:00",
+      "category": "general",
+      "pattern": "When Brian asks whether the Cash Planner can do an analysis FinOps did in the CICO Excel, the real ask is to replicate it. Refetch the CICO (cico_daily_email.fetch) first since the local copy lags their same-day edits; the formulas in the latest workbook are the spec; parity-test against the numbers in their email.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-10-290": {
+      "id": "pat-2026-10-10-290",
+      "name": "Cash Planner REPLACES the CICO: never propose CICO extractor",
+      "source": "ep-2026-10-10-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-10",
+      "last_applied": "2026-10-10T03:04:19.747836+00:00",
+      "category": "general",
+      "pattern": "Cash Planner REPLACES the CICO: never propose CICO extractors or reading CICO tabs as inputs. Unknown granularity is solved by the in-app treasury analyst answering anything in natural language over finest-grain planner-owned data (Redshift, bank feeds, treasury inputs, facility terms) with code execution, saving results as live analyses that can feed the plan.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-10-291": {
+      "id": "pat-2026-10-10-291",
+      "name": "Cash Planner is Brians highest-stakes build: never ship assi",
+      "source": "ep-2026-10-10-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-10",
+      "last_applied": "2026-10-10T03:51:02.543803+00:00",
+      "category": "general",
+      "pattern": "Cash Planner is Brians highest-stakes build: never ship assistant behavior that can produce a wrong number. Enforce in code not prompt: terms-as-data with source quotes, origin-declared inputs, user-quote verification, independent reviewer on every plan write, golden evals (tests/eval_assistant.py) run before any prompt/model/tool change; abstain and ask when a driving input is missing. Restart helper must not kill itself (exclude own PID when matching uvicorn cmdline).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
       ]
     }
   }

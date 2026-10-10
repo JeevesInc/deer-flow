@@ -12,6 +12,8 @@ The user provides frontend requirements: a component, page, application, or inte
 
 Apps Brian's team will USE (Cash Planner, CICO challenger, any plan/approve/edit tool) are production SaaS software: React 19/TS, TanStack Router+Query, Tailwind/shadcn, AG Grid, ECharts; FastAPI/Postgres. Never Streamlit, never anchored on the borrowing-base app. Bar = Linear/Pigment feel. Screenshot and critique the rendered app before showing him.
 
+**Done = built, not described (Brian 2026-10-09: "three failures in a row"; "you didn't do it, you just said it").** Before saying a planner feature works: `tsc --noEmit` rc=0, `npm run build` rc=0, backend pytest rc=0, and a screenshot of the route exercising it. "What doesn't it have?" = build the gaps in the same turn (largest first) and report what shipped with commit hashes; a gap list alone is a failed answer. Never list a capability as present unless you exercised it this session.
+
 ## Output Requirements
 
 **MANDATORY**: The entry HTML file MUST be named `index.html`. This is a strict requirement for all generated frontend projects to ensure compatibility with standard web hosting and deployment workflows.

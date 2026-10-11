@@ -4655,6 +4655,86 @@
       "target_skills": [
         "cfo-org-kb"
       ]
+    },
+    "pat-2026-10-11-292": {
+      "id": "pat-2026-10-11-292",
+      "name": "Web signups: playwright (installed in backend venv) + persis",
+      "source": "ep-2026-10-11-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-11",
+      "last_applied": "2026-10-11T01:34:10.242484+00:00",
+      "category": "general",
+      "pattern": "Web signups: playwright (installed in backend venv) + persistent profile under workspace; dismiss CookieYes via button.cky-btn-reject; scope dialogs to [data-slot=dialog-content]; pull email verification codes with gmail_tool.py search/read. web_fetch (Jina) is 401 - use urllib in a script. Creds stored in .deer-flow/priorlabs_credentials.json. API use needs only General T&C, not the non-commercial weights license.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-11-293": {
+      "id": "pat-2026-10-11-293",
+      "name": "Model facility step-ups as upsize_to with a needed-by month.",
+      "source": "ep-2026-10-11-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-11",
+      "last_applied": "2026-10-11T03:27:39.244599+00:00",
+      "category": "general",
+      "pattern": "Model facility step-ups as upsize_to with a needed-by month. MC collateral = CICO MC tab mechanics (daily MC spend x days BR 26.4, CO 3.2, MX 3.9, MX net of 1MM Accelerate; cover SBLC + PG + BR prepay 6 days; cash = shortfall incl returns). Index MC spend to CARD-only country forecast: BR growth is JP-led (6m card +1.4pct per month vs JP +16.7pct). CICO bugs: Oct-26 7.25M return missing from cash flow; prepay, SBLC and NB-floor inputs stop Jun-27.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-11-294": {
+      "id": "pat-2026-10-11-294",
+      "name": "Before listing what is missing, read statement.py src tags (",
+      "source": "ep-2026-10-11-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-11",
+      "last_applied": "2026-10-11T04:22:47.732450+00:00",
+      "category": "general",
+      "pattern": "Before listing what is missing, read statement.py src tags (cico = passthrough) and check plan status (EVAL plans were already archived; revenue was already split) - I over-listed two non-gaps. CICO workbook needs app.engine.cico_file import (patches openpyxl) and read_only=True.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-11-295": {
+      "id": "pat-2026-10-11-295",
+      "name": "A direct question mid-build gets a 1-3 line answer FIRST as ",
+      "source": "ep-2026-10-11-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-11",
+      "last_applied": "2026-10-11T09:11:01.917193+00:00",
+      "category": "general",
+      "pattern": "A direct question mid-build gets a 1-3 line answer FIRST as its own completed turn, then continue the build in the next turn. Never run >10 min on a question turn: a follow-up Slack message interrupts the run and discards it silently.",
+      "problem": "Cash Planner thread 2026-10-10 21:33: Brian asked a yes/no question (So everything is forecasted or input?)",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-11-296": {
+      "id": "pat-2026-10-11-296",
+      "name": "Pass relative test paths with forward slashes (tests/test_mo",
+      "source": "ep-2026-10-11-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-11",
+      "last_applied": "2026-10-11T09:11:02.006477+00:00",
+      "category": "general",
+      "pattern": "Pass relative test paths with forward slashes (tests/test_model_inputs.py, no leading slash so the path guard allows it) or via subprocess list-args in a python script; never Windows backslashes in bash.",
+      "problem": "Running pytest on Windows host from bash",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
     }
   }
 }

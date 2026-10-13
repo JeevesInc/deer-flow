@@ -23,6 +23,7 @@ log = logging.getLogger("cm_brief")
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 STATE_FILE   = BACKEND_DIR / ".deer-flow" / "_cap_markets_state.json"
 CICO_FILE    = BACKEND_DIR / ".deer-flow" / "_cico_state.json"
+CICO_WB_FILE = BACKEND_DIR / ".deer-flow" / "_cico_workbook_state.json"
 # parents[2] from backend/scripts/ == the deer-flow root; skills/ lives directly
 # under it (the old path had a spurious extra "deer-flow" segment → didn't exist).
 SLACK_TOOL   = Path(__file__).resolve().parents[2] / "skills" / "custom" / "slack-search" / "slack_tool.py"
@@ -81,6 +82,16 @@ def build_brief() -> str:
     us    = state.get("us_bridge", {})
     mx    = state.get("mx_sofom", {})
     cico  = json.loads(CICO_FILE.read_text(encoding="utf-8")) if CICO_FILE.exists() else {}
+    # Prefer the CICO workbook totals written by cico_daily_email.py (the email the bot
+    # sends itself) when they are newer than the OCR'd screenshot state (2026-10-12 fix).
+    try:
+        from email.utils import parsedate_to_datetime as _p
+        _wb = json.loads(CICO_WB_FILE.read_text(encoding="utf-8")) if CICO_WB_FILE.exists() else {}
+        if _wb.get("total_cash_usd") is not None and (
+                not cico.get("source_date") or _p(_wb["source_date"]).date() >= _p(cico["source_date"]).date()):
+            cico = _wb
+    except Exception as _e:
+        log.warning("CICO workbook state unreadable: %s", _e)
 
     today = date.today().strftime("%a %b %d").replace(" 0", " ")
 
@@ -178,6 +189,7 @@ def build_brief() -> str:
         f"  Total Cash:      {_m(cico_cash, 1)}",
         f"  DACA / Pledged:  {_m(cico_daca, 1)}",
         f"  Restricted:      {_m(cico_restricted, 1)}",
+        *([f"  NB Liquidity:    {_m(cico.get('nb_liquidity_usd'), 1)}"] if cico.get("nb_liquidity_usd") is not None else []),
     ]
 
     if alerts:

@@ -56,9 +56,12 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
     state_schema = AgentState
 
     def __init__(self, top_k: int = 10, lessons_top_k: int = 4,
-                 behavior_top_k: int = 5):
+                 behavior_top_k: int = 5, scenarios_top_k: int = 3,
+                 atoms_always_keep: int = 3):
         super().__init__()
         self._top_k = top_k
+        self._scenarios_top_k = scenarios_top_k
+        self._atoms_always_keep = atoms_always_keep
         self._lessons_top_k = lessons_top_k
         self._behavior_top_k = behavior_top_k
         # Per-run memoization: this middleware is rebuilt by the graph factory
@@ -106,6 +109,20 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
 
             memories = _jev_filter(query, memories, "fact")
 
+            # L2 (memory layers, 2026-10-12): topic pages synthesized nightly
+            # from clusters of L1 facts by backend/scripts/memory_layers.py.
+            # Atoms already summarized by an injected page are dropped, except
+            # the top few, which keep exact detail for the specific question.
+            scenarios_block, covered_ids = self._build_scenarios_block(query, min_score)
+            if covered_ids:
+                keep = memories[: self._atoms_always_keep]
+                rest = [m for m in memories[self._atoms_always_keep:]
+                        if str(m.get("id", "")) not in covered_ids]
+                if len(keep) + len(rest) < len(memories):
+                    logger.info("mem0 L2 dedupe: dropped %d atoms covered by scenarios",
+                                len(memories) - len(keep) - len(rest))
+                memories = keep + rest
+
             lines = []
             for mem in memories:
                 text = mem.get("memory", "") or mem.get("text", "") or ""
@@ -115,10 +132,12 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
 
             lessons_block = self._build_lessons_block(query, min_score)
             behavior_block = self._build_behavior_block(query, min_score)
-            if not lines and not lessons_block and not behavior_block:
+            if not lines and not lessons_block and not behavior_block and not scenarios_block:
                 return None
 
             parts = []
+            if scenarios_block:
+                parts.append(scenarios_block)
             if lines:
                 parts.append(
                     "<recalled_memories>\n"
@@ -136,6 +155,44 @@ class Mem0InjectionMiddleware(AgentMiddleware[AgentState]):
         except Exception as e:
             logger.warning("mem0 injection failed: %s", e)
             return None
+
+    def _build_scenarios_block(self, query: str, min_score: float) -> tuple[str | None, set[str]]:
+        """Search the L2 ``memory-scenarios`` namespace (memory_layers.py).
+
+        Returns the formatted block and the set of L1 fact ids those pages
+        summarize (for atom dedupe). Never raises.
+        """
+        try:
+            from deerflow.agents.memory.mem0_store import search_memories
+
+            pages = search_memories(query, top_k=self._scenarios_top_k,
+                                    user_id="memory-scenarios")
+            if min_score > 0:
+                pages = [m for m in pages
+                         if float(m.get("score", 0.0) or 0.0) >= min_score]
+            pages = _jev_filter(query, pages, "fact")
+            lines, covered = [], set()
+            for m in pages:
+                text = (m.get("memory", "") or "").strip()
+                if not text:
+                    continue
+                meta = m.get("metadata") or {}
+                asof = str(meta.get("last_fact_at", ""))[:10]
+                lines.append(f"- {text}" + (f" [latest fact {asof}]" if asof else ""))
+                covered.update(str(i) for i in (meta.get("member_ids") or []))
+            if not lines:
+                return None, set()
+            return (
+                "<memory_topics>\n"
+                "Consolidated topic summaries built from many of your long-term "
+                "memories (newer facts supersede older). Use them for context; "
+                "verify specific numbers before repeating them:\n"
+                + "\n".join(lines)
+                + "\n</memory_topics>"
+            ), covered
+        except Exception as e:
+            logger.debug("scenarios injection skipped: %s", e)
+            return None, set()
 
     def _build_lessons_block(self, query: str, min_score: float) -> str | None:
         """Search the mem0 `lessons` namespace and format matches (P2-1 §4.1).

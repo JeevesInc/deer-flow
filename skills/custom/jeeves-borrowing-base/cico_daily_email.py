@@ -260,6 +260,51 @@ def build(FILE):
                 big_moves=big_moves)
 
 
+WB_CASH_STATE = ROOT_DF / "_cico_workbook_state.json"
+
+
+def write_cash_state(FILE):
+    """Summary totals straight from the CICO workbook (same file the daily email is built
+    from) -> _cico_workbook_state.json. cm_morning_brief prefers this over the OCR'd
+    _cico_state.json whenever its balance date is newer (2026-10-12: brief showed the
+    10/07 screenshot as '5 days stale' while the bot itself had sent the 10/09 email)."""
+    wb = openpyxl.load_workbook(FILE, read_only=True, data_only=True)
+    ws = wb["Bank balances"]
+    grid = [list(r) for r in ws.iter_rows(min_row=1, max_row=600, values_only=True)]
+    hdr = grid[6]
+    date_cols = [i for i, v in enumerate(hdr) if isinstance(v, dt.datetime)]
+    def has(r, txt):
+        return any(isinstance(x, str) and txt in x.lower() for x in grid[r][:10])
+    summ = next(r for r in range(len(grid)) if has(r, "summary by country"))
+    def filled(ci):
+        return sum(1 for r in range(8, summ) if isinstance(grid[r][ci], (int, float)) and grid[r][ci] != 0)
+    cur = [c for c in date_cols if filled(c) > 30][-1]
+    def val(label, after=0):
+        for r in range(after, len(grid)):
+            labs = [x.strip().lower() for x in grid[r][:10] if isinstance(x, str)]
+            if label in labs:
+                v = grid[r][cur]
+                return round(v, 2) if isinstance(v, (int, float)) else None
+        return None
+    nb_hdr = next(r for r in range(len(grid)) if has(r, "nb controlled accounts"))
+    d_cur = hdr[cur]
+    st = {
+        "source": "cico_workbook",
+        "source_file": FILE.name,
+        "as_of": f"{d_cur:%Y-%m-%d}",
+        "source_date": f"{d_cur:%a, %d %b %Y} 00:00:00 -0600",
+        "extracted_at": dt.datetime.now().isoformat(),
+        "total_cash_usd": val("total cash"),
+        "daca_pledged_usd": val("daca + pledged countries"),
+        "prepaid_daca_pledged_usd": val("prepaid daca + pledged countries"),
+        "restricted_deposits_usd": val("total restricted deposits accounts balance"),
+        "total_cash_plus_restricted_usd": val("total cash + restricted deposits"),
+        "nb_liquidity_usd": val("total cash", nb_hdr),
+    }
+    WB_CASH_STATE.write_text(json.dumps(st, indent=1), encoding="utf-8")
+    return st
+
+
 def send_mail(html, subject, to):
     from email.mime.text import MIMEText
     from google_auth import get_credentials
@@ -292,6 +337,10 @@ def main():
         elif a.no_fetch: FILE, mod = latest_local(), None
         else: FILE, mod = fetch()
         b = build(FILE)
+        try:
+            write_cash_state(FILE)
+        except Exception as e:
+            say("cash-state write failed (email unaffected):", repr(e))
         key = f"{b['d_cur']:%Y-%m-%d}"
         subject = f"{b['d_cur']:%y%m%d} CICO - Daily balances"
         (TREAS / "cico_daily_email_preview.html").write_text(b["html"], encoding="utf-8")

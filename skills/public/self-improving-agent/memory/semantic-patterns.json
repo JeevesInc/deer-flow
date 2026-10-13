@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 275,
+      "applications": 276,
       "created": "2026-04-07",
-      "last_applied": "2026-10-10T09:09:38.826034+00:00",
+      "last_applied": "2026-10-13T09:12:26.689412+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4734,6 +4734,86 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-12-297": {
+      "id": "pat-2026-10-12-297",
+      "name": "When the mention is an approver granting approval on a ticke",
+      "source": "ep-2026-10-12-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-12",
+      "last_applied": "2026-10-12T15:08:01.394231+00:00",
+      "category": "general",
+      "pattern": "When the mention is an approver granting approval on a ticket Brian opened, the routine action is to acknowledge, tell the assignee they are cleared, and restate the scope and no-secrets-in-Linear rule. Do not change status on another team ticket and do not re-ask for approval.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "linear"
+      ]
+    },
+    "pat-2026-10-12-298": {
+      "id": "pat-2026-10-12-298",
+      "name": "When the bot takes over producing a report, repoint every do",
+      "source": "ep-2026-10-12-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-12",
+      "last_applied": "2026-10-12T15:50:44.979572+00:00",
+      "category": "general",
+      "pattern": "When the bot takes over producing a report, repoint every downstream consumer to the bot own source before calling data stale.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-12-299": {
+      "id": "pat-2026-10-12-299",
+      "name": "Payment-date F12340 balance before the 15th = Reqd figure in",
+      "source": "ep-2026-10-12-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-12",
+      "last_applied": "2026-10-12T16:30:17.047450+00:00",
+      "category": "general",
+      "pattern": "Payment-date F12340 balance before the 15th = Reqd figure in the latest Recycling Request email (William Brum), the amount FinOps ring-fences for the distribution; EOM balance = ops-mx-spv post on last day. Clause iv in the executed Aug letter used SUM(tape AC) divided by days in month, not workbook G10 (divides by D6-D5 = days minus 1); flag the gap each month. CxC F12340 monthly-service invoice can lag; F12339 admin + RUG facturas arrive around the 5th via reportes-cxc.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-10-12-300": {
+      "id": "pat-2026-10-12-300",
+      "name": "When the app moves off CICO, re-audit every page: each must ",
+      "source": "ep-2026-10-12-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-12",
+      "last_applied": "2026-10-12T18:28:48.527814+00:00",
+      "category": "general",
+      "pattern": "When the app moves off CICO, re-audit every page: each must read the plan run over the full horizon; CICO only behind the compare toggle",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-13-301": {
+      "id": "pat-2026-10-13-301",
+      "name": "backend/scripts/memory_layers.py builds L2 topic pages (mem0",
+      "source": "ep-2026-10-13-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-13",
+      "last_applied": "2026-10-13T06:47:35.519834+00:00",
+      "category": "general",
+      "pattern": "backend/scripts/memory_layers.py builds L2 topic pages (mem0 ns memory-scenarios) from L1 fact clusters (cos 0.60, min 5); state .deer-flow/memory_layers/state.json; nightly via dreams _run_memory_layers; memory_derive reads L2. Qdrant vectors are dicts (dense + bm25 sparse) - take the list-valued entry. Sonnet JSON needs retry on parse fail. Middleware change needs LangGraph restart; dreams change needs gateway restart.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "mem0-memory"
       ]
     }
   }

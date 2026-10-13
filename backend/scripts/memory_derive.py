@@ -73,7 +73,7 @@ def derive_summary_from_facts(facts: list[str]) -> str | None:
     facts_text = "\n".join(f"- {f}" for f in facts[:TOP_K_RECENT])
     prompt = f"""You are summarizing recent facts about Brian Mauck's work at Jeeves Financial Technology.
 
-Recent facts from memory:
+Recently active topics from memory (each a consolidated summary):
 {facts_text}
 
 Write a 2-3 sentence summary of the most important recent context: active deals, priorities, and key relationships.
@@ -107,11 +107,22 @@ def run():
         print(f"[memory_derive] Only {total} facts, skipping derive (min {MIN_FACTS_TO_DERIVE})", file=sys.stderr)
         return
 
+    # L3 from L2 (memory layers, 2026-10-12): summarize the most recently
+    # active topic pages; fall back to raw recent facts if L2 is not built.
+    facts = []
     try:
-        facts = read_recent_mem0_facts(TOP_K_RECENT)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from memory_layers import recent_scenarios
+        facts = [f"{s['title']} (latest {str(s.get('last_fact_at', ''))[:10]}): {s['summary']}"
+                 for s in recent_scenarios(TOP_K_RECENT)]
     except Exception as e:
-        print(f"[memory_derive] mem0 read failed: {e}", file=sys.stderr)
-        return
+        print(f"[memory_derive] L2 read failed, using raw facts: {e}", file=sys.stderr)
+    if not facts:
+        try:
+            facts = read_recent_mem0_facts(TOP_K_RECENT)
+        except Exception as e:
+            print(f"[memory_derive] mem0 read failed: {e}", file=sys.stderr)
+            return
     if not facts:
         return
 

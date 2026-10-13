@@ -574,8 +574,40 @@ HARD RULES for this message:
 # Dispatch                                                             #
 # ------------------------------------------------------------------ #
 
+def _run_memory_layers() -> None:
+    """Nightly memory pyramid refresh (2026-10-12), isolated subprocesses.
+
+    L1 facts -> L2 topic pages (backend/scripts/memory_layers.py, incremental:
+    only clusters whose membership changed are re-synthesized), then
+    L2 -> L3 memory.json history (memory_derive.py). Before this, derive only
+    ran at gateway startup, so a long-lived gateway never refreshed memory.json.
+    Non-fatal.
+    """
+    import subprocess as _sp
+    scripts = Path(__file__).resolve().parents[3] / "backend" / "scripts"
+    for name, timeout in (("memory_layers.py", 3600), ("memory_derive.py", 180)):
+        try:
+            r = _sp.run([sys.executable, str(scripts / name)], timeout=timeout,
+                        cwd=str(scripts), capture_output=True, text=True)
+            log.info("%s rc=%s %s", name, r.returncode, (r.stdout or "").strip()[-300:])
+            if r.returncode:
+                log.error("%s stderr: %s", name, (r.stderr or "")[-800:])
+        except Exception as e:
+            log.error("%s failed (non-fatal): %s", name, e)
+    try:
+        st = load_state()
+        st["last_derive"] = datetime.now().isoformat()
+        sp = _state_path()
+        sp.parent.mkdir(parents=True, exist_ok=True)
+        with open(sp, "w") as f:
+            json.dump(st, f, indent=2)
+    except Exception as e:
+        log.warning("could not stamp last_derive: %s", e)
+
+
 def run_dream() -> None:
     log.info("Starting dream session...")
+    _run_memory_layers()
 
     # Weekly consolidation of the brian-behavior namespace written by
     # action_learner: merge duplicates, resolve contradictions (recent wins),

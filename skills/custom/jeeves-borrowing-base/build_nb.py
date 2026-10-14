@@ -281,6 +281,43 @@ def load_tape_csv(path):
 
 
 # ── CICO ───────────────────────────────────────────────────────────────────
+def _cico_html_balances(payload):
+    """Parse the HTML-table CICO email: rows country | bank | acct | ccy | balance (original
+    currency, despite the 'USD' legend) | d/d. Key = account token (bank + acct when the token
+    repeats); long wallet ids are cut to 9 chars to match the col-P label."""
+    import base64
+    from bs4 import BeautifulSoup
+
+    def _html(p):
+        if p.get('mimeType') == 'text/html' and p.get('body', {}).get('data'):
+            return base64.urlsafe_b64decode(p['body']['data']).decode('utf-8', 'ignore')
+        for q in p.get('parts', []) or []:
+            h = _html(q)
+            if h:
+                return h
+        return None
+    h = _html(payload)
+    if not h:
+        return {}
+    rows = []
+    for tr in BeautifulSoup(h, 'html.parser').find_all('tr'):
+        c = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
+        if len(c) >= 5 and len(c[3]) == 3 and c[3].isalpha() and c[3].isupper() and c[2]:
+            v = c[4].replace(',', '')
+            neg = v.startswith('(')
+            v = v.strip('()')
+            try:
+                val = 0.0 if v in ('-', '') else float(v) * (-1 if neg else 1)
+            except ValueError:
+                continue
+            rows.append((c[1], c[2][:9] if len(c[2]) > 12 else c[2], val))
+    counts = collections.Counter(a for _, a, _ in rows)
+    out = {}
+    for bank, acct, val in rows:
+        out[acct if counts[acct] == 1 else '{} {}'.format(bank, acct)] = val
+    return out
+
+
 def fetch_cico(msg_id=None):
     """Return (balances_dict, subject, date_header) from the latest CICO email."""
     import tempfile
@@ -295,12 +332,16 @@ def fetch_cico(msg_id=None):
             raise RuntimeError('No CICO daily balances email in the last 14 days')
         msg_id = msgs[0]['id']
     msg = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
-    hdrs = {h['name']: h['value'] for h in msg['payload'].get('headers', [])}
+    hdrs = {h['name'].title(): h['value'] for h in msg['payload'].get('headers', [])}
     with tempfile.TemporaryDirectory() as tmp:
         paths = cico._download_images(service, msg_id, msg['payload'], tmp)
-        if not paths:
-            raise RuntimeError('CICO email {} has no image attachments'.format(msg_id))
-        balances = cico._call_claude_vision(paths)
+        if paths:
+            balances = cico._call_claude_vision(paths)
+        else:
+            # 2026-10-13: the CICO email is now an HTML table (cico_daily_email.py), no images.
+            balances = _cico_html_balances(msg['payload'])
+            if not balances:
+                raise RuntimeError('CICO email {} has no image attachments or balance table'.format(msg_id))
     balances = {k: v for k, v in balances.items() if not k.startswith('__')}
     if len(balances) < 12:
         raise RuntimeError('CICO extraction gate: only {} rows extracted'.format(len(balances)))

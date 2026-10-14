@@ -4815,6 +4815,70 @@
       "target_skills": [
         "mem0-memory"
       ]
+    },
+    "pat-2026-10-13-302": {
+      "id": "pat-2026-10-13-302",
+      "name": "A memory removal must cover every store: mem0 deerflow_user ",
+      "source": "ep-2026-10-13-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-13",
+      "last_applied": "2026-10-13T16:05:43.851718+00:00",
+      "category": "general",
+      "pattern": "A memory removal must cover every store: mem0 deerflow_user facts, lessons namespace AND sll/lessons.jsonl (sll_sync re-adds), strategic-context chunks, memory-scenarios L2 pages, STRATEGIC_CONTEXT.md, memory.json. Verify with a post-delete scan across all namespaces before saying done. Earlier cleanup only hit the files; L2 build resurfaced the facts.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "mem0-memory"
+      ]
+    },
+    "pat-2026-10-13-303": {
+      "id": "pat-2026-10-13-303",
+      "name": "build_nb month_end_window(as_of=ME) excludes the ME month; f",
+      "source": "ep-2026-10-13-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-13",
+      "last_applied": "2026-10-13T17:13:08.822091+00:00",
+      "category": "general",
+      "pattern": "build_nb month_end_window(as_of=ME) excludes the ME month; for a month-end BBC refresh dq30 with as_of=ME+1 (Jul-Sep). Save the prior month-end bank_accts snapshot (--save-snapshot) after delivery or Exhibit B diffs vs Schedule 5.22. When Brian fixes liquidity to a sent form, copy that form bank_accts S-T into Q-R-S-T so BB cash and Liquidity share one balance set.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-10-14-304": {
+      "id": "pat-2026-10-14-304",
+      "name": "Before saying an API key cannot do X, probe every list endpo",
+      "source": "ep-2026-10-14-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T01:57:26.948343+00:00",
+      "category": "general",
+      "pattern": "Before saying an API key cannot do X, probe every list endpoint and expand[] options; a balance+transactions key can prove account identity by replaying running balances against CICO history to the cent (130 of 136 matched) and can rebuild EOD balances at any cutoff",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-14-305": {
+      "id": "pat-2026-10-14-305",
+      "name": "Interactive auth (SSO token / push approval) = ONE foregroun",
+      "source": "ep-2026-10-14-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T09:04:26.727339+00:00",
+      "category": "general",
+      "pattern": "Interactive auth (SSO token / push approval) = ONE foreground script owned by ONE thread. Before starting, check for and kill any running copy; when Brian's token reply lands in a new thread, hand it to the running script, never start another. After login, verify persistence with a fresh non-interactive process (keeper_records.py) BEFORE saying done. Runbook + scripts: .deer-flow/treasury/keeper/README.md.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
     }
   }
 }

@@ -33,8 +33,8 @@ app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)  # import-safe: body runs only under __main__
 
 KEYS = {'facility_req': ['NB', 'CIM MX SOFOM'], 'pool': ['NB', 'MX', 'All']}
-REQS = 'streamlit>=1.40\npandas>=2.0\nplotly>=5.20\npyarrow>=15\n'
-CONFIG = '[theme]\nbase = "light"\n[browser]\ngatherUsageStats = false\n'
+REQS = 'streamlit>=1.50\npandas>=2.0\nplotly>=5.20\npyarrow>=15,<26\n'
+CONFIG = '[theme]\nbase = "dark"\nprimaryColor = "#4c9bff"\n[browser]\ngatherUsageStats = false\n'
 
 
 def git(*a, cwd=None):
@@ -62,7 +62,7 @@ def main():
             'facility_table': None, 'kpi_avail': None, 'heatmap': None, 'obligors': None, 'recycling': None,
             'waterfall_steps': 'facility_req', 'reasons': 'facility_req', 'bb_trend': 'facility_req',
             'loans': 'facility_req', 'test_trend': 'facility_req',
-            'dq_mix': 'pool', 'roll_rates': 'pool', 'epd': 'pool', 'vintage': 'pool', 'risk_migration': 'pool',
+            'dq_mix': 'pool', 'roll_rates': 'pool', 'roll_matrix': 'pool', 'epd': 'pool', 'vintage': 'pool', 'risk_migration': 'pool',
             'collections': 'pool'}
         for card, key in file_keys.items():
             for v in (KEYS[key] if key else [None]):
@@ -72,6 +72,12 @@ def main():
                 counts[app.mc_export_name(card, v)] = len(df)
         pd.read_sql(app.FWD_BASE_SQL, conn).to_parquet(os.path.join(data, 'forward_base.parquet'), index=False)
         pd.read_sql(app.FWD_FC_SQL, conn).to_parquet(os.path.join(data, 'forecast.parquet'), index=False)
+        app.actuals_long(pd.read_sql(app.ACTUALS_SQL, conn)).to_parquet(os.path.join(data, 'actuals_series.parquet'), index=False)
+        app.forecast_series().to_parquet(os.path.join(data, 'forecast_series.parquet'), index=False)
+        bq, bs = app.forecast_bands()
+        if len(bq):
+            bq.to_parquet(os.path.join(data, 'forecast_bands.parquet'), index=False)
+            bs.to_parquet(os.path.join(data, 'forecast_band_summary.parquet'), index=False)
         snap = pd.read_sql("select max(as_of) from analytics_sandbox.cm_mc_facility_daily where facility = 'NB'", conn).iloc[0, 0]
     finally:
         conn.close()

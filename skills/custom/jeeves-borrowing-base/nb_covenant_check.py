@@ -86,9 +86,15 @@ def check_workbook(path):
     # build_nb writes test-date balances to cols S/T (Liquidity in col U); when
     # present, Liquidity uses them and the BB cash pool stays on as-of balances.
     _u1 = str(ba.cell(1, 21).value or '')
-    me_mode = 'month-end' in _u1.lower()
+    # 2026-10-14: the form's liquidity tab (E7 = SUM(bank_accts!U)) is driven by the test-date
+    # balances in cols S/T even when the U1 header text is blank, so detect month-end mode from
+    # the data too. Without this the check fell back to as-of balances (10/5 form: $12.29MM vs the
+    # $16.02MM 9/30 figure on the certificate).
+    me_mode = ('month-end' in _u1.lower()
+               or any(ba.cell(r, 19).value not in (None, '') for r in range(2, ba.max_row + 1)))
     _td = re.search(r'(\d{2}-[A-Za-z]{3}-\d{2})', _u1)
-    liq_date = _td.group(1) if (me_mode and _td) else 'as-of date (no month-end columns)'
+    liq_date = (_td.group(1) if _td else 'month-end (bank_accts S/T)') if me_mode \
+        else 'as-of date (no month-end columns)'
     for r in range(2, ba.max_row + 1):
         if ba.cell(r, 1).value in (None, ''):
             continue

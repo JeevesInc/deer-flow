@@ -39,6 +39,7 @@ sys.path.insert(0, BB_DIR)
 DEER = r'C:\Jeeves\redshift-bot\deer-flow'
 STATE_DIR = os.path.join(DEER, 'backend', '.deer-flow')
 CM_STATE = os.path.join(STATE_DIR, '_cap_markets_state.json')
+NB_LIQ_REPORTED = os.path.join(STATE_DIR, 'nb_liquidity_reported.json')
 SOFOM_SCRATCH = os.path.join(STATE_DIR, '_cap_markets_scratch')
 THREADS = os.path.join(STATE_DIR, 'threads')
 SCHEMA = 'analytics_sandbox'
@@ -238,11 +239,20 @@ def build_nb(as_of, wb_metrics):
     tests = []
     full_avail = max(availability, 0.0)
     liq, floor = _f(wb_metrics.get('liquidity')), _f(wb_metrics.get('liquidity_floor'))
+    liq_src = 'NB BB as of {} (test date {})'.format(wb_metrics.get('_wb_as_of'), wb_metrics.get('liquidity_test_date'))
+    # 7.01(a) is a MONTH-END test: show the figure actually reported to NB for the latest month-end
+    # (nb_liquidity_reported.json, maintained by hand), not a recomputation off the weekly workbook.
+    try:
+        rep = json.load(open(NB_LIQ_REPORTED, encoding='utf-8'))
+        liq, floor = float(rep['liquidity']), float(rep['floor'])
+        liq_src = 'Reported to NB: {} (test date {})'.format(rep['source'], rep['test_date'])
+    except FileNotFoundError:
+        pass
     tests.append(dict(test='7.01(a) Minimum Liquidity (month-end)', category='covenant', actual=liq,
                       threshold=floor, direction='min', unit='usd', headroom=liq - floor,
                       headroom_usd=liq - floor, availability_lost_if_breached_usd=full_avail,
                       consequence='Event of Default - draws blocked; floor steps to $25MM once borrowings >= $100MM',
-                      source='NB BB as of {} (test date {})'.format(wb_metrics.get('_wb_as_of'), wb_metrics.get('liquidity_test_date'))))
+                      source=liq_src))
     dqa = wb_metrics.get('dq30_avg')
     tests.append(dict(test='7.01(b) DQ30 Rate, 3-mo avg (month-end)', category='covenant',
                       actual=dqa, threshold=0.025, direction='max', unit='pct',
@@ -634,18 +644,29 @@ def mx_performance():
     files = [f for f in res.get('files', []) if f['name'].endswith('.xlsx')]
     if not files:
         raise RuntimeError('no servicer report found in Drive')
-    f = files[0]
     cache = os.path.join(DEER, 'backend', '.deer-flow', '_mission_control')
     os.makedirs(cache, exist_ok=True)
-    path = os.path.join(cache, f['name'])
-    if not os.path.exists(path):
-        buf = io.BytesIO()
-        dl = MediaIoBaseDownload(buf, drv.files().get_media(fileId=f['id'], supportsAllDrives=True))
-        done = False
-        while not done:
-            _, done = dl.next_chunk()
-        open(path, 'wb').write(buf.getvalue())
-    ws = openpyxl.load_workbook(path, read_only=True, data_only=True)['Exhibit B']
+    # Newest report whose Exhibit B is populated. The current month's report sits in Drive as an
+    # unfilled draft until it is finalised (formula cells have no cached values), so fall back to the
+    # prior month instead of crashing. Re-download when Drive's copy is newer than the cache.
+    ws = f = None
+    for cand in files:
+        path = os.path.join(cache, cand['name'])
+        drive_mt = dt.datetime.fromisoformat(cand['modifiedTime'].replace('Z', '+00:00')).timestamp()
+        if not os.path.exists(path) or os.path.getmtime(path) < drive_mt:
+            buf = io.BytesIO()
+            dl = MediaIoBaseDownload(buf, drv.files().get_media(fileId=cand['id'], supportsAllDrives=True))
+            done = False
+            while not done:
+                _, done = dl.next_chunk()
+            open(path, 'wb').write(buf.getvalue())
+        w = openpyxl.load_workbook(path, read_only=True, data_only=True)['Exhibit B']
+        if all(w[c].value is not None for c in ('G51', 'H51', 'H52', 'H53', 'H54', 'H57', 'H58', 'H59', 'H60')):
+            ws, f = w, cand
+            break
+        log('MX performance: Exhibit B not populated in', cand['name'], '- trying prior report')
+    if ws is None:
+        raise RuntimeError('no servicer report with a populated Exhibit B')
     g = lambda c: ws[c].value
     months = [(g('G51'), g('H51'), g('H57')), (None, g('H52'), g('H58')), (None, g('H53'), g('H59'))]
     m0 = g('G51')
@@ -701,7 +722,7 @@ def refresh_forecast(conn, run_model=False, weeks=26):
         through = (dt.date.today() + dt.timedelta(weeks=weeks)).isoformat()
         script = os.path.join(SK, 'custom', 'cfo-org-kb', 'scripts', 'receivable_balance_weekly_run.py')
         env = dict(os.environ, OUTPUTS_PATH=outdir)
-        r = subprocess.run([sys.executable, script, '--through', through, '--no-upload', '--no-slack', '--no-ledger'],
+        r = subprocess.run([sys.executable, script, '--through', through, '--no-upload', '--no-slack', '--no-ledger', '--no-collections'],
                            capture_output=True, text=True, timeout=3600, env=env)
         log('forecast run rc', r.returncode, r.stdout[-200:])
     files = sorted(glob.glob(os.path.join(outdir, 'Model - Receivable Balance Forecast - *.xlsx')), key=os.path.getmtime)

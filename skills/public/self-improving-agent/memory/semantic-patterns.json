@@ -4879,6 +4879,102 @@
       "target_skills": [
         "slack-search"
       ]
+    },
+    "pat-2026-10-14-306": {
+      "id": "pat-2026-10-14-306",
+      "name": "When a diagnosis surfaces a defect in the same artifact, fix",
+      "source": "ep-2026-10-14-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T16:11:54.569967+00:00",
+      "category": "general",
+      "pattern": "When a diagnosis surfaces a defect in the same artifact, fix it in the same turn and report it done; never close with a list of open issues. Never open(path,w) and read the same path in one expression (wiped requirements.txt).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-14-307": {
+      "id": "pat-2026-10-14-307",
+      "name": "NEVER call raw keeper.exe against deerflow-keeper.json. Its ",
+      "source": "ep-2026-10-14-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T16:22:37.383866+00:00",
+      "category": "general",
+      "pattern": "NEVER call raw keeper.exe against deerflow-keeper.json. Its Windows set_file_permissions wipes the DACL, the rotated persistent-login clone_code then fails to write, and the saved session is dead (next call = SSO). Only use the ACL-patched wrapper (keeper_safe_list.py pattern: patch keepercommander.utils and loader set_file_permissions to icacls grant SYSTEM+Administrators, NoUi login that cancels on any prompt). One Keeper process at a time; never test with a copied config (clone_code is single-use).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-10-14-308": {
+      "id": "pat-2026-10-14-308",
+      "name": "Payment-date balance from Brian goes to Exhibit B D36 AND I1",
+      "source": "ep-2026-10-14-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T16:39:59.750873+00:00",
+      "category": "general",
+      "pattern": "Payment-date balance from Brian goes to Exhibit B D36 AND I110 (pmt-date cash) plus note R39; Anexo J (x) = balance - (ii) - (iii) - (iv) - USD clauses x preliminary-letter FX; only table row 9 changes. CIM monthly report certification per Loan Agreement 6.1(b) (certified true/correct/complete); signer Alex CFO for SOFOM; docx to Box My Sign Requests 378011435816 + Drive month folder.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-10-14-309": {
+      "id": "pat-2026-10-14-309",
+      "name": "Long training runs stalled the thread at 09:59 with no reply",
+      "source": "ep-2026-10-14-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T17:56:27.327356+00:00",
+      "category": "general",
+      "pattern": "Long training runs stalled the thread at 09:59 with no reply for ~1h; Brian asked in a new thread. For runs over ~5 min: launch in background, post an interim result in the originating thread, never let the thread end on a sleep/poll call.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-14-310": {
+      "id": "pat-2026-10-14-310",
+      "name": "Daily-payment XGBoost (daily or weekly target) lost to the 3",
+      "source": "ep-2026-10-14-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-14",
+      "last_applied": "2026-10-14T17:58:09.350390+00:00",
+      "category": "general",
+      "pattern": "Daily-payment XGBoost (daily or weekly target) lost to the 3-mo run-rate rule on weekly WAPE (15.5-20.9% vs 10.9%) over 12 rolling folds May-Oct 2026; intra-month shape profiles also hurt. Use nested selection (old half pick, new half report) and pick production weight on all folds; band must use production-weight errors. Mission Control calls weekly_run with --no-collections.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-15-311": {
+      "id": "pat-2026-10-15-311",
+      "name": "hello? or you there? in a thread with undelivered work means",
+      "source": "ep-2026-10-15-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-15",
+      "last_applied": "2026-10-15T09:02:58.185882+00:00",
+      "category": "general",
+      "pattern": "hello? or you there? in a thread with undelivered work means where is it: deliver the result or a concrete status, never the greeting line. SOUL bare-greeting rule patched with this exception 2026-10-15.",
+      "problem": "Brian asked for a collections forecast 09:59, got no reply for ~1h, then sent hello?",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
     }
   }
 }

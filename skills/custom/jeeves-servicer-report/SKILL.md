@@ -294,6 +294,13 @@ the month-end one different is the extra certifications it must carry:
 This cron exists so the month-end variant is never silently skipped behind the weekly one. When the
 14th falls in the same week as a Monday NB run, they are still two separate obligations.
 
+### HARD RULE — CIM Exhibit E and agreement-deadline claims (added 2026-10-15 after a 9-turn correction cycle)
+
+- **Source:** CIM agreement §6.1(a)(iii) — Exhibit E compliance certificate, executed by a Responsible Officer, due **within 40 calendar days after each calendar month-end**. Each month is a separate obligation; a missed month stays owed.
+- **On the 15th:** the outbound package is the CURRENT month's servicer report plus every Exhibit E that is signed and still unsent (Oct-15-2026 = Sept report + Aug certificate). Never pair a certificate with an old servicer report already sent to CIM.
+- **Never state, or withdraw, a due date without quoting the section.** On 10/15 the agent said 11/9, dropped it under pushback ("nothing in the agreement gives it a separate date") without reading, then re-read and restored it. Under pushback: open the agreement, quote it, then answer — never concede first.
+- **"Sent" needs `in:sent` evidence.** A draft is a draft; check Gmail Sent before describing any email as sent.
+
 ### Full-package schedule (added 2026-09-23 — Brian: "I want all of it done before the requirement")
 
 `run_schedule()` in the same cron, hourly tick, drafts only:

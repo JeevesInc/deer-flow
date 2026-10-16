@@ -104,6 +104,12 @@ the session-1 headless reauth path works with no human. It does NOT cover cold p
 - The blocked alert is now **once per boot** (`zscaler_alert_marker.json`, keyed on boot epoch
   from `GetTickCount64`) and carries its evidence: boot timestamp plus the session table.
 
+### 6. Token arrives after ZSATray's 30s timer (fixed 2026-10-15)
+
+**Symptom:** Okta 'Already authenticated', Edge 'Open' clicked, yet 'ZPA did not reach AUTHENTICATED'; ZSATray log shows `Timer_ZPAReauthTimeout timed out` ~30s after `launchBrowser()`, then `Processing ZPA AuthToken` + `STATUS_FAILED`.
+**Root cause:** after a ZSATray restart the new tray auto-launches its own PKCE URL with a 30s timer; the script slept 12s to 'settle', clicked Authenticate again (rejected: 'already autenticating'), then tailed the log 10s — handoff landed at ~45s.
+**Fix (scripts/zscaler_reauth.py, backup .bak_20261015):** settle 12s→2s, return CLICKED straight after restart, rescan the log on disk before tailing. Monitor runs from Task Scheduler — kill PID and it respawns with new code. Restored 2026-10-15 10:07 on first patched attempt. Read ZSATray_*.log (timestamps local despite (-0700)) before blaming Okta.
+
 ## Diagnosing: read the RIGHT log
 
 Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (services back on

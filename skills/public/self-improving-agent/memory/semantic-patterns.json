@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 276,
+      "applications": 278,
       "created": "2026-04-07",
-      "last_applied": "2026-10-13T09:12:26.689412+00:00",
+      "last_applied": "2026-10-16T09:05:56.817463+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -4974,6 +4974,38 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-15-312": {
+      "id": "pat-2026-10-15-312",
+      "name": "When Redshift via Zscaler fails after reauth, run the native",
+      "source": "ep-2026-10-15-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-15",
+      "last_applied": "2026-10-15T16:48:59.818831+00:00",
+      "category": "general",
+      "pattern": "When Redshift via Zscaler fails after reauth, run the native SQL through Metabase POST https://jeeves.metabaseapp.com/api/dataset (database 6, METABASE_API_KEY, truststore.inject_into_ssl() for the Zscaler cert). Script: workspace mb_run.py. Also: gwc_tape sets charge_off_flag at 120 DPD of oldest open instalment while loans.status stays delinquent.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-10-16-313": {
+      "id": "pat-2026-10-16-313",
+      "name": "Read CIM 6.1(a)(iii) before any Exhibit E date claim; under ",
+      "source": "ep-2026-10-16-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-16",
+      "last_applied": "2026-10-16T09:05:56.933470+00:00",
+      "category": "general",
+      "pattern": "Read CIM 6.1(a)(iii) before any Exhibit E date claim; under pushback quote the agreement, never concede unread; on the 15th send current-month SR + all signed unsent certs; verify in:sent before saying sent",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
       ]
     }
   }

@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 278,
+      "applications": 289,
       "created": "2026-04-07",
-      "last_applied": "2026-10-16T09:05:56.817463+00:00",
+      "last_applied": "2026-10-17T18:16:12.276598+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5006,6 +5006,102 @@
       "solution": "",
       "target_skills": [
         "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-10-16-314": {
+      "id": "pat-2026-10-16-314",
+      "name": "When a prior dated version of the same doc lives in the targ",
+      "source": "ep-2026-10-16-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-16",
+      "last_applied": "2026-10-16T15:44:10.854715+00:00",
+      "category": "general",
+      "pattern": "When a prior dated version of the same doc lives in the target folder and must be preserved (executed/sent records), ALWAYS pass --new",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-10-17-315": {
+      "id": "pat-2026-10-17-315",
+      "name": "Topic-resolve multi-match first names; internal policy-gap e",
+      "source": "ep-2026-10-17-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-17",
+      "last_applied": "2026-10-17T02:25:04.268178+00:00",
+      "category": "general",
+      "pattern": "Topic-resolve multi-match first names; internal policy-gap emails = finding + size + constraint + forward norm, no drama; no typed signatures",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-10-17-316": {
+      "id": "pat-2026-10-17-316",
+      "name": "Draw prep: refresh tape first; liquidity = reported month-en",
+      "source": "ep-2026-10-17-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-17",
+      "last_applied": "2026-10-17T09:10:08.807846+00:00",
+      "category": "general",
+      "pattern": "Draw prep: refresh tape first; liquidity = reported month-end figure, never re-raise; collate existing signed pages instead of re-sign; grep consumers before rewriting a .deer-flow state JSON (broke Mission Control)",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-17-317": {
+      "id": "pat-2026-10-17-317",
+      "name": "CICO email rendered blank client-balance inputs (rows 553-56",
+      "source": "ep-2026-10-17-014",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-17",
+      "last_applied": "2026-10-17T18:16:45.201602+00:00",
+      "category": "general",
+      "pattern": "CICO email rendered blank client-balance inputs (rows 553-568) as $0 self-funded on 10-16; Alex caught it. Added completeness() gate in cico_daily_email.py: blank-vs-prior-day rows (excluding 'inactive') or zeroed Total rows block the send; refusal goes ONLY as a thread reply to the trigger message, never a DM to Brian. Backtested 260930-261016: only 261005 (pre-v2) and 261016 would have blocked.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-18-318": {
+      "id": "pat-2026-10-18-318",
+      "name": "Self-restart must be a detached one-shot script that waits f",
+      "source": "ep-2026-10-18-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-18",
+      "last_applied": "2026-10-18T09:12:39.244176+00:00",
+      "category": "general",
+      "pattern": "Self-restart must be a detached one-shot script that waits for health then posts the result with slack_tool.py send --thread <ts>; rule added to SOUL Services line",
+      "problem": "Brian asked for a gateway restart from a Slack DM thread (2026-10-17 15:51)",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-10-18-319": {
+      "id": "pat-2026-10-18-319",
+      "name": "Never redirect to NUL in git-bash; use subprocess.DEVNULL in",
+      "source": "ep-2026-10-18-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-18",
+      "last_applied": "2026-10-18T09:12:39.324759+00:00",
+      "category": "general",
+      "pattern": "Never redirect to NUL in git-bash; use subprocess.DEVNULL in a python wrapper",
+      "problem": "selfedit-commit failed 2026-10-17 03:30 with git add exit 128",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
       ]
     }
   }

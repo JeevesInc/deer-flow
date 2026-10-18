@@ -242,10 +242,25 @@ def build_nb(as_of, wb_metrics):
     liq_src = 'NB BB as of {} (test date {})'.format(wb_metrics.get('_wb_as_of'), wb_metrics.get('liquidity_test_date'))
     # 7.01(a) is a MONTH-END test: show the figure actually reported to NB for the latest month-end
     # (nb_liquidity_reported.json, maintained by hand), not a recomputation off the weekly workbook.
+    # Schema (2026-10-16, shared with build_nb.py's month-end pin): {test_date: {liquidity, source,
+    # accounts, [floor]}}. The legacy flat {test_date, liquidity, floor, source} form is still accepted.
     try:
         rep = json.load(open(NB_LIQ_REPORTED, encoding='utf-8'))
-        liq, floor = float(rep['liquidity']), float(rep['floor'])
-        liq_src = 'Reported to NB: {} (test date {})'.format(rep['source'], rep['test_date'])
+        if 'liquidity' in rep:
+            rep = {rep['test_date']: rep}
+        dates = sorted(k for k in rep if k <= str(as_of) and isinstance(rep[k], dict) and 'liquidity' in rep[k])
+        if dates:
+            td = dates[-1]
+            r = rep[td]
+            liq = float(r['liquidity'])
+            if r.get('floor') is not None:
+                floor = float(r['floor'])
+            elif td < '2026-10-23':
+                floor = 15000000.0   # pre step-up: borrowings < $100MM until the $20.5M draw funds 10/23
+            # else keep the workbook floor (steps to $25MM once borrowings >= $100MM)
+            liq_src = 'Reported to NB: {} (test date {})'.format(r.get('source', ''), td)
+        else:
+            print('[mission_control] WARN no reported 7.01(a) entry <= {}; using weekly workbook'.format(as_of))
     except FileNotFoundError:
         pass
     tests.append(dict(test='7.01(a) Minimum Liquidity (month-end)', category='covenant', actual=liq,

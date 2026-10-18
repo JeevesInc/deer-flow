@@ -56,6 +56,62 @@ def say(*a):
         f.write(msg + "\n")
 
 
+def slack_thread(channel, ts, text):
+    """Reply in the trigger message's thread (bot identity, audited via slack_tool)."""
+    args = [sys.executable, SLACK_TOOL, "send", channel, text] + (["--thread", ts] if ts else [])
+    try:
+        r = subprocess.run(args, timeout=60, capture_output=True, text=True)
+        if r.returncode: say("slack thread reply rc", r.returncode, r.stderr[-300:])
+    except Exception as e:
+        say("slack thread reply failed", channel, e)
+
+
+def find_trigger(uid):
+    """Fallback when the gateway didn't pass --trigger-channel/--trigger-ts: newest CICO-ish
+    message from the trigger user in their DM with the bot."""
+    try:
+        sys.path.insert(0, os.path.dirname(SLACK_TOOL))
+        import slack_tool
+        bot = slack_tool._get_bot_client()
+        ch = bot.conversations_open(users=[uid])["channel"]["id"]
+        for m in bot.conversations_history(channel=ch, limit=20).get("messages", []):
+            if m.get("user") == uid and re.search(r"cico|balance|saldo", (m.get("text") or "").lower()):
+                return ch, m.get("ts")
+        return ch, None
+    except Exception as e:
+        say("find_trigger failed", uid, e)
+        return None, None
+
+
+def completeness(FILE):
+    """Rows of the Bank balances tab that had a value on the prior date but are BLANK on the
+    current date (unfilled inputs), plus 'Total ...' rows that collapse to zero. 2026-10-16:
+    the client-balance inputs (rows 553-568) were left blank, the self-funded block went out
+    as $0 vs $15.6M and Alex asked what happened. Rows labelled 'inactive' are ignored (an
+    inactive demo Revolut row went blank on 10-15)."""
+    wb = openpyxl.load_workbook(FILE, read_only=True, data_only=True)
+    grid = [list(r) for r in wb["Bank balances"].iter_rows(min_row=1, max_row=600, values_only=True)]
+    wb.close()
+    hdr = grid[6]
+    date_cols = [i for i, v in enumerate(hdr) if isinstance(v, dt.datetime)]
+    def lab(r): return " ".join(str(v).strip() for v in grid[r][:10] if v is not None and str(v).strip())
+    summ = next(r for r in range(len(grid)) if "summary by country" in lab(r).lower())
+    end = next(r for r in range(summ, len(grid)) if "total cash" in lab(r).lower()) + 1
+    def filled(ci): return sum(1 for r in range(8, end) if isinstance(grid[r][ci], (int, float)) and grid[r][ci] != 0)
+    dc = [c for c in date_cols if filled(c) > 30]
+    cur, prev = dc[-1], dc[-2]
+    blanks, zeroed = [], []
+    for r in range(8, len(grid)):
+        p, v, L = grid[r][prev], grid[r][cur], lab(r)
+        if "inactive" in L.lower(): continue
+        if isinstance(p, (int, float)) and abs(p) >= 1 and v is None:
+            blanks.append((r + 1, L))
+        elif (L.lower().startswith("total") and isinstance(p, (int, float)) and abs(p) >= 1000
+              and isinstance(v, (int, float)) and abs(v) < 0.5):
+            zeroed.append((r + 1, L, p))
+    return dict(d_cur=hdr[cur], d_prev=hdr[prev], blanks=blanks, zeroed=zeroed)
+
+
 def slack(uid, text):
     try:
         r = subprocess.run([sys.executable, SLACK_TOOL, "send", uid, text], timeout=60,
@@ -320,6 +376,7 @@ def main():
     ap.add_argument("--file"); ap.add_argument("--no-fetch", action="store_true")
     ap.add_argument("--trigger-user"); ap.add_argument("--force", action="store_true")
     ap.add_argument("--fetch-only", action="store_true")
+    ap.add_argument("--trigger-channel"); ap.add_argument("--trigger-ts")
     a = ap.parse_args()
     if a.fetch_only:
         pth, mod = fetch_latest()
@@ -348,6 +405,26 @@ def main():
         dlt = (f" ({'+' if b['total_delta'] >= 0 else '-'}${abs(b['total_delta']):,.0f} d/d)"
                if b["total_delta"] is not None else "")
         say("built", FILE.name, "date", key, "prev", f"{b['d_prev']:%Y-%m-%d}", "rows", b["rows"], "total", tot, dlt)
+        cp = completeness(FILE)
+        if cp["blanks"] or cp["zeroed"]:
+            say("INCOMPLETE", FILE.name, "blank rows", [x[0] for x in cp["blanks"]], "zeroed totals", [x[0] for x in cp["zeroed"]])
+            if a.send:
+                # Refuse to send. Reply ONLY in the trigger message's thread - no DM to Brian.
+                items = [f"- row {r}: {L[:110]}" for r, L in cp["blanks"][:15]]
+                if len(cp["blanks"]) > 15: items.append(f"- ...and {len(cp['blanks']) - 15} more")
+                items += [f"- row {r}: {L[:60]} shows 0 (was {p:,.0f} on {cp['d_prev']:%d-%b})" for r, L, p in cp["zeroed"]]
+                hi = f"Hi {who} - " if who not in ("manual", "Brian") else ""
+                msg = (f"{hi}I haven't sent the {cp['d_cur']:%d-%b} CICO email: {FILE.name} isn't complete. "
+                       f"These rows on the Bank balances tab are blank for {cp['d_cur']:%d-%b} but had values on "
+                       f"{cp['d_prev']:%d-%b}, so the email would show them as zero:\n" + "\n".join(items) +
+                       "\nFill them in, save the file, and message me *CICO* again - I'll send it once it's complete.")
+                if a.trigger_user:
+                    ch, ts = (a.trigger_channel, a.trigger_ts) if a.trigger_channel else find_trigger(a.trigger_user)
+                    if ch: slack_thread(ch, ts, msg)
+                    else: say("could not resolve trigger message - no reply posted")
+                else:
+                    print(msg)
+                return
         if not a.send: return
 
         st = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {"sent": {}}

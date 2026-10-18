@@ -211,6 +211,12 @@ python /mnt/skills/custom/google-drive/upload_to_drive.py "$OUTPUTS_PATH/Jeeves 
 
 An NB draw / Borrowing Request draft to the agent (WTNA) attaches **the borrowing base workbook .xlsx it was built from** alongside the signed PDFs — never PDFs alone. 2026-10-06, $2M draw: *"You need to attach the actual Excel file to the request as well"*. Before calling the draft ready, list its attachments in the Slack reply and confirm one is the .xlsx.
 
+## HARD RULE — NB draw prep: fresh tape, liquidity of record, no re-signs (Brian, 2026-10-16, $20.5M DDTL)
+1. **Refresh the tape before building the draw BB.** A Borrowing Request + 4.02(d) certificate is built on the latest daily tape, not the last weekly BB workbook. Brian: *"why didn't you refresh the tape data for the draw?"* State the tape date in the reply.
+2. **Liquidity in a draw package = the month-end figure already reported to NB** (record: `.deer-flow/nb_liquidity_reported.json`; 9/30 = $16,020,609.13). Never re-derive it from CICO, never offer an alternative reading, never raise it as an issue. Brian: *"the liquidity stays the exact same as we already showed them, which is the 16M, stop bringing this up"* (same framing corrected 10/05, 10/08, 10/16).
+3. **Post-signature fixes: never ask the signer to re-sign.** Regenerate the corrected pages and collate the existing signed signature pages into the updated PDF. Brian: *"we are not having him sign it again... just collate his signature page with the updated PDF."*
+4. **Before rewriting any `.deer-flow/*.json` state file, grep its consumers** (`cfo-org-kb/scripts`, `skills/custom`) and keep existing keys. 10/16: rewriting `nb_liquidity_reported.json` to a per-date schema broke `mission_control_snapshot.py` (`KeyError: 'liquidity'`) and dashboard 11645 showed the prior day until Brian said "so fix it?".
+
 ## NB borrowing base certificate — facility-specific rules (2026-07-28, Brian)
 
 1. **Collateral is NOT netted out of eligible receivables.** Credit support (AIG

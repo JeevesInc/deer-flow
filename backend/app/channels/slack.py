@@ -982,7 +982,8 @@ class SlackChannel(Channel):
         df_root = Path(__file__).resolve().parents[3]
         script = df_root / "skills" / "custom" / "jeeves-borrowing-base" / "cico_daily_email.py"
         py = df_root / "backend" / ".venv" / "Scripts" / "python.exe"
-        args = [str(py if py.exists() else _sys.executable), str(script), "--send", "--trigger-user", user_id]
+        args = [str(py if py.exists() else _sys.executable), str(script), "--send", "--trigger-user", user_id,
+                "--trigger-channel", ch, "--trigger-ts", ts]
         if "resend" in text or "re-send" in text:
             args.append("--force")
         env = os.environ.copy()

@@ -161,7 +161,8 @@ def check_workbook(path):
     ebitda_avg = sum(_f(eb.cell(34, c).value) for c in (3, 4, 5)) / 3.0
 
     # ---- step-up + borrowing base
-    step_up = (dq_avg is not None and dq_avg < 0.015
+    # Step-up DQ prong = each of the 3 month-ends < 1.50% (three consecutive months), NOT the average
+    step_up = (len(usable) == 3 and all(v < 0.015 for v in usable)
                and liquidity >= 17500000.0 and liquidity >= 27500000.0)
     rate = 0.925 if step_up else 0.90
     bb = counted * rate + bb_cash * 0.95

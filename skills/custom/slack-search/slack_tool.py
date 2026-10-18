@@ -135,7 +135,7 @@ def cmd_lookup(email):
     print(f'  Email:        {email}')
 
 
-def cmd_send(recipient, message):
+def cmd_send(recipient, message, thread_ts=None):
     """Send a DM via the bot identity. Recipient can be a Slack user_id (UXXX/WXXX) or an email.
 
     Logs `[Slack outbound]` to bot_dm_history.log so the message shows up in
@@ -160,12 +160,12 @@ def cmd_send(recipient, message):
             print(f"ERROR: couldn't look up {recipient}: {e}", file=sys.stderr)
             sys.exit(1)
     elif not (user_id.startswith('U') or user_id.startswith('W')
-              or user_id.startswith('C') or user_id.startswith('G')):
+              or user_id.startswith('C') or user_id.startswith('G') or user_id.startswith('D')):
         print(f"ERROR: recipient must be a Slack user_id (UXXX/WXXX), a channel id (CXXX/GXXX) or an email; got: {recipient}", file=sys.stderr)
         sys.exit(1)
 
     # A channel id posts in-channel as the bot; anything else is a DM.
-    is_channel = user_id.startswith('C') or user_id.startswith('G')
+    is_channel = user_id.startswith('C') or user_id.startswith('G') or user_id.startswith('D')
 
     # Resolve display name for the audit log (best-effort).
     recipient_name = user_id
@@ -194,6 +194,7 @@ def cmd_send(recipient, message):
             text=message,
             unfurl_links=False,
             unfurl_media=False,
+            **({'thread_ts': thread_ts} if thread_ts else {}),
         )
         ts = resp.get('ts', '')
     except Exception as e:
@@ -502,7 +503,8 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python slack_tool.py send <user-id-or-email> "message text"', file=sys.stderr)
             sys.exit(1)
-        cmd_send(sys.argv[2], sys.argv[3])
+        _thr = sys.argv[sys.argv.index('--thread') + 1] if '--thread' in sys.argv[4:-1] else None
+        cmd_send(sys.argv[2], sys.argv[3], thread_ts=_thr)
 
     elif command == 'allowlist':
         if len(sys.argv) < 3 or sys.argv[2] not in ('add', 'remove', 'list'):

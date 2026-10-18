@@ -17,6 +17,7 @@ Usage
                      [--out-date 20260817] [--skip-cico]
 """
 import argparse
+import json
 import collections
 import csv
 import datetime as dt
@@ -639,6 +640,28 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
         lbl, unenc_dq30, unenc_total, unenc_dq30 / unenc_total if unenc_total else 0))
 
     refresh_dq30_backup(wb, as_of)
+
+    # Receivables Advance Step-Up Event: DQ30 < 1.50% for THREE CONSECUTIVE month-ends (dq30!E20)
+    # AND the Liquidity prong (liquidity!E29). Forced on every build so a template can never carry
+    # the old 3-mo-AVERAGE / cushion>=2.5M formula, which flipped rates to 92.5% on the
+    # 2026-10-16 $20.5M draw workbook once pro forma proceeds lifted the cushion (Brian, 2026-10-16).
+    # Month-end 7.01(a) balances of record = what was reported to NB (Brian, 2026-10-16:
+    # 'the liquidity stays the exact same as we already showed them'). Never re-derive a
+    # reported month from CICO.
+    try:
+        _rp = json.load(open(os.path.join(r'C:\Jeeves\redshift-bot\deer-flow\backend\.deer-flow', 'nb_liquidity_reported.json')))
+        _rec = _rp.get(liquidity_test_date(as_of).isoformat()) if me_liq else None
+        if _rec:
+            _ba = wb['bank_accts']
+            for _r in range(2, _ba.max_row + 1):
+                _k = str(_ba.cell(_r, 2).value)
+                if _k in _rec['accounts']:
+                    _ba.cell(_r, 19).value = _rec['accounts'][_k]['S']
+                    _ba.cell(_r, 20).value = _rec['accounts'][_k]['T']
+            print('7.01(a): month-end balances of record applied ({})'.format(_rec['source']))
+    except FileNotFoundError:
+        pass
+    wb['Summary']['L52'] = '=IF(AND(dq30!E20="Yes",liquidity!E29="Yes"),"Yes","No")'
 
     wb.save(out_path)
     print('saved:', out_path)

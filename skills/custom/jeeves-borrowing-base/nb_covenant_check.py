@@ -23,7 +23,34 @@ Tests evaluated:
 import re
 from datetime import datetime
 
+import os
 from openpyxl import load_workbook
+
+
+def _load(path):
+    """load_workbook, tolerant of broken style indexes.
+
+    2026-10-19 09:01: the gate crashed with an openpyxl IndexError while reading
+    cell styles of the NB workbook it had just built. This check reads VALUES only,
+    so on a style-table failure re-load a temp copy with every cell style ref
+    (s="N") stripped from the sheet XML. Values/formulas are untouched.
+    """
+    try:
+        return load_workbook(path)
+    except IndexError:
+        import re as _re, tempfile, zipfile
+        fd, tmp = tempfile.mkstemp(suffix='.xlsx'); os.close(fd)
+        with zipfile.ZipFile(path) as zin, zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename.startswith('xl/worksheets/') and item.filename.endswith('.xml'):
+                    data = _re.sub(rb'(<(?:c|row|col)\b[^>]*?)\s(?:s|style)="\d+"', rb'\1', data)
+                zout.writestr(item, data)
+        try:
+            return load_workbook(tmp)
+        finally:
+            try: os.remove(tmp)
+            except OSError: pass
 
 DQ30_CAP = 0.025
 EBITDA_FLOOR = -1000000.0
@@ -46,7 +73,7 @@ def _n(v):
 
 
 def check_workbook(path):
-    wb = load_workbook(path)
+    wb = _load(path)
 
     # ---- eligible receivables (tape: F country, K dpd, M charge-off, O modified,
     #      P transfer_flag, Q sofom_balance_usd, R balance_usd)

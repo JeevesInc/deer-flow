@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 290,
+      "applications": 291,
       "created": "2026-04-07",
-      "last_applied": "2026-10-19T09:11:10.568142+00:00",
+      "last_applied": "2026-10-20T09:14:40.054811+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5102,6 +5102,22 @@
       "solution": "",
       "target_skills": [
         "self-improving-agent"
+      ]
+    },
+    "pat-2026-10-19-320": {
+      "id": "pat-2026-10-19-320",
+      "name": "non-allowlisted DMs are queued for triage, never dropped; al",
+      "source": "ep-2026-10-19-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-19",
+      "last_applied": "2026-10-19T17:34:59.723221+00:00",
+      "category": "general",
+      "pattern": "non-allowlisted DMs are queued for triage, never dropped; allowlisting is not the fix",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
       ]
     }
   }

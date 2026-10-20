@@ -78,7 +78,10 @@ sending that, don't ever draft an email like that."*
   every word a lender sees about a covenant.
 - **Never read the pass/fail off the workbook.** openpyxl writes formulas with no cached value, so
   every covenant cell is `None` on read. Re-compute in Python: `nb_covenant_check.check_workbook()`
-  (gate wired into `report_scheduler_cron.py` §3.4, 2026-09-16).
+  (gate wired into `report_scheduler_cron.py` §3.4, 2026-09-16). A gate CRASH is a defect to fix
+  and re-run the same day, not a diagnosis to report: 2026-10-19 09:01 openpyxl `IndexError` on cell
+  styles was only diagnosed in-thread; fixed by Dream #153 via `_load()` (strips sheet style refs on a
+  copy and retries — values only).
 - **When Brian adds bank accounts, sweep the WHOLE account set in one pass.** On 2026-09-16 accounts
   were added one at a time across four corrections (Brazil account -> "add all the major accounts"
   -> the four DACA'd accounts), costing 76 turns on one thread. Pull every account off the current

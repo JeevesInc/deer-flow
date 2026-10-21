@@ -145,6 +145,9 @@ Before drafting any BoD slide content:
   prepayment penalties + expanded MX facility to $150M, which let CIM grow in MX
   instead of tying up the corp refinance -- this is the level of insight a board slide
   needs.)
+- **Wins in green, losses in red (Brian, 2026-10-20).** BoD body text highlights the win phrase in pure green (rgb 0,1,0) and losses/adverse moves in pure red (rgb 1,0,0) -- the Aug 2026 capital + finance decks do this on every slide. Apply it at build time via FIXED_RANGE updateTextStyle on the phrase, not just plain body text.
+- **Rebuilding one slide touches ONLY that slide (Brian, 2026-10-20: "just deleted B, C, E, F along the way, great job").** A rebuild script for Option D deleted chart + side panels on every option slide. Scope deletes/replaces by the target slide's objectId, never by element type/name pattern across the deck. Before batchUpdate, snapshot every other slide's pageElement IDs; after, re-fetch and assert they are unchanged — if not, restore from the snapshot before reporting.
+- **Equity raise figures come from Brian, not inference.** 2026-10-20 the deck said ~$50M equity; Brian: $35M from Vista + $65M Series C-1 = $100M (see STRATEGIC_CONTEXT Vista line). Any equity-adjusted (apples-to-apples) metric must use the confirmed amounts.
 - If unsure whether a fact is "board-level" vs "operational," default to cutting it --
   ask Brian rather than including tactical detail and waiting for a correction.
 

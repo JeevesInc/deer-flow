@@ -146,7 +146,9 @@ def check_workbook(path):
     drawn = sum(_f(hd.cell(r, 3).value) for r in range(2, hd.max_row + 1))
     adv_req = _f(wb['Summary']['L76'].value)
     borrowings = drawn + adv_req
-    floor = 25000000.0 if borrowings >= 100000000 else 15000000.0
+    # 7.01(a) step-up keys off ACTUAL Borrowings outstanding (funded), not a pending
+    # advance request (Brian, 2026-10-20: "We haven't received the money so it's not 25 yet").
+    floor = 25000000.0 if drawn >= 100000000 else 15000000.0
     cushion = liquidity - floor
 
     # ---- DQ30 (dq30_detail: A month_end, G dpd, H balance_usd,

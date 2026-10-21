@@ -90,6 +90,7 @@ Shows all calendars the user has access to, with their IDs.
 
 ## Rules
 
+- **HARD RULE (2026-10-20, `AttributeError: module 'calendar_tool' has no attribute 'build'`): use the CLI subcommands (`get`, `update`, `delete`, `create`) — do not import calendar_tool. If you must import, the service factory is `calendar_tool._get_service()`; there is no `build`.**
 - **HARD RULE (Brian, 2026-10-09, 6:15am slot rejected): never propose or book Brian before 8:00 PT** — always pass `--start-hour 8` or later. FreeBusy treats all busy time equally, so do not trust raw `find-time` output for colleagues: pull their events and treat **long blocks (>=90 min, focus/OOO-ish holds) as SOFT/overlappable** and **30-60 min events as REAL meetings** to avoid. Pick a slot that overlaps only a soft block over an early/odd hour. Cross-timezone (CDMX/BR) is not a reason to go early PT.
 - Default timezone is **America/Los_Angeles** (California time)
 - Always **confirm with the user before creating or deleting** events

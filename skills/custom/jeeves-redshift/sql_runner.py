@@ -243,8 +243,12 @@ def validate_sql(sql: str, allow_today: bool = False, extra_tables=None) -> list
         allowed = {t.lower() for t in ALLOWED_TABLES}
         if extra_tables:
             allowed |= {t.strip().lower() for t in extra_tables if t.strip()}
+        # Blank out function-call FROMs (EXTRACT(year FROM t.posted_at), TRIM(x FROM y),
+        # SUBSTRING(s FROM n)) so alias.column is not read as a table.
+        # Dream #155: 2026-10-21 false positive "not in the allowed list: t.posted_at".
+        scan = re.sub(r'(?i)\b(?:EXTRACT|TRIM|SUBSTRING|POSITION)\s*\([^()]*\)', ' ', cleaned)
         refs = {r.lower() for r in re.findall(
-            r'(?i)\b(?:FROM|JOIN)\s+([a-zA-Z_][\w$]*\.[a-zA-Z_][\w$]*)', cleaned)}
+            r'(?i)\b(?:FROM|JOIN)\s+([a-zA-Z_][\w$]*\.[a-zA-Z_][\w$]*)', scan)}
         unknown = sorted(r for r in refs
                          if r not in allowed and r.split('.')[0] not in _SYSTEM_SCHEMAS)
         if unknown:

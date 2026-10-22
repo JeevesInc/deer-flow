@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 295,
+      "applications": 296,
       "created": "2026-04-07",
-      "last_applied": "2026-10-21T09:04:44.587881+00:00",
+      "last_applied": "2026-10-22T09:07:39.305847+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5118,6 +5118,70 @@
       "solution": "",
       "target_skills": [
         "slack-search"
+      ]
+    },
+    "pat-2026-10-21-321": {
+      "id": "pat-2026-10-21-321",
+      "name": "Spec of record for NB tape refresh = Brian 2026-06-26 send t",
+      "source": "ep-2026-10-21-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-21",
+      "last_applied": "2026-10-21T18:42:17.776377+00:00",
+      "category": "general",
+      "pattern": "Spec of record for NB tape refresh = Brian 2026-06-26 send to Varun (msg 19f0580fde64d5b4): LOC Acct Rollforward (monthly, start=1st..EOM, loc_acct_rollforward.sql), Top Obligors (top_obligors.sql, >$2M), Data Tape - Portfolio (data_tape.sql, single tape sheet, with ein); 7/13 re-send added EIN. Varun asked for EIN on rollforward too. Rollforward ties to prior file Jan25-Apr26 to the dollar; tape balance_usd sum = rollforward EOP. Downloading two attachments with the same filename into one dir overwrites - use separate dirs.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-10-21-322": {
+      "id": "pat-2026-10-21-322",
+      "name": "Brian 2026-10-21: no approval needed for replies to people w",
+      "source": "ep-2026-10-21-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-21",
+      "last_applied": "2026-10-21T21:18:34.627565+00:00",
+      "category": "general",
+      "pattern": "Brian 2026-10-21: no approval needed for replies to people who ask the bot questions; answer them directly instead of drafting for Brian and waiting for send.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-10-22-323": {
+      "id": "pat-2026-10-22-323",
+      "name": "Before telling someone what their number includes or that it",
+      "source": "ep-2026-10-22-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-22",
+      "last_applied": "2026-10-22T09:07:56.762984+00:00",
+      "category": "general",
+      "pattern": "Before telling someone what their number includes or that it cannot tie, rebuild it with THEIR filters (status, date field, product) and show the query. 10/21 told Shalom $62.69M included failed/pending and $62.47M could not tie - both wrong, retracted.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-10-22-324": {
+      "id": "pat-2026-10-22-324",
+      "name": "A 500 with an app error body means the service reached its D",
+      "source": "ep-2026-10-22-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-22",
+      "last_applied": "2026-10-22T09:07:56.841172+00:00",
+      "category": "general",
+      "pattern": "A 500 with an app error body means the service reached its DB layer - read the service logs/stack and the credential config before blaming VPN/Zscaler. Brian had to say the VPN was fine and then ask to swap in local creds; propose the concrete fix yourself.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
       ]
     }
   }

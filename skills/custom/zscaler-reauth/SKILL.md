@@ -1,6 +1,6 @@
 ---
 name: zscaler-reauth
-description: Use this skill when you get a Redshift connection error, SSL error, network timeout, or any "could not connect" / "Connection refused" / "timeout expired" error that suggests VPN/Zscaler connectivity is down. Also use when the user explicitly asks you to fix Zscaler or reauthenticate.
+description: Use this skill when you get a Redshift connection error, SSL error, network timeout, or any "could not connect" / "Connection refused" / "timeout expired" error that suggests VPN/Zscaler connectivity is down. Also use when the user explicitly asks you to fix Zscaler or reauthenticate, and for ANY AWS SSO / Identity Center login (aws sso login, expired SSO token, CloudWatch/OpenSearch log access) - the bot can approve SSO device codes unattended via Okta FastPass.
 allowed-tools:
   - bash
   - read_file
@@ -133,3 +133,15 @@ Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (ser
   2026-08-09; query the active session properly (`session_launcher.find_active_session`) instead.
 - Do not patch `report_scheduler_cron.py` and assume the fix is live — see the borrowing-base skill:
   long-running cron modules are imported at gateway start and need a restart to pick up edits.
+
+
+## AWS SSO login (Identity Center) — you CAN do this unattended
+
+**HARD RULE (Brian corrected this three times on 2026-10-22: "So do that" → "You have a browser, you do it" → "Not true, it runs on my windows profile and you use fastpass all the time"):** never tell Brian an AWS SSO / Okta login needs him. The bot runs in his Windows session and already drives Okta FastPass for Zscaler. Same mechanism:
+
+1. Start `aws sso login --sso-session <s> --use-device-code --no-browser` as a background subprocess with `USERPROFILE=HOME=C:\Users\BrianMauck` (CLI at `C:\Program Files\Amazon\AWSCLIV2\aws.EXE`); read the user code from its output.
+2. Approve it with `aws_sso_approve.py <CODE> <log>` run through `session_launcher.run_in_user_session` (see that file's docstring). It reuses the Okta cookie file plus `zscaler_reauth._handle_okta_flow`, then clicks *Confirm and continue* and *Allow access*.
+3. The CLI finishes on its own. Then run `sts get-caller-identity`.
+
+`InvalidRequestException` on StartDeviceAuthorization or a 90s Okta timeout: kill the stale aws/msedge PIDs and request a NEW code. Codes are single-use. Start URL `https://d-9a672d6eac.awsapps.com/start`, region us-east-2.
+**Access map (verified 2026-10-22):** prod 642613937634 `CapitalMarketBoundary` authenticates but FGAC denies `indices:data/read/search` on incubator-logs. Prod `CapitalMarket` is not assigned (ForbiddenException). Dev 558433362422 `CapitalMarket` sees the `development-logs` and `ai-service` domains. Incubator OpenSearch is in **us-east-1** at `opensearch-incubator.prod.jeeves.vpn` and needs `truststore` for the cert. Reading prod incubator logs needs a role/FGAC grant, which is the outstanding ask.

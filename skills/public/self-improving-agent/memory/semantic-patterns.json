@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 297,
+      "applications": 298,
       "created": "2026-04-07",
-      "last_applied": "2026-10-23T09:11:24.388907+00:00",
+      "last_applied": "2026-10-24T09:12:49.155982+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5246,6 +5246,102 @@
       "solution": "",
       "target_skills": [
         "zscaler-reauth"
+      ]
+    },
+    "pat-2026-10-23-329": {
+      "id": "pat-2026-10-23-329",
+      "name": "On a monthly package status ask, list every deliverable with",
+      "source": "ep-2026-10-23-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-23",
+      "last_applied": "2026-10-23T15:52:05.216991+00:00",
+      "category": "general",
+      "pattern": "On a monthly package status ask, list every deliverable with in:sent evidence (incl. what WAS sent, e.g. 10/13 Aug financials) and have the outbound draft built and ready before the due date; never report 'no draft' as a status \u2014 build it.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-10-23-330": {
+      "id": "pat-2026-10-23-330",
+      "name": "tape product col is LOC for all rows; card vs JP split comes",
+      "source": "ep-2026-10-23-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-23",
+      "last_applied": "2026-10-23T16:06:18.325182+00:00",
+      "category": "general",
+      "pattern": "tape product col is LOC for all rows; card vs JP split comes from loc_tape card_balance_usd/jp_balance_usd (cfo-org-kb card_vs_jp_balance_split.sql). Reduce BR balance_usd by card_balance_usd, re-run build_nb.build(tape, latest form, cico=None, me_liq=None) to keep cash/liquidity, then nb_covenant_check on both.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-23-331": {
+      "id": "pat-2026-10-23-331",
+      "name": "Source of truth is backend scripts cm_credit_health_app.py (",
+      "source": "ep-2026-10-23-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-23",
+      "last_applied": "2026-10-23T20:36:07.431366+00:00",
+      "category": "general",
+      "pattern": "Source of truth is backend scripts cm_credit_health_app.py (mirrored to cfo-org-kb mission_control and hosted clone by mc_export.py). Layout edits go through mc_assistant.Layout JSON in .deer-flow mission_control_layout.json (audited, undo); sections gated with on(id) and T(id). Service runs with fileWatcherType none so Restart-Service deerflow-dashboard after code edits. Test with streamlit AppTest including chat_input.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-23-332": {
+      "id": "pat-2026-10-23-332",
+      "name": "2026-10-23 Brian: Jev email gate doing terrible in productio",
+      "source": "ep-2026-10-23-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-23",
+      "last_applied": "2026-10-23T22:49:55.025873+00:00",
+      "category": "general",
+      "pattern": "2026-10-23 Brian: Jev email gate doing terrible in production despite F1 0.85 on 60-case golden set. JEV_EMAIL_GATE now defaults OFF in webhook_receiver.py (Opus-only, no gate, no override); deerflow-webhook service restarted. Do not re-enable on eval numbers alone.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-eval"
+      ]
+    },
+    "pat-2026-10-24-333": {
+      "id": "pat-2026-10-24-333",
+      "name": "For product-vision decks, build a single-file HTML shell (va",
+      "source": "ep-2026-10-24-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-24",
+      "last_applied": "2026-10-24T01:14:50.187570+00:00",
+      "category": "general",
+      "pattern": "For product-vision decks, build a single-file HTML shell (vanilla JS, sample-data engine, deep-link hash params) and screenshot it with Playwright channel=chrome (msedge channel fails to launch on this host). Use SVG viewBox without preserveAspectRatio=none and pass explicit w for full-width charts, or text distorts.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-slides"
+      ]
+    },
+    "pat-2026-10-24-334": {
+      "id": "pat-2026-10-24-334",
+      "name": "When a mockup absorbs an existing app (Mission Control), enu",
+      "source": "ep-2026-10-24-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-24",
+      "last_applied": "2026-10-24T02:44:21.357064+00:00",
+      "category": "general",
+      "pattern": "When a mockup absorbs an existing app (Mission Control), enumerate every card in the source (mc_cards.py names + cm_credit_health_app.py TAB_IDS) and diff before showing. Spec = the real app.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-slides"
       ]
     }
   }

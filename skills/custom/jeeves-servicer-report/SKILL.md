@@ -296,6 +296,9 @@ the month-end one different is the extra certifications it must carry:
 This cron exists so the month-end variant is never silently skipped behind the weekly one. When the
 14th falls in the same week as a Monday NB run, they are still two separate obligations.
 
+### HARD RULE — never ask Brian to explain your own artifact; track every package signature (added 2026-10-23)
+Brian 2026-10-23: *"Why are you asking me why an exhibit that you created has an account change?"* and *"There's other signatures that are needed for the monthly NB package. You're dropping the ball here."* (1) Any change in a certificate/exhibit you built (account, balance, date) — diff it yourself against the prior period's executed version and the build inputs, then STATE the cause; never ask Brian. (2) A monthly NB package status = every document that needs a signature (BBC, 6.01(c) compliance cert, financials cert, any exhibits), each with its Box Sign status from `_nb_cert_watch.json` + Box, and what is sent per `in:sent`. "Financials sent" is not "package done".
+
 ### HARD RULE — CIM Exhibit E and agreement-deadline claims (added 2026-10-15 after a 9-turn correction cycle)
 
 - **Source:** CIM agreement §6.1(a)(iii) — Exhibit E compliance certificate, executed by a Responsible Officer, due **within 40 calendar days after each calendar month-end**. Each month is a separate obligation; a missed month stays owed.

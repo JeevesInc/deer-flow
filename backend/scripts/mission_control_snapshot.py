@@ -35,6 +35,7 @@ SK = os.environ.get('SKILLS_PATH') or os.path.join(r'C:\Jeeves', 'redshift-bot',
 BB_DIR = os.path.join(SK, 'custom', 'jeeves-borrowing-base')
 sys.path.insert(0, os.path.join(SK, 'custom', '_shared'))
 sys.path.insert(0, BB_DIR)
+sys.path.insert(0, os.path.join(SK, 'custom', 'cfo-org-kb', 'scripts', 'mission_control'))  # nb_scenario
 
 DEER = r'C:\Jeeves\redshift-bot\deer-flow'
 STATE_DIR = os.path.join(DEER, 'backend', '.deer-flow')
@@ -147,6 +148,7 @@ def nb_concentration(groups, eligible, as_of):
 def build_nb(as_of, wb_metrics):
     import build_nb as bn
     tape = bn.pull_tape(as_of.isoformat())
+    build_nb.last_tape = tape  # reused by write_scenario_base (no second tape pull)
     log('NB tape rows', len(tape))
     loans, gross = [], 0.0
     reason_amt = collections.OrderedDict((k, 0.0) for k, _ in NB_REASONS)
@@ -571,6 +573,22 @@ def write(conn, as_of, facilities, waterfalls, tests, loans, obligors, recycling
     conn.commit()
 
 
+def write_scenario_base(as_of, tape, wbm):
+    """Loan-level NB base + scalars for the dashboard's Scenarios tab / assistant (nb_scenario.py)."""
+    import pandas as pd
+    import nb_scenario
+    if not tape:
+        raise RuntimeError('no NB tape in memory')
+    split = nb_scenario.pull_split(as_of)
+    rows, scal = nb_scenario.build_base(tape, split, wbm, as_of, FACILITY_TERMS['NB']['commitment'])
+    d = os.path.join(STATE_DIR, 'mission_control')
+    os.makedirs(d, exist_ok=True)
+    pd.DataFrame(rows).to_parquet(os.path.join(d, 'nb_scenario_base.parquet'), index=False)
+    json.dump(scal, open(os.path.join(d, 'nb_scenario_scalars.json'), 'w', encoding='utf-8'), indent=1)
+    chk = nb_scenario.compute(rows, scal)['metrics']['borrowing_base']
+    log('scenario base', as_of, len(rows), 'rows; split rows', len(split), '; engine BB {:,.0f}'.format(chk))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--as-of', default=None)
@@ -633,6 +651,10 @@ def main():
     import redshift_util as ru
     conn = ru.connect()
     write(conn, as_of, facilities, waterfalls, tests, loans, obligors, recycling)
+    try:
+        write_scenario_base(as_of, getattr(build_nb, 'last_tape', None), wbm)
+    except Exception:
+        log('scenario base failed (dashboard Scenarios tab keeps the previous day): ' + traceback.format_exc())
     if not a.dry_run and not a.nb_only:
         try:
             refresh_forecast(conn, run_model=(dt.date.today().weekday() == 0 or '--forecast' in sys.argv))

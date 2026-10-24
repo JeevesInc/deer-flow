@@ -33,7 +33,7 @@ app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)  # import-safe: body runs only under __main__
 
 KEYS = {'facility_req': ['NB', 'CIM MX SOFOM'], 'pool': ['NB', 'MX', 'All']}
-REQS = 'streamlit>=1.50\npandas>=2.0\nplotly>=5.20\npyarrow>=15,<26\n'
+REQS = 'streamlit>=1.50\npandas>=2.0\nplotly>=5.20\npyarrow>=15,<26\nanthropic>=0.40\n'
 CONFIG = '[theme]\nbase = "dark"\nprimaryColor = "#4c9bff"\n[browser]\ngatherUsageStats = false\n'
 
 
@@ -81,19 +81,30 @@ def main():
         snap = pd.read_sql("select max(as_of) from analytics_sandbox.cm_mc_facility_daily where facility = 'NB'", conn).iloc[0, 0]
     finally:
         conn.close()
+    scn = os.path.join(BACKEND, '.deer-flow', 'mission_control')  # Scenarios tab base (mission_control_snapshot.py)
+    for f in ('nb_scenario_base.parquet', 'nb_scenario_scalars.json'):
+        if os.path.exists(os.path.join(scn, f)):
+            shutil.copy2(os.path.join(scn, f), os.path.join(data, f))
     json.dump({'published_at': dt.datetime.now().isoformat(timespec='seconds'), 'snapshot_as_of': str(snap),
                'files': counts}, open(os.path.join(data, 'meta.json'), 'w'), indent=1)
     shutil.copy2(APP_SRC, os.path.join(CLONE, 'streamlit_app.py'))
-    for f in ('mc_cards.py', 'mc_sql.py'):
+    for f in ('mc_cards.py', 'mc_sql.py', 'mc_assistant.py', 'nb_scenario.py', 'mc_sandbox.py'):
         shutil.copy2(os.path.join(SK, 'custom', 'cfo-org-kb', 'scripts', 'mission_control', f), os.path.join(CLONE, f))
+    # mc_layout.json is owned by the in-app assistant (GitHub contents API) - never overwrite it here
     open(os.path.join(CLONE, 'requirements.txt'), 'w').write(REQS)
     os.makedirs(os.path.join(CLONE, '.streamlit'), exist_ok=True)
     open(os.path.join(CLONE, '.streamlit', 'config.toml'), 'w').write(CONFIG)
     open(os.path.join(CLONE, '.gitignore'), 'w').write('__pycache__/\n*.pyc\n.streamlit/secrets.toml\n')
+    if os.path.exists(os.path.join(CLONE, 'mc_layout.json')):  # owned by the assistant via the GitHub API:
+        subprocess.run(['git', 'checkout', 'HEAD', '--', 'mc_layout.json'], cwd=CLONE, capture_output=True)  # never commit a stale copy
     git('add', '-A')
     git('-c', 'user.name=deerflow-analyst', '-c', 'user.email=brian.mauck@tryjeeves.com', 'commit', '-m',
         'Publish Mission Control data - snapshot {}'.format(snap))
-    git('push', '-u', 'origin', 'HEAD:main')
+    try:
+        git('push', '-u', 'origin', 'HEAD:main')
+    except RuntimeError:  # the assistant may have committed mc_layout.json meanwhile
+        git('pull', '--rebase')
+        git('push', '-u', 'origin', 'HEAD:main')
     print('published snapshot', snap, len(counts), 'files')
 
 

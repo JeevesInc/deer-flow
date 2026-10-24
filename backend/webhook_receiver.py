@@ -284,9 +284,11 @@ def classify_with_llm(source: str, sender: str, subject: str, body_preview: str,
     # Below the threshold Opus is skipped entirely. At/above it Opus still runs to
     # write summary / proposed_action. Gmail only: an actionable Slack message
     # AUTO-DISPATCHES an agent run, so Slack keeps the Opus-only decision.
-    # Any Jev failure -> Opus-only path, exactly as before. JEV_EMAIL_GATE=0 disables.
+    # Any Jev failure -> Opus-only path, exactly as before.
+    # 2026-10-23 Brian: "get rid of Jev on the email classifier, it's doing terrible".
+    # OFF by default -> Opus-only (no gate, no override). JEV_EMAIL_GATE=1 re-enables.
     jev_p = None
-    if source == 'gmail' and os.environ.get('JEV_EMAIL_GATE', '1') != '0':
+    if source == 'gmail' and os.environ.get('JEV_EMAIL_GATE', '0') == '1':
         try:
             from jev_classifier import p_actionable, GATE_THRESHOLD  # _shared
             jev_p = p_actionable(sender, subject, body_preview, to, cc)

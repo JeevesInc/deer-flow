@@ -127,6 +127,8 @@ python action_learner.py --consolidate --force
 
 - **HARD RULE — replying about a document means opening that document first.** When asked to respond to counsel/a lender about a joinder, schedule, certificate or agreement, `download` the attachment(s) on that thread (and the executed version in Drive) and read them before drafting. 2026-10-06, Nathalie/Goodwin post-closing: *"So why don't you look at the joinder?"* — the draft was written from memory and missed that the UK joinder schedules were blank `[●]` placeholders.
 
+- **HARD RULE — "screenshot of the file" means a capture of the ACTUAL file open in its native app (Excel/PDF viewer), never a re-render.** An HTML table, matplotlib image or openpyxl-to-PNG rebuild of the cells is a *representation* and will be rejected. Open the real workbook (Excel COM: open the file, select the range, `Range.CopyPicture` -> paste into a chart -> `Chart.Export` PNG; this does not need SetForegroundWindow), crop to the relevant rows/date column, `view_image` it to confirm it shows the source file's own grid/headers, then attach. If capture fails twice, say exactly that and attach the source file itself — do not substitute a render or defend it. 2026-10-24 CICO 23-Oct 'balances missing' reply: two HTML renders were sent as 'screenshots'; Brian: *"That's not the CICO file, that's your own HTML table. Why are you arguing with me"* / *"still not the actual file, it's a representation"*.
+
 - **HARD RULE — there is NO `gmail_tool.get_service()`.** The accessor is private: `_get_service()`
   (and `_get_drive_service()`). Calling the public-looking name raised
   `AttributeError: module 'gmail_tool' has no attribute 'get_service'` in two separate threads on

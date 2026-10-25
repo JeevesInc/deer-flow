@@ -65,6 +65,7 @@ def _payload_has_image(payload) -> bool:
 # spacing/dash/case drift and a "Re:"/"Fwd:" prefix. Anything else on a CICO
 # thread (model updates, diligence schedules) is discussion, not data.
 _DAILY_BALANCES_RE = re.compile(r"cico\s*-?\s*daily\s*balance", re.IGNORECASE)
+_REPLY_PREFIX_RE = re.compile(r"^\s*(re|fw|fwd|rv)\s*:", re.IGNORECASE)
 
 
 def _fetch_latest_cico(svc):
@@ -107,6 +108,12 @@ def _fetch_latest_cico(svc):
             continue
         if not _DAILY_BALANCES_RE.search(subject):
             skipped.append(subject[:55] + " [not the daily balances report]")
+            continue
+        # 2026-10-24: "Re: 261022 CICO - Daily balances" replies (Alex/Brian
+        # thread with a rebuilt screenshot + signature images) were OCR'd 3x,
+        # read {} and fired false "extract blocked" alerts. Replies are never data.
+        if _REPLY_PREFIX_RE.match(subject):
+            skipped.append(subject[:55] + " [reply/forward]")
             continue
         if skipped:
             log.info("Skipped %d non-report CICO hit(s): %s",
@@ -507,7 +514,57 @@ def _alert_extract_failure(subject: str, date: str, summary: dict,
         log.warning("Could not send CICO failure alert: %s", e)
 
 
+WORKBOOK_STATE_FILE = BACKEND_DIR / ".deer-flow" / "_cico_workbook_state.json"
+
+
+def _write_from_workbook_state() -> bool:
+    """Mirror _cico_workbook_state.json (written by the CICO email script from
+    the Treasury workbook) into _cico_state.json for metrics.py / the credit
+    health app. Since 2026-10-08 the daily email is bot-built HTML with no
+    screenshots, so the OCR path could only re-read the 10/07 email or, worse,
+    OCR reply threads. by_category/rows are left empty: the OCR versions were
+    wrong by orders of magnitude and nothing should cite them.
+    Returns False (-> OCR fallback) if the workbook state is missing/invalid."""
+    try:
+        wb = json.loads(WORKBOOK_STATE_FILE.read_text(encoding="utf-8"))
+        cash = float(wb["total_cash_usd"])
+        restricted = float(wb["restricted_deposits_usd"])
+    except Exception as e:
+        log.warning("Workbook state unusable (%s); falling back to OCR", e)
+        return False
+    try:
+        prev = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        prev = {}
+    if prev.get("source") == "cico_workbook" and prev.get("as_of") == wb.get("as_of") \
+            and prev.get("total_cash_usd") == round(cash, 2):
+        prev["extracted_at"] = datetime.now().isoformat()
+        STATE_FILE.write_text(json.dumps(prev, indent=2, ensure_ascii=False), encoding="utf-8")
+        log.info("CICO state already matches workbook as_of %s; touched", wb.get("as_of"))
+        return True
+    state = {
+        "source": "cico_workbook",
+        "source_subject": wb.get("source_file", ""),
+        "source_date": wb.get("source_date", ""),
+        "as_of": wb.get("as_of"),
+        "extracted_at": datetime.now().isoformat(),
+        "by_category": {},
+        "rows": [],
+        "total_cash_usd": round(cash, 2),
+        "restricted_deposits_usd": round(restricted, 2),
+        "daca_pledged_usd": round(float(wb.get("daca_pledged_usd") or 0), 2),
+        "total_cash_plus_restricted_usd": round(cash + restricted, 2),
+    }
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    log.info("Wrote %s from workbook state (as_of %s, cash $%.2f, restricted $%.2f)",
+             STATE_FILE, state["as_of"], cash, restricted)
+    return True
+
+
 def main() -> int:
+    if os.environ.get("CICO_FORCE_OCR") != "1" and _write_from_workbook_state():
+        return 0
     svc = _gmail_service()
     try:
         msg = _fetch_latest_cico(svc)

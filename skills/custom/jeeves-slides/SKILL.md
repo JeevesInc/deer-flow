@@ -167,6 +167,13 @@ Before drafting any BoD slide content:
 
 ---
 
+## Editing a LIVE shared Google Slides deck (comment-driven requests) — MANDATORY
+
+When asked to change an existing Google Slides deck (e.g. "Alex wants to combine some slides"):
+1. Edit the live deck in place via the Slides API — never a copy — and say so in the first line of the reply with the deck link and the final slide numbers/count ("Edited in place in the live deck: slides 16-17 merged, 26 -> 24 slides"). Renders shown to Brian must be exported from the live deck after the edit, and say so (2026-10-25: Brian still had to ask "Did you do it in place on the Google deck?").
+2. Pull the deck's open comments (`drive.comments().list`, `resolved=False`) and find the ones that drove the request and any anchored to the slides you merged or deleted. List them in the reply as addressed / still open.
+3. Do NOT reply to or resolve a reviewer's comment on your own. Those comments are visible to the reviewer (e.g. Alex), so it's an outward-facing step. Offer it in one line ("Want me to reply 'Done' and resolve Alex's 2 comments?"). If you don't, the reviewer still sees the asks as open (2026-10-25: both combine comments were left unresolved with no reply).
+
 ## Source Discipline — MANDATORY
 
 **Every factual claim in any Jeeves deck must be traceable to a source document or verified data pull. No exceptions.**

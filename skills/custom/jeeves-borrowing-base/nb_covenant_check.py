@@ -54,6 +54,21 @@ def _load(path):
 
 DQ30_CAP = 0.025
 EBITDA_FLOOR = -1000000.0
+# Top Five / Top Ten Obligor Concentration Limits (Credit Agreement 1.01): 25% / 35% from the Closing Date through
+# the date six months after it (2027-02-10), then 20% / 30% through the Maturity Date. Added 2026-10-27 (Brian).
+CONC_STEPDOWN = datetime(2027, 2, 10)
+
+
+def _concentration_limits(as_of):
+    """(top five, top ten) limits in force on the tape date; an unreadable date fails closed to the stepped-down pair."""
+    if isinstance(as_of, str):
+        try:
+            as_of = datetime.strptime(as_of.strip()[:10], '%Y-%m-%d')
+        except ValueError:
+            as_of = None
+    if isinstance(as_of, datetime) and as_of <= CONC_STEPDOWN:
+        return 0.25, 0.35
+    return 0.20, 0.30
 
 
 def _f(v):
@@ -99,9 +114,10 @@ def check_workbook(path):
             break
         cum += _f(ob.cell(r, 5).value) - _f(ob.cell(r, 6).value)
         cums[r] = cum
+    top5_lim, top10_lim = _concentration_limits(tp.cell(2, 1).value)
     e1 = max(0.0, cums.get(2, 0.0) - 0.05 * elig_bal)
-    e5 = max(0.0, cums.get(6, 0.0) - e1 - 0.25 * elig_bal)
-    e10 = max(0.0, cums.get(11, 0.0) - (e1 + e5) - 0.35 * elig_bal)
+    e5 = max(0.0, cums.get(6, 0.0) - e1 - top5_lim * elig_bal)
+    e10 = max(0.0, cums.get(11, 0.0) - (e1 + e5) - top10_lim * elig_bal)
     excess = e1 + e5 + e10
     counted = elig_bal - excess
 

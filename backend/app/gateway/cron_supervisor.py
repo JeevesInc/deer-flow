@@ -218,7 +218,7 @@ def start_crons() -> None:
     _load_and_start("bot-dm-history", backend_dir / "scripts" / "bot_dm_history_cron.py")
     _load_and_start("cap-markets-refresh", backend_dir / "scripts" / "cap_markets_metrics_refresh.py")
     _load_and_start("cico-cash", backend_dir / "scripts" / "cico_cash_extract.py")
-    _load_and_start("cash-planner-refresh", backend_dir / ".deer-flow" / "treasury" / "cash_planner" / "refresh.py")
+    # cash-planner-refresh retired 2026-10-27 (Brian): Cash Planner is retired; One Plan calls the CICO challenger itself.
     _load_and_start("diligence-registry", skills_dir / "jeeves-diligence" / "diligence_registry_cron.py")
     _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
     _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")

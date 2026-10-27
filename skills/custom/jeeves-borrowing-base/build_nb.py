@@ -169,14 +169,12 @@ def fetch_month_end_cico(test_date):
     import cico_fetch_balances as cico
     service = cico._get_gmail_service()
     stamp = test_date.strftime('%y%m%d')
-    msgs = service.users().messages().list(
-        userId='me', q='subject:"{} CICO" newer_than:400d'.format(stamp),
-        maxResults=5).execute().get('messages', [])
-    if not msgs:
+    mid = _latest_original_cico_id(service, 'newer_than:400d', stamp=stamp)
+    if not mid:
         raise RuntimeError("no '{} CICO- Daily balances' email -- cannot test Section 7.01(a) "
                            "as of {}".format(stamp, test_date))
-    bal, subj, _ = fetch_cico(msgs[0]['id'])
-    return bal, subj, msgs[0]['id']
+    bal, subj, _ = fetch_cico(mid)
+    return bal, subj, mid
 
 
 def write_month_end_liquidity(wb, me):
@@ -319,30 +317,47 @@ def _cico_html_balances(payload):
     return out
 
 
+_CICO_ORIG_RE = re.compile(r'^\s*\d{6}\s*CICO\s*-?\s*Daily balances\s*$', re.I)
+
+
+def _latest_original_cico_id(service, extra_q, stamp=None):
+    """Newest message whose subject is exactly '<YYMMDD> CICO - Daily balances'
+    (no Re:/Fwd: replies). stamp='YYMMDD' pins the balance date."""
+    q = 'subject:"{} CICO" {}'.format(stamp, extra_q) if stamp else \
+        'subject:"CICO- Daily balances" {}'.format(extra_q)
+    res = service.users().messages().list(userId='me', q=q, maxResults=30).execute()
+    for m in res.get('messages', []):
+        md = service.users().messages().get(userId='me', id=m['id'], format='metadata',
+                                            metadataHeaders=['Subject']).execute()
+        subj = {h['name'].title(): h['value'] for h in md['payload'].get('headers', [])}.get('Subject', '')
+        if _CICO_ORIG_RE.match(subj) and (not stamp or subj.strip().startswith(stamp)):
+            return m['id']
+    return None
+
+
 def fetch_cico(msg_id=None):
     """Return (balances_dict, subject, date_header) from the latest CICO email."""
     import tempfile
     import cico_fetch_balances as cico
     service = cico._get_gmail_service()
     if msg_id is None:
-        res = service.users().messages().list(
-            userId='me', q='subject:"CICO- Daily balances" newer_than:14d',
-            maxResults=5).execute()
-        msgs = res.get('messages', [])
-        if not msgs:
-            raise RuntimeError('No CICO daily balances email in the last 14 days')
-        msg_id = msgs[0]['id']
+        # 2026-10-26: the newest subject hit was a 'Re: 261022 CICO - Daily balances'
+        # reply carrying a screenshot of a BLANK CICO sheet; vision refused it and the
+        # NB run died. Only an original '<YYMMDD> CICO - Daily balances' send counts.
+        msg_id = _latest_original_cico_id(service, 'newer_than:14d')
+        if not msg_id:
+            raise RuntimeError('No original <YYMMDD> CICO daily balances email in the last 14 days')
     msg = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
     hdrs = {h['name'].title(): h['value'] for h in msg['payload'].get('headers', [])}
-    with tempfile.TemporaryDirectory() as tmp:
-        paths = cico._download_images(service, msg_id, msg['payload'], tmp)
-        if paths:
-            balances = cico._call_claude_vision(paths)
-        else:
-            # 2026-10-13: the CICO email is now an HTML table (cico_daily_email.py), no images.
-            balances = _cico_html_balances(msg['payload'])
-            if not balances:
+    # HTML table first (cico_daily_email.py format since 2026-10-13); vision only for
+    # legacy screenshot emails with no parseable table.
+    balances = _cico_html_balances(msg['payload'])
+    if not balances:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = cico._download_images(service, msg_id, msg['payload'], tmp)
+            if not paths:
                 raise RuntimeError('CICO email {} has no image attachments or balance table'.format(msg_id))
+            balances = cico._call_claude_vision(paths)
     balances = {k: v for k, v in balances.items() if not k.startswith('__')}
     if len(balances) < 12:
         raise RuntimeError('CICO extraction gate: only {} rows extracted'.format(len(balances)))

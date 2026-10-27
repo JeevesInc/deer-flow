@@ -6,7 +6,7 @@ Schedule:
   - Every weekday, 8am+:         US Borrowing Base (yesterday's date, for dashboard)
   - Every day, 8:30am+ PST:      MX Borrowing Base (yesterday's date)
   - Mondays, 8:30am+ PT:         NB Borrowing Base (as of the prior Sunday)
-  - Mondays, 9:30am+ PT:         Receivable balance forecast
+  - Daily, 9:30am+ PT:           Receivable balance + collections forecast (daily since 2026-10-26)
   - Mondays, 10:30am+ PT:        AIG/Aronova TEX invoice file -> Brian's DM (no email)
   - Weekdays only, hourly 8am+:  SOFOM distribution tape reply to Axel
 
@@ -1312,7 +1312,9 @@ def run_cico_dashboard():
 # ---------------------------------------------------------------------------
 
 def run_receivable_forecast():
-    """Daily receivable balance forecast — WEEKLY, MONDAYS, after the NB borrowing base.
+    """Daily receivable balance forecast — DAILY from 9:30 PT (Brian 2026-10-26: "the forecast for
+    receivables, collections, etc that are run every week should be run every day and drive all the
+    models"). Was weekly Mondays (Brian 2026-09-11).
 
     Cadence set by Brian 2026-09-11 ("systemize it so we can run it on a weekly basis,
     retrain using all available data"). Delegates to the model of record in cfo-org-kb:
@@ -1578,12 +1580,11 @@ def run_loop():
                         and not state.get('last_nb_bb', '').endswith('_running')):
                     _launch_background('nb_bb', run_nb_bb, 'last_nb_bb', today_str)
 
-                # ── Receivable balance forecast ───────────────────────────
-                # Weekly, MONDAYS from 9:30am PT — deliberately after the NB BB job so the
-                # two heavy Redshift pulls do not overlap. Retrains on all available
-                # history and forecasts to month end. Cadence set by Brian 2026-09-11.
-                if (weekday == 0
-                        and (now.hour > 9 or (now.hour == 9 and now.minute >= 30))
+                # ── Receivable balance + collections forecast ─────────────
+                # DAILY from 9:30am PT (Brian 2026-10-26; weekly Mondays before that) — after the
+                # MX BB (8:30) and, on Mondays, the NB BB so the heavy Redshift pulls do not overlap.
+                # Retrains on all available history; feeds Mission Control and One Plan.
+                if ((now.hour > 9 or (now.hour == 9 and now.minute >= 30))
                         and not _state_completed_today(state, 'last_receivable_forecast', today_str)
                         and not state.get('last_receivable_forecast', '').endswith('_running')):
                     _launch_background('receivable_forecast', run_receivable_forecast,
@@ -1606,7 +1607,11 @@ def run_loop():
                 # -- Mission Control snapshot (Streamlit :8100) --------------
                 # Daily from 11:00 PT, after the MX BB (8:30), NB BB (Mon 8:30), receivable
                 # forecast (Mon 9:30) and AIG file (Mon 10:30) so the Redshift pulls do not overlap.
+                # Waits for today's receivable forecast (daily since 2026-10-26) so the snapshot and
+                # One Plan pick up the fresh run; falls through at 13:00 if the forecast failed.
                 if ((now.hour >= 11)
+                        and (_state_completed_today(state, 'last_receivable_forecast', today_str)
+                             or now.hour >= 13)
                         and not _state_completed_today(state, 'last_mission_control', today_str)
                         and not state.get('last_mission_control', '').endswith('_running')):
                     _launch_background('mission_control', run_mission_control,

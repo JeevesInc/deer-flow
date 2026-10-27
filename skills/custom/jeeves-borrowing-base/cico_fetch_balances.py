@@ -54,8 +54,19 @@ def _search_latest_cico_email(service):
             break
     if not messages:
         return None
-    msg_id = messages[0]['id']
-    msg = service.users().messages().get(userId='me', id=msg_id, format='full').execute()
+    # 2026-10-27 (Dream #160): sweep of the 10/26 build_nb fix - reply threads
+    # ('Re: 261022 CICO - Daily balances') share the subject and can carry a
+    # screenshot of a BLANK sheet. Skip Re:/Fwd: and take the newest original.
+    msg = None
+    for m in messages:
+        cand = service.users().messages().get(userId='me', id=m['id'], format='full').execute()
+        subj = {h['name']: h['value'] for h in cand['payload'].get('headers', [])}.get('Subject', '')
+        if not subj.strip().lower().startswith(('re:', 'fwd:', 'fw:')):
+            msg = cand
+            break
+    if msg is None:
+        return None
+    msg_id = msg['id']
     headers = {h['name']: h['value'] for h in msg['payload'].get('headers', [])}
     return {
         'id': msg_id,

@@ -657,7 +657,7 @@ def main():
         log('scenario base failed (dashboard Scenarios tab keeps the previous day): ' + traceback.format_exc())
     if not a.dry_run and not a.nb_only:
         try:
-            refresh_forecast(conn, run_model=(dt.date.today().weekday() == 0 or '--forecast' in sys.argv))
+            refresh_forecast(conn, run_model=('--no-forecast' not in sys.argv))  # daily since 2026-10-26 (was Mondays)
         except Exception:
             log('forecast refresh failed: ' + traceback.format_exc())
     log('wrote snapshot', as_of, 'facilities', len(facilities), 'tests', len(tests), 'loans', len(loans))
@@ -750,7 +750,7 @@ def apply_mx_performance(tests, perf, receivable_bb_usd):
 def refresh_forecast(conn, run_model=False, weeks=26):
     """Receivable balance forecast by country x product (cfo-org-kb receivable_balance_weekly_run.py,
     pooled XGBoost) -> analytics_sandbox.cm_mc_receivable_forecast, which drives the forward view.
-    run_model=True re-runs the model to a 26-week horizon (about 16 min; Mondays only)."""
+    run_model=True re-runs the model to a 26-week horizon (about 16 min; daily since 2026-10-26)."""
     import glob, subprocess
     import pandas as pd
     outdir = os.environ.get('OUTPUTS_PATH') or os.path.join(DEER, 'backend', '.deer-flow', '_mission_control')

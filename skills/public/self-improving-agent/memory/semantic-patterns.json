@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 300,
+      "applications": 301,
       "created": "2026-04-07",
-      "last_applied": "2026-10-26T09:10:30.669406+00:00",
+      "last_applied": "2026-10-27T09:09:27.118361+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5342,6 +5342,54 @@
       "solution": "",
       "target_skills": [
         "jeeves-slides"
+      ]
+    },
+    "pat-2026-10-26-335": {
+      "id": "pat-2026-10-26-335",
+      "name": "Reply threads on the CICO email share its subject; never tak",
+      "source": "ep-2026-10-26-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-26",
+      "last_applied": "2026-10-26T16:15:29.391008+00:00",
+      "category": "general",
+      "pattern": "Reply threads on the CICO email share its subject; never take messages[0] from a subject search.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-27-336": {
+      "id": "pat-2026-10-27-336",
+      "name": "For any capital/credit screen in a new app, read the MC dail",
+      "source": "ep-2026-10-27-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-27",
+      "last_applied": "2026-10-27T02:02:09.109392+00:00",
+      "category": "general",
+      "pattern": "For any capital/credit screen in a new app, read the MC daily parquet snapshot (.deer-flow/_mission_control/cm-mission-control/data, refreshed by the MC publish) and call nb_scenario.compare for what-ifs before writing new SQL or synthetic data. Never put a shared ngrok domain (Gmail push) behind a second tunnel: it pools traffic.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-27-337": {
+      "id": "pat-2026-10-27-337",
+      "name": "A CICO email-selection fix must be applied to EVERY selector",
+      "source": "ep-2026-10-27-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-27",
+      "last_applied": "2026-10-27T09:11:23.535317+00:00",
+      "category": "general",
+      "pattern": "A CICO email-selection fix must be applied to EVERY selector: build_nb.fetch_cico was fixed 10/26 but cico_fetch_balances._search_latest_cico_email still took messages[0] until Dream #160 swept it. When fixing a selection bug, grep the skill dir for the same pattern before calling it done.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

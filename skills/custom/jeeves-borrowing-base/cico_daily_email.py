@@ -3,7 +3,9 @@
 or Mariana (hook in app/channels/slack.py -> _handle_cico_trigger).
 
 Flow: pull the newest 'YYMMDD Jeeves - CICO.xlsx' from Axel's OneDrive (FinOps V3/CICO,
-top-level only) -> render the Bank balances tab exactly as the approved test -> send from
+top-level only; fetch() tries plain HTTPS with the saved M365 cookies first, then headed Edge
+in Brian's desktop session; every download goes to a .part file, is validated as a real xlsx of
+the listed size, then renamed - a 0-byte/partial file never lands in the CICO folder) -> render the Bank balances tab exactly as the approved test -> send from
 Brian's Gmail to the CICO distribution list -> Slack the trigger user + Brian.
 
 Usage:
@@ -122,7 +124,101 @@ def slack(uid, text):
 
 
 # ---------------------------------------------------------------- fetch (SharePoint)
+class FetchError(RuntimeError):
+    pass
+
+
+MIN_XLSX_BYTES = 1_000_000  # real CICO workbooks are ~31 MB; anything under 1 MB is not one
+
+
+def _pick(files):
+    """Newest 'YYMMDD Jeeves - CICO[ vN].xlsx' from a SharePoint Files listing. Refuses (raises)
+    when the newest item is empty/tiny on SharePoint - 2026-10-27 the 261027 item existed as a
+    0-byte item from 12:18Z (TimeCreated) until its first content version at 14:30Z, and four
+    cron fetches wrote it to disk as a 0-byte xlsx."""
+    cands = []
+    for f in files:
+        m = FILE_RE.match(f["Name"])
+        if m: cands.append((m.group(1), int(m.group(2) or 0), f.get("TimeLastModified", ""), f))
+    if not cands: raise FetchError("no 'YYMMDD Jeeves - CICO.xlsx' in FinOps V3/CICO")
+    cands.sort(key=lambda c: (c[0], c[1], c[2]))
+    f = cands[-1][3]
+    n = int(f.get("Length") or 0)
+    if n < MIN_XLSX_BYTES:
+        raise FetchError(f"newest CICO file '{f['Name']}' is {n:,} bytes on SharePoint (modified "
+                         f"{f.get('TimeLastModified')}) - not a saved workbook yet; not downloaded")
+    return f
+
+
+def _valid_xlsx(path, expected=None):
+    """Return None if path is a real xlsx (zip with xl/workbook.xml, size matches listing), else why not."""
+    try:
+        n = path.stat().st_size
+    except OSError as e:
+        return f"unreadable ({e})"
+    if n < MIN_XLSX_BYTES: return f"{n:,} bytes"
+    if expected and n != int(expected): return f"{n:,} bytes but SharePoint lists {int(expected):,}"
+    try:
+        with zipfile.ZipFile(path) as z:
+            if "xl/workbook.xml" not in z.namelist(): return "zip without xl/workbook.xml"
+    except zipfile.BadZipFile as e:
+        return f"not a zip ({e})"
+    return None
+
+
+def _store(name, expected, write):
+    """write(fh) streams the body into DL/<name>.part; validate; atomically rename. Never leaves
+    a bad file under the real name (latest_local() would pick it up)."""
+    DL.mkdir(parents=True, exist_ok=True)
+    dest, part = DL / name, DL / (name + ".part")
+    part.unlink(missing_ok=True)
+    try:
+        with open(part, "wb") as fh:
+            write(fh)
+        bad = _valid_xlsx(part, expected)
+        if bad: raise FetchError(f"downloaded '{name}' is not a valid workbook: {bad}")
+        os.replace(part, dest)
+    finally:
+        part.unlink(missing_ok=True)
+    return dest
+
+
+def fetch_http():
+    """Non-browser path: SharePoint REST with the FedAuth/rtFa cookies Edge saved to
+    m365_session.json. Works from session 0 (gateway/SYSTEM) - no desktop hop. Raises
+    FetchError('auth ...') when the cookies are missing/expired so fetch() can fall back to Edge,
+    which re-logs in and refreshes the cookie file."""
+    import requests
+    if not M365.exists(): raise FetchError("auth: no m365_session.json")
+    ses = requests.Session()
+    for c in json.loads(M365.read_text(encoding="utf-8")).get("cookies", []):
+        if "sharepoint.com" in c.get("domain", ""):
+            ses.cookies.set(c["name"], c["value"], domain=c["domain"], path=c.get("path", "/"))
+    q = quote(FOLDER.replace("'", "''"))
+    r = ses.get(SITE + f"/_api/web/GetFolderByServerRelativeUrl('{q}')/Files",
+                headers={"Accept": "application/json;odata=nometadata"}, timeout=60, allow_redirects=False)
+    if r.status_code in (301, 302, 401, 403) or "json" not in r.headers.get("content-type", ""):
+        raise FetchError(f"auth: SharePoint list returned {r.status_code} (cookies expired?)")
+    r.raise_for_status()
+    f = _pick(r.json().get("value", []))
+    fq = quote(f["ServerRelativeUrl"].replace("'", "''"))
+    resp = ses.get(SITE + f"/_api/web/GetFileByServerRelativeUrl('{fq}')/$value",
+                   timeout=300, stream=True, allow_redirects=False)
+    if resp.status_code != 200: raise FetchError(f"download failed {resp.status_code} {f['Name']}")
+
+    def write(fh):
+        for ch in resp.iter_content(1 << 20): fh.write(ch)
+    dest = _store(f["Name"], f.get("Length"), write)
+    say("fetched", f["Name"], "modified", f.get("TimeLastModified"), "via http", f"{dest.stat().st_size:,}B")
+    return dest, f.get("TimeLastModified")
+
+
 def fetch_latest():
+    """Headed-Edge path. Must run in an interactive desktop session - call fetch(), which hops
+    there from session 0. (2026-10-27 16:50: calling this directly from the agent, which runs in
+    session 0, made msedge exit 1002 'Target page, context or browser has been closed'.)"""
+    if in_session_zero():
+        raise FetchError("fetch_latest() needs a desktop session (Edge cannot start in session 0) - use fetch()")
     sys.path.insert(0, r"C:\Jeeves\redshift-bot\scripts")
     import zscaler_reauth as zr
     zr._load_env_config()
@@ -172,22 +268,14 @@ def fetch_latest():
         q = quote(FOLDER.replace("'", "''"))
         r = ctx.request.get(SITE + f"/_api/web/GetFolderByServerRelativeUrl('{q}')/Files",
                             headers={"Accept": "application/json;odata=nometadata"}, timeout=60000)
-        if not r.ok: raise RuntimeError(f"list failed {r.status}")
-        cands = []
-        for f in r.json().get("value", []):
-            m = FILE_RE.match(f["Name"])
-            if m: cands.append((m.group(1), f.get("TimeLastModified", ""), f))
-        if not cands: raise RuntimeError("no 'YYMMDD Jeeves - CICO.xlsx' in FinOps V3/CICO")
-        cands.sort(key=lambda c: (c[0], c[1]))
-        f = cands[-1][2]
-        dest = DL / f["Name"]
+        if not r.ok: raise FetchError(f"list failed {r.status}")
+        f = _pick(r.json().get("value", []))
         fq = quote(f["ServerRelativeUrl"].replace("'", "''"))
         resp = ctx.request.get(SITE + f"/_api/web/GetFileByServerRelativeUrl('{fq}')/$value", timeout=300000)
-        if not resp.ok: raise RuntimeError(f"download failed {resp.status} {f['Name']}")
-        DL.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(resp.body())
+        if not resp.ok: raise FetchError(f"download failed {resp.status} {f['Name']}")
+        dest = _store(f["Name"], f.get("Length"), lambda fh: fh.write(resp.body()))
         browser.close()
-        say("fetched", f["Name"], "modified", f.get("TimeLastModified"))
+        say("fetched", f["Name"], "modified", f.get("TimeLastModified"), "via edge")
         return dest, f.get("TimeLastModified")
 
 
@@ -203,7 +291,16 @@ def in_session_zero():
 
 
 def fetch():
-    """Edge (headed) cannot start in session 0 (gateway runs as SYSTEM) -> hop to Brian's desktop session."""
+    """1) plain HTTPS with saved cookies (no browser); 2) only if that is an auth failure, headed
+    Edge - which cannot start in session 0 (gateway runs as SYSTEM) -> hop to Brian's desktop
+    session. A content problem (empty/invalid newest file) raises - Edge would get the same bytes."""
+    try:
+        return fetch_http()
+    except FetchError as e:
+        if not str(e).startswith("auth"): raise
+        say("http fetch unavailable, falling back to Edge:", e)
+    except Exception as e:
+        say("http fetch error, falling back to Edge:", repr(e)[:300])
     if not in_session_zero():
         return fetch_latest()
     sys.path.insert(0, REAUTH_DIR)
@@ -213,11 +310,15 @@ def fetch():
     if rc != 0 or not FETCH_RESULT.exists():
         raise RuntimeError(f"SharePoint fetch in user session failed rc={rc}: {str(out)[-300:]}")
     r = json.loads(FETCH_RESULT.read_text(encoding="utf-8"))
+    bad = _valid_xlsx(Path(r["path"]))
+    if bad: raise FetchError(f"Edge fetch produced an invalid workbook {r['path']}: {bad}")
     return Path(r["path"]), r["modified"]
 
 
 def latest_local():
-    c = [(FILE_RE.match(p.name).group(1), p.stat().st_mtime, p) for p in DL.glob("*.xlsx") if FILE_RE.match(p.name)]
+    c = [(FILE_RE.match(p.name).group(1), p.stat().st_mtime, p) for p in DL.glob("*.xlsx")
+         if FILE_RE.match(p.name) and p.stat().st_size >= MIN_XLSX_BYTES and zipfile.is_zipfile(p)]
+    if not c: raise FetchError(f"no valid CICO workbook in {DL}")
     return sorted(c)[-1][2]
 
 

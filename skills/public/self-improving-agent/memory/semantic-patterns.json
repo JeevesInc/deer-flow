@@ -5391,6 +5391,118 @@
       "target_skills": [
         "jeeves-borrowing-base"
       ]
+    },
+    "pat-2026-10-27-338": {
+      "id": "pat-2026-10-27-338",
+      "name": "Recovery: import report_scheduler_cron, set state key to tod",
+      "source": "ep-2026-10-27-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-27",
+      "last_applied": "2026-10-27T16:41:49.519055+00:00",
+      "category": "general",
+      "pattern": "Recovery: import report_scheduler_cron, set state key to today_running first (blocks hourly double-send), call run_sofom_distribution(msg_id, subject) and run_mx_bb(), then stamp. run_cico_dashboard needs OUTPUTS_PATH set to .deer-flow _cap_markets_scratch or it no-ops yet logs success. cm_morning_brief.py re-spawns nb_dq30_daily.py, so run the brief OR dq30, not both. Revenue comp: set last_run to today then run_revenue_comp().",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-27-339": {
+      "id": "pat-2026-10-27-339",
+      "name": "Agent runs in session 0: never call cico_daily_email.fetch_l",
+      "source": "ep-2026-10-27-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-27",
+      "last_applied": "2026-10-27T23:54:27.125913+00:00",
+      "category": "general",
+      "pattern": "Agent runs in session 0: never call cico_daily_email.fetch_latest() directly (Edge exits 1002); call fetch(), which now uses cookie HTTP first. SharePoint items can be 0 bytes right after creation - validate Length and zip before writing.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-28-340": {
+      "id": "pat-2026-10-28-340",
+      "name": "Before calling an input missing, check whether an artifact a",
+      "source": "ep-2026-10-28-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T00:31:25.718709+00:00",
+      "category": "general",
+      "pattern": "Before calling an input missing, check whether an artifact already in hand is it; for deployment questions copy an existing Jeeves app on the target platform",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-341": {
+      "id": "pat-2026-10-28-341",
+      "name": "To trigger Zscaler recovery from app code, write the request",
+      "source": "ep-2026-10-28-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T01:03:58.822103+00:00",
+      "category": "general",
+      "pattern": "To trigger Zscaler recovery from app code, write the request file ZSCALER_REAUTH_REQUEST_FILE (C:Jeeves redshift-bot tmp zscaler_force_reauth.request) and poll-retry like _shared redshift.py; spawning reauth.py directly is a no-op while the monitor holds its singleton lock. Read _shared redshift.py before designing any reconnect.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-10-28-342": {
+      "id": "pat-2026-10-28-342",
+      "name": "Brian 2026-10-27: One Plan prod/incubator work is PREPARATIO",
+      "source": "ep-2026-10-28-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T01:17:05.891854+00:00",
+      "category": "general",
+      "pattern": "Brian 2026-10-27: One Plan prod/incubator work is PREPARATION ONLY until he calls cutover - Cloudflare tunnel + access key stays live; OAuth/Postgres flags default off; no deploy, no infra-repo PR, no ECR push (build.yml gated by INCUBATOR_BUILD var); never touch OnePlan-Server/OnePlan-Tunnel tasks, cloudflared, data/public_url.txt, data/access_key.txt. When adding new auth routes, verify the default (flags-off) tunnel gate is unchanged with a test.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-343": {
+      "id": "pat-2026-10-28-343",
+      "name": "For a product/guide review, run the live outputs (api/foreca",
+      "source": "ep-2026-10-28-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T03:17:36.606336+00:00",
+      "category": "general",
+      "pattern": "For a product/guide review, run the live outputs (api/forecast, decision, covenants) and diff each output screen against the real human artifact it replaces (e.g. Finance Slides Nov 2026 BoD) before commenting on wording",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-10-28-344": {
+      "id": "pat-2026-10-28-344",
+      "name": "Before handing Brian go-live steps for the live one-plan che",
+      "source": "ep-2026-10-28-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T04:52:32.043679+00:00",
+      "category": "general",
+      "pattern": "Before handing Brian go-live steps for the live one-plan checkout, check git status -sb there: it carried an unpushed commit (6569729) so git pull merges; trial-merge it in a throwaway worktree and run tests first. token_urlsafe keys can end in _ or -, which the gate rstrip of pasted punctuation ate (1/64 CI flake): try the exact key first. Merging plan-engine needed: jobs.py deleted upstream, test_decisions skip without V9 workbook, libgomp1 for xgboost in python:slim + hadolint ignore DL3008.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
     }
   }
 }

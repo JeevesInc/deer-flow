@@ -5503,6 +5503,278 @@
       "target_skills": [
         "jeeves-capital-markets"
       ]
+    },
+    "pat-2026-10-28-345": {
+      "id": "pat-2026-10-28-345",
+      "name": "When someone reports a row missing from a file, identify the",
+      "source": "ep-2026-10-28-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T16:42:11.731050+00:00",
+      "category": "general",
+      "pattern": "When someone reports a row missing from a file, identify the exact report/query they use (check their email/Metabase ids) and run THAT query for the named rows before answering",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-28-346": {
+      "id": "pat-2026-10-28-346",
+      "name": "Facilities in One Plan must be first-class (today position r",
+      "source": "ep-2026-10-28-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T17:23:26.112274+00:00",
+      "category": "general",
+      "pattern": "Facilities in One Plan must be first-class (today position run + today card + tests + liquidity + forward), not forecast-only lines. Claimed CIM was on Facilities page from code without checking it renders only behind ForecastGate. Verify what the live screen renders before asserting presence. Reuse mission_control_snapshot.build_mx for CIM position (state file _cap_markets_state.json).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-347": {
+      "id": "pat-2026-10-28-347",
+      "name": "Retiring Cash Planner (2217a17, 10-27) silently removed the ",
+      "source": "ep-2026-10-28-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T17:46:22.328986+00:00",
+      "category": "general",
+      "pattern": "Retiring Cash Planner (2217a17, 10-27) silently removed the One Plan assistant (its agent loop lived in CP). Before removing a component, list user-facing features that depend on it. Assistant is now One Plan-native (backend/assistant.py, PR #15): tools = in-process HTTP calls with caller creds, so permissions are the screens own.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-348": {
+      "id": "pat-2026-10-28-348",
+      "name": "gh pr edit fails without read:org (GraphQL); retarget/create",
+      "source": "ep-2026-10-28-010",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T17:46:43.781087+00:00",
+      "category": "general",
+      "pattern": "gh pr edit fails without read:org (GraphQL); retarget/create/merge PRs via gh api REST. Before merging, check the live tree branch: Brian moved One Plan to main on 10-28, so PRs must target main.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-slides"
+      ]
+    },
+    "pat-2026-10-28-349": {
+      "id": "pat-2026-10-28-349",
+      "name": "Google Slides tables cannot go below ~0.33in rows; draw boar",
+      "source": "ep-2026-10-28-011",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T18:30:09.815705+00:00",
+      "category": "general",
+      "pattern": "Google Slides tables cannot go below ~0.33in rows; draw board tables as per-column text boxes over row fills. Size font so no label wraps or rows misalign.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-slides"
+      ]
+    },
+    "pat-2026-10-28-350": {
+      "id": "pat-2026-10-28-350",
+      "name": "When Brian reports merges failing and the fix is mine, finis",
+      "source": "ep-2026-10-28-012",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T20:17:30.819167+00:00",
+      "category": "general",
+      "pattern": "When Brian reports merges failing and the fix is mine, finish the job: after making PRs green, merge them in the agreed order via REST (gh api PUT pulls/N/merge; gh pr edit/merge need read:org), re-resolve any PR that conflicts after an earlier merge, then verify main (ruff + pytest). Brian said: no, you merge. Also check for a concurrent agent run on the same branches before pushing (qa-e2e was resolved and merged by another run mid-task).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "github"
+      ]
+    },
+    "pat-2026-10-28-351": {
+      "id": "pat-2026-10-28-351",
+      "name": "bash guard rejects JSX closing tags and cmd switches in here",
+      "source": "ep-2026-10-28-013",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T20:40:14.743645+00:00",
+      "category": "general",
+      "pattern": "bash guard rejects JSX closing tags and cmd switches in heredocs: write patch scripts with write_file then run; deer-flow process is elevated so restart_server.ps1 runs without UAC; verify outputs unchanged by diffing view() on a DB copy main vs worktree",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-352": {
+      "id": "pat-2026-10-28-352",
+      "name": "Brian: draws are decisions, never a full-draw rule. CIM (and",
+      "source": "ep-2026-10-28-014",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T21:22:44.751297+00:00",
+      "category": "general",
+      "pattern": "Brian: draws are decisions, never a full-draw rule. CIM (and CICO Corp funding r243) drew to 90% of eligible automatically; now held at position-run drawn + typed draws, cured only to base. Check both One Plan funding path AND CICO path when changing facility logic; equity need moved 342.9->408.0",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-28-353": {
+      "id": "pat-2026-10-28-353",
+      "name": "When explaining how a One Plan number is computed, flag whet",
+      "source": "ep-2026-10-28-015",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T21:52:08.495661+00:00",
+      "category": "general",
+      "pattern": "When explaining how a One Plan number is computed, flag whether it is driver-based or an imported value; imported = gap to close, propose/do the port",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-28-354": {
+      "id": "pat-2026-10-28-354",
+      "name": "When a diagnosis turns up a second defect in code I am alrea",
+      "source": "ep-2026-10-28-016",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T21:55:58.217433+00:00",
+      "category": "general",
+      "pattern": "When a diagnosis turns up a second defect in code I am already editing (e.g. CIM draw double-counted in One Plan workbook cash), fix it in the same PR before replying; never close a report with an unfixed defect.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-10-28-355": {
+      "id": "pat-2026-10-28-355",
+      "name": "Audit duplicates programmatically: dump every Inputs-page se",
+      "source": "ep-2026-10-28-017",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T22:30:09.740358+00:00",
+      "category": "general",
+      "pattern": "Audit duplicates programmatically: dump every Inputs-page series via the inputs API on a copy of data/one_plan.db, map What-if levers onto them, grep web/src for every write call; then diff all forecast lines main vs branch on the DB copy to prove zero numeric change. gh pr edit needs read:org - use gh api PATCH repos/JeevesInc/one-plan/pulls/N instead.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-28-356": {
+      "id": "pat-2026-10-28-356",
+      "name": "One Plan main Forecast page shows no covenants (no covenant ",
+      "source": "ep-2026-10-28-018",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T22:53:48.393177+00:00",
+      "category": "general",
+      "pattern": "One Plan main Forecast page shows no covenants (no covenant table, no facility and covenant inputs tab). Covenants live only on Triggers and covenants. The What the plan needs card stays.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-28-357": {
+      "id": "pat-2026-10-28-357",
+      "name": "Before imputing a rollforward driver from loc_tape history, ",
+      "source": "ep-2026-10-28-019",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-28",
+      "last_applied": "2026-10-28T23:15:31.552433+00:00",
+      "category": "general",
+      "pattern": "Before imputing a rollforward driver from loc_tape history, break it into tape fields: adjustments are mostly loan_allocation_amount_usd (+4-6M per month, not FX), so a trailing percentage forecast cut implied usage and revenue by 3M. Check the P and L delta for each imputed driver separately on a DB copy before shipping.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-358": {
+      "id": "pat-2026-10-29-358",
+      "name": "One Plan views must be COMPUTED from the plan (drivers, faci",
+      "source": "ep-2026-10-29-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T00:33:07.105556+00:00",
+      "category": "general",
+      "pattern": "One Plan views must be COMPUTED from the plan (drivers, facilities, forecast runs) with bank balances as the only actual input; CICO/V9 tabs are the spec to match on content, never a data source to read. Brian has said this repeatedly; built weekly cash as a reader of CICO weekly tab and was corrected.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-359": {
+      "id": "pat-2026-10-29-359",
+      "name": "Account-level cash must model the MX trust: F/12339 master (",
+      "source": "ep-2026-10-29-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T01:08:03.079396+00:00",
+      "category": "general",
+      "pattern": "Account-level cash must model the MX trust: F/12339 master (JPM 8192) to F/12340 borrower (Monex 6054) next business day, then recycled to the SOFOM (BBVA 7356 per T bet accs). Trust accounts are never a country main account or sweep source. Payroll comes from the plan opex headcount lines (payroll_non_bonus+severance+bonus+contingencies+commissions), not CICO typed totals. Use Bank balances account-info column I (use) for account roles.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-360": {
+      "id": "pat-2026-10-29-360",
+      "name": "F/12340 recycling is gated by the borrowing base: Master BB ",
+      "source": "ep-2026-10-29-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T01:21:56.701117+00:00",
+      "category": "general",
+      "pattern": "F/12340 recycling is gated by the borrowing base: Master BB Exhibit A O59 Avail to Recyc = trust cash (O53 Prerecycling + O54 Directed) + pending recyclings (O55:O56) + Reqd (O57 = O87 - 13,000,000 MXN, O87 = BB excess/deficit on receivables + swap, i.e. excluding collection cash). Cash covering drawn minus 90% x receivables counted, plus the MXN 13M cushion, stays in the trust. Never model the trust as releasing everything.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-10-29-361": {
+      "id": "pat-2026-10-29-361",
+      "name": "decompose the gap line by line (plan vs CICO own by row) bef",
+      "source": "ep-2026-10-29-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T05:07:59.635259+00:00",
+      "category": "general",
+      "pattern": "decompose the gap line by line (plan vs CICO own by row) before reporting; it was a CICO formula CIM draw double counted by the NB Liquidity anchor plus plan payroll overriding the current month",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
     }
   }
 }

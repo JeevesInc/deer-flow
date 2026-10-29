@@ -247,6 +247,11 @@ def write_month_end_liquidity(wb, me):
     lq['E15'] = '=SUMPRODUCT({0}*((({1}="USD")+({2}="Y"))>0)*{3})'.format(base, rng('C'), rng('J'), bal)
     lq['E16'] = '=SUMPRODUCT({0}*({1}<>"USD")*({2}="N")*{3})'.format(base, rng('C'), rng('J'), bal)
     lq['B22'] = 'Liquidity as of {} (last Business Day of the month -- Section 7.01(a) test date)'.format(lbl)
+    # 2026-10-28: the 7.01(a) floor keys off Borrowings outstanding ON the test date, not today's
+    # total (the 10/23 $20.5M draw must not lift the 9/30 floor to $25MM).
+    _td = me['date']
+    lq['E20'] = '=SUMIFS(historical_draws!$C:$C,historical_draws!$A:$A,"<="&DATE({},{},{}))'.format(_td.year, _td.month, _td.day)
+    lq['B20'] = 'Aggregate principal amount of Borrowings outstanding on the test date ({})'.format(lbl)
     tot = sum((0.8 if (ba.cell(row=r, column=3).value != 'USD' and ba.cell(row=r, column=10).value != 'Y') else 1.0)
               * vals.get(r, 0.0) * fxv.get(r, 0.0) for r in rows
               if str(ba.cell(row=r, column=8).value).strip() == 'Yes'

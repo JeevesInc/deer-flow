@@ -164,7 +164,15 @@ def check_workbook(path):
     borrowings = drawn + adv_req
     # 7.01(a) step-up keys off ACTUAL Borrowings outstanding (funded), not a pending
     # advance request (Brian, 2026-10-20: "We haven't received the money so it's not 25 yet").
-    floor = 25000000.0 if drawn >= 100000000 else 15000000.0
+    # 2026-10-28: floor keys off Borrowings outstanding ON the 7.01(a) test date.
+    import datetime as _dt
+    drawn_at_test = drawn
+    if _td:
+        _tdd = _dt.datetime.strptime(_td.group(1), '%d-%b-%y')
+        drawn_at_test = sum(_f(hd.cell(r, 3).value) for r in range(2, hd.max_row + 1)
+                            if isinstance(hd.cell(r, 1).value, _dt.datetime)
+                            and hd.cell(r, 1).value <= _tdd)
+    floor = 25000000.0 if drawn_at_test >= 100000000 else 15000000.0
     cushion = liquidity - floor
 
     # ---- DQ30 (dq30_detail: A month_end, G dpd, H balance_usd,

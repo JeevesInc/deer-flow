@@ -163,7 +163,18 @@ def _download_xlsx(svc, file_id: str):
         log.error("xlwings recalc FAILED (%s) — formula-only read; MX SOFOM "
                   "eligible/BB will be null until Excel COM works", e)
 
-    wb = load_workbook(tmp_path, data_only=True)
+    try:
+        wb = load_workbook(tmp_path, data_only=True)
+    except Exception as e:
+        # 2026-10-28: Excel's re-save in the gateway's service session left a style table openpyxl can't bind
+        # (IndexError in bind_cells), so every hourly refresh failed and Mission Control / One Plan's CIM position
+        # stayed on the prior day's master. The file as downloaded carries Excel's cached values (FinOps saves it
+        # in Excel); read that, in read-only mode, which doesn't bind styles.
+        log.error("openpyxl could not read the recalculated workbook (%s: %s); reading the file as downloaded",
+                  type(e).__name__, e)
+        with open(tmp_path, "wb") as fh2:
+            fh2.write(fh.getvalue())
+        wb = load_workbook(tmp_path, data_only=True, read_only=True)
     try:
         os.unlink(tmp_path)
     except OSError:

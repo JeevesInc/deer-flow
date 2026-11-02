@@ -219,6 +219,11 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)
 
+    # Tickets list page + JSON (Super-Agent Phase 4)
+    from app.gateway.routers import tickets as tickets_router
+
+    app.include_router(tickets_router.router)
+
     async def _collect_health() -> tuple[str, dict[str, str]]:
         checks: dict[str, str] = {}
         overall = "healthy"

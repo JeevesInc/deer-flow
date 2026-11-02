@@ -1427,6 +1427,8 @@ def _handle_gmail_message(msg: dict) -> None:
     date = _h('Date')
     snippet = html.unescape(meta.get('snippet', '')).strip()
 
+    _ticket_beat('gmail')
+
     # SOFOM distribution fast-path — check before any noise/self-send skip so
     # a same-day resend or reply-all doesn't get lost, and before the LLM call
     # so the daily tape never waits on classification latency or quota.
@@ -1457,6 +1459,13 @@ def _handle_gmail_message(msg: dict) -> None:
 
     # Extract body text for richer context
     body_text = _extract_gmail_body(full)
+
+    # Subscriptions route; the classifier only sees mail no Ticket owns
+    # (Super-Agent Phase 2).
+    if _route_to_ticket(full.get('threadId', '') or meta.get('threadId', ''),
+                        full.get('id', '') or meta.get('id', ''),
+                        from_header, subject, date, body_text or snippet):
+        return
 
     # LLM classification
     classification = classify_with_llm(
@@ -1494,6 +1503,84 @@ def _handle_gmail_message(msg: dict) -> None:
     if not existing:
         _record_proposal_thread(gmail_thread_id, slack_post)
     _log_proposal(classification, from_header, subject, gmail_msg_id, slack_post)
+
+
+# -- Tickets: Source heartbeat + Subscription routing (Super-Agent Phase 2) ----
+
+def _tickets_mods():
+    """(store, steering, runner) from the harness, or None if unavailable."""
+    try:
+        harness = str(Path(__file__).resolve().parent / 'packages' / 'harness')
+        if harness not in sys.path:
+            sys.path.insert(0, harness)
+        from deerflow.tickets import runner, steering, store
+        return store, steering, runner
+    except Exception as e:
+        log.warning('tickets modules unavailable: %s', e)
+        return None
+
+
+def _ticket_beat(source: str) -> None:
+    mods = _tickets_mods()
+    if mods:
+        mods[1].beat(source)
+
+
+def _ticket_route_prompt(ticket: dict, sender: str, subject: str, date: str, msg_id: str, body: str) -> str:
+    return (
+        f"[Subscribed reply] New email on a Gmail thread owned by Ticket {ticket['id']} \"{ticket['title']}\".\n"
+        f"From: {sender}\nSubject: {subject}\nDate: {date}\nGmail message id: {msg_id}\n\n{body[:4000]}\n\n"
+        f"Ticket mandate (Brian, verbatim):\n{ticket['mandate']}\n\n"
+        "Work out what this reply means for the Ticket and do the next step. Any response to the sender is a Gmail "
+        "draft for Brian (never sent). Record progress with ticket_update or close with ticket_close(deliverable). "
+        "Reply to Brian with the result in 1-4 lines: what they said, what you did, the draft id if any."
+    )
+
+
+def _route_to_ticket(gmail_thread_id: str, msg_id: str, sender: str, subject: str, date: str, body: str) -> bool:
+    if not gmail_thread_id:
+        return False
+    mods = _tickets_mods()
+    if not mods:
+        return False
+    store_mod, steering_mod, runner_mod = mods
+    try:
+        st = store_mod.TicketStore()
+        owners = st.tickets_for_key(f'gmail:{gmail_thread_id}')
+    except Exception as e:
+        log.warning('ticket subscription lookup failed: %s', e)
+        return False
+    if not owners:
+        return False
+    ticket = st.reopen(owners[0]['id'], f'Reply from {sender} on gmail:{gmail_thread_id} ({subject})')
+    prompt = _ticket_route_prompt(ticket, sender, subject, date, msg_id, body)
+    _audit_ticket_route(ticket['id'], gmail_thread_id, msg_id, sender)
+
+    def _go():
+        try:
+            runner_mod.run_on_ticket(ticket, prompt)
+        except runner_mod.ThreadBusy:
+            # The Ticket's run is working right now: steer the reply into it.
+            steering_mod.push(ticket['langgraph_thread_id'], prompt, source='gmail')
+            log.info('ticket %s busy; reply steered into running run', ticket['id'])
+        except Exception as e:
+            log.error('ticket route run failed for %s: %s', ticket['id'], e)
+            runner_mod.slack_send(runner_mod.owner_id(),
+                                  f"Reply from {sender} on Ticket {ticket['id']} \"{ticket['title']}\" could not be processed: {e}")
+
+    threading.Thread(target=_go, daemon=True, name=f"ticket-route-{ticket['id']}").start()
+    log.info('Routed gmail thread %s to ticket %s (classifier skipped)', gmail_thread_id, ticket['id'])
+    return True
+
+
+def _audit_ticket_route(ticket_id: str, gmail_thread_id: str, msg_id: str, sender: str) -> None:
+    try:
+        p = Path(__file__).resolve().parent / '.deer-flow' / 'ticket_routing.jsonl'
+        with p.open('a', encoding='utf-8') as f:
+            f.write(json.dumps({'ts': datetime.now(timezone.utc).isoformat(timespec='seconds'), 'ticket_id': ticket_id,
+                                'gmail_thread_id': gmail_thread_id, 'msg_id': msg_id, 'sender': sender}) + '\n')
+    except Exception as e:
+        log.warning('ticket route audit failed: %s', e)
 
 
 def _extract_gmail_body(full_msg: dict) -> str:

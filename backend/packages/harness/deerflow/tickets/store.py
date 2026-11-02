@@ -260,6 +260,41 @@ class TicketStore:
         with _lock, self._conn() as c:
             c.execute("INSERT OR IGNORE INTO subscriptions VALUES (?,?,?)", (ticket_id, key, _iso(_now())))
 
+    def tickets_for_key(self, key: str) -> list[dict[str, Any]]:
+        """Non-stopped Tickets subscribed to a thread key, active first, newest first."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT t.* FROM tickets t JOIN subscriptions s ON s.ticket_id=t.id WHERE s.key=? AND t.status!=?",
+                (key, STOPPED),
+            ).fetchall()
+        out = [self._row(r) for r in rows]
+        out.sort(key=lambda t: (t["status"] in ACTIVE_STATUSES, t["updated_at"]), reverse=True)
+        return out
+
+    def subscriptions(self, ticket_id: str) -> list[str]:
+        with self._conn() as c:
+            return [r[0] for r in c.execute("SELECT key FROM subscriptions WHERE ticket_id=? ORDER BY created_at", (ticket_id,))]
+
+    def reopen(self, ticket_id: str, note: str) -> dict[str, Any]:
+        """Back to ``open`` because someone replied on a subscribed thread. A stopped
+        Ticket stays stopped (only Brian restarts work)."""
+        t = self.require(ticket_id)
+        if t["status"] == STOPPED:
+            raise TicketError(f"{ticket_id} was stopped by Brian.")
+        now = _iso(_now())
+        with _lock, self._conn() as c:
+            self._append(c, ticket_id, "notes", {"ts": now, "note": note})
+            c.execute(
+                "UPDATE tickets SET status=?, updated_at=?, last_progress_at=?, redispatch_count=0 WHERE id=?",
+                (OPEN, now, now, ticket_id),
+            )
+        return self.require(ticket_id)
+
+    def created_since(self, since: datetime) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            rows = c.execute("SELECT * FROM tickets WHERE created_at>=?", (_iso(since),)).fetchall()
+        return [self._row(r) for r in rows]
+
 
 # -- business-hours arithmetic ---------------------------------------------
 

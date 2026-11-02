@@ -9,6 +9,7 @@ from deerflow.agents.middlewares.anthropic_retry_middleware import AnthropicRetr
 from deerflow.agents.middlewares.clarification_middleware import ClarificationMiddleware
 from deerflow.agents.middlewares.continuation_middleware import ContinuationMiddleware
 from deerflow.agents.middlewares.loop_detection_middleware import LoopDetectionMiddleware
+from deerflow.agents.middlewares.steering_middleware import SteeringMiddleware
 from deerflow.agents.middlewares.step_budget_middleware import StepBudgetMiddleware
 from deerflow.agents.middlewares.mem0_injection_middleware import Mem0InjectionMiddleware
 from deerflow.agents.middlewares.memory_middleware import MemoryMiddleware
@@ -326,6 +327,10 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None, agent_nam
 
     # LoopDetectionMiddleware — detect and break repetitive tool call loops
     middlewares.append(LoopDetectionMiddleware())
+
+    # SteeringMiddleware — inject messages Brian sent mid-run, auto-subscribe Tickets to
+    # Gmail drafts, flag a repeated tool error (Super-Agent Phase 3).
+    middlewares.append(SteeringMiddleware())
 
     # ContinuationMiddleware — re-invoke once when the model abandons stated intent
     # (says "now let me X" but emits no tool call). Sits outside the retry layer so a

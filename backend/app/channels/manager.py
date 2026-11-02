@@ -27,6 +27,14 @@ from app.channels.manager_helpers import (
 from app.channels.message_bus import InboundMessage, InboundMessageType, MessageBus, OutboundMessage
 from app.channels.store import ChannelStore
 
+# Super-Agent Phases 2-3: Tickets, steering inbox, Source heartbeats.
+try:
+    from deerflow.tickets import steering as _steering
+    from deerflow.tickets import store as _ticket_store
+except Exception:  # pragma: no cover - harness missing
+    _steering = None
+    _ticket_store = None
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_LANGGRAPH_URL = "http://localhost:2024"
@@ -345,6 +353,8 @@ class ChannelManager:
         self.bus = bus
         self.store = store
         self._max_concurrency = max_concurrency
+        # thread_id -> id(msg) of the inbound message whose run is in flight.
+        self._thread_runs: dict[str, int] = {}
         self._langgraph_url = langgraph_url
         self._gateway_url = gateway_url
         self._assistant_id = assistant_id
@@ -636,6 +646,8 @@ class ChannelManager:
                 msg.msg_type.value,
                 msg.text[:100] if msg.text else "",
             )
+            if _steering is not None:
+                _steering.beat(msg.channel_name)
             task = asyncio.create_task(self._handle_message(msg))
             task.add_done_callback(self._log_task_error)
 
@@ -668,7 +680,10 @@ class ChannelManager:
                         return
                     await self._handle_command(msg)
                 else:
-                    await self._handle_chat(msg)
+                    try:
+                        await self._handle_chat(msg)
+                    finally:
+                        await self._after_chat(msg)
             except Exception as exc:
                 logger.exception(
                     "Error handling message from %s (chat=%s)",
@@ -711,6 +726,60 @@ class ChannelManager:
         except Exception as exc:
             logger.error("[Actor] could not write actor marker for thread %s: %s", thread_id, exc)
         return record
+
+    # -- Tickets / steering (Super-Agent Phases 2-3) -------------------------
+
+    def _reopen_waiting_tickets(self, thread_id: str) -> None:
+        """Brian replied on this thread: Tickets waiting on him are open again."""
+        if _ticket_store is None:
+            return
+        try:
+            st = _ticket_store.TicketStore()
+            for tk in st.list(statuses=(_ticket_store.WAITING_ON_BRIAN,), thread_id=thread_id):
+                st.reopen(tk["id"], "Brian replied in the thread")
+                logger.info("[Tickets] reopened %s on Brian's reply", tk["id"])
+        except Exception as exc:
+            logger.warning("[Tickets] reopen check failed for %s: %s", thread_id, exc)
+
+    def _steer_into_running(self, thread_id: str, msg: InboundMessage) -> bool:
+        if _steering is None or thread_id not in self._thread_runs:
+            return False
+        if msg.files or (msg.metadata or {}).get("image_blocks"):
+            return False  # attachments need the normal upload path
+        try:
+            _steering.push(thread_id, msg.text, source=msg.channel_name)
+        except Exception as exc:
+            logger.warning("[Steering] push failed for %s, falling back to a queued run: %s", thread_id, exc)
+            return False
+        logger.info("[Steering] message handed to the running run on thread %s", thread_id)
+        return True
+
+    async def _after_chat(self, msg: InboundMessage) -> None:
+        """Release the busy mark this message owns; anything steered in after the
+        run's last model call becomes a follow-up run so it is never lost."""
+        thread_id = self.store.get_thread_id(msg.channel_name, msg.chat_id, topic_id=msg.topic_id)
+        if not thread_id or self._thread_runs.get(thread_id) != id(msg):
+            return
+        self._thread_runs.pop(thread_id, None)
+        if _steering is None:
+            return
+        try:
+            leftovers = _steering.pop_all(thread_id)
+        except Exception as exc:
+            logger.warning("[Steering] leftover drain failed for %s: %s", thread_id, exc)
+            return
+        if not leftovers:
+            return
+        import dataclasses
+
+        text = "\n\n".join(item.get("text", "") for item in leftovers)
+        logger.info("[Steering] %d message(s) arrived after the last model call on %s; running them now", len(leftovers), thread_id)
+        meta = {k: v for k, v in (msg.metadata or {}).items() if k != "image_blocks"}
+        follow = dataclasses.replace(msg, text=text, files=[], metadata=meta, created_at=time.time())
+        try:
+            await self._handle_chat(follow)
+        finally:
+            await self._after_chat(follow)
 
     async def _create_thread(self, client, msg: InboundMessage) -> str:
         """Create a new thread on the LangGraph Server and store the mapping."""
@@ -759,6 +828,14 @@ class ChannelManager:
             if not msg.text.startswith("[RESTRICTED SESSION"):
                 msg.text = NON_OWNER_PREAMBLE.format(
                     name=actor.get("name"), user_id=actor.get("user_id")) + msg.text
+
+        if actor.get("is_owner"):
+            self._reopen_waiting_tickets(thread_id)
+            # Mid-run steering: a run is already working on this thread, so hand
+            # the message to it (SteeringMiddleware injects it before the next
+            # model call) instead of queuing a second run behind it.
+            if self._steer_into_running(thread_id, msg):
+                return
 
         assistant_id, run_config, run_context = self._resolve_run_params(msg, thread_id)
         if extra_context:
@@ -813,6 +890,7 @@ class ChannelManager:
         # 01a0443b went on to finish successfully three minutes later — the
         # real answer was computed and never delivered. Binding to run_id also
         # gives us an id to log and to cancel precisely.
+        self._thread_runs[thread_id] = id(msg)
         run = await client.runs.create(
             thread_id,
             assistant_id,

@@ -5,6 +5,7 @@ from langchain.tools import BaseTool
 from deerflow.config import get_app_config
 from deerflow.reflection import resolve_variable
 from deerflow.tools.builtins import ask_clarification_tool, present_file_tool, task_tool, view_image_tool
+from deerflow.tools.builtins.ticket_tools import TICKET_TOOLS
 from deerflow.tools.builtins.tool_search import reset_deferred_registry
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,8 @@ logger = logging.getLogger(__name__)
 BUILTIN_TOOLS = [
     present_file_tool,
     ask_clarification_tool,
+    # Durable Tickets (Super-Agent proposal Phase 1, approved 2026-11-02)
+    *TICKET_TOOLS,
 ]
 
 SUBAGENT_TOOLS = [

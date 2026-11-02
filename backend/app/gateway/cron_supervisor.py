@@ -249,6 +249,9 @@ def start_crons() -> None:
     # retention-janitor: prunes intel/scratch, rotates dispatch_audit, monthly
     # VACUUM of checkpoints.db (P2-7 — .deer-flow only ever grew before this).
     _load_and_start("retention-janitor", backend_dir / "scripts" / "retention_janitor_cron.py")
+    # ticket-watchdog: re-dispatches open Tickets with no progress for 4 business
+    # hours, then DMs Brian; never closes a Ticket (Super-Agent proposal Phase 1).
+    _load_and_start("ticket-watchdog", backend_dir / "scripts" / "ticket_watchdog_cron.py")
     # GW-F8: the dispatch queue's drain thread only starts when something new
     # is enqueued in THIS process — items persisted before a restart stranded
     # until the 12h expiry deleted them silently. Kick the drain at boot.

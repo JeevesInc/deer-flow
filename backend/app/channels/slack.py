@@ -665,6 +665,13 @@ class SlackChannel(Channel):
             event = req.payload.get("event", {})
             etype = event.get("type", "")
 
+            # Outbound policy (Brian, 2026-11-02): never act in Slack Connect / externally
+            # shared conversations. A reply there is an external message he did not approve.
+            if req.payload.get("is_ext_shared_channel"):
+                logger.warning("[Slack] Ignoring event from externally shared conversation %s (outbound policy)",
+                               event.get("channel"))
+                return
+
             # Handle message events (DM or @mention)
             if etype in ("message", "app_mention"):
                 self._handle_message_event(event)

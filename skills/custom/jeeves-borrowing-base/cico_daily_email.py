@@ -359,7 +359,7 @@ def build(FILE):
     summ = next(r for r in range(len(grid)) if "summary by country" in rowtxt(r))
     end = next(r for r in range(summ, len(grid)) if "total cash" in rowtxt(r)) + 1
     HIDDEN = hidden_rows(FILE, "Bank balances")
-    cim = next(r for r in range(start, end) if "cim reporting" in rowtxt(r))
+    cim = next(r for r in range(start, end) if any(k in rowtxt(r) for k in ("cim reporting", "summary by currency")))  # renamed in 261030
     nb = next(r for r in range(len(grid)) if "nb controlled accounts" in rowtxt(r))
     nb_end = next(r for r in range(nb, len(grid)) if "total cash" in rowtxt(r))
     ORDER = list(range(start, cim)) + list(range(nb, nb_end + 1)) + list(range(summ, end))
@@ -467,6 +467,10 @@ def send_mail(html, subject, to):
     from google_auth import get_credentials
     from googleapiclient.discovery import build as gbuild
     m = MIMEText(html, "html"); m["to"] = ", ".join(to); m["subject"] = subject
+    import sys as _s, os as _o
+    _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.dirname(_o.path.abspath(__file__))), "_shared"))
+    from outbound_policy import assert_internal_emails
+    assert_internal_emails(to, "cico_daily_email")  # outbound policy 2026-11-02: internal-only auto-send
     svc = gbuild("gmail", "v1", credentials=get_credentials())
     return svc.users().messages().send(userId="me", body={"raw": base64.urlsafe_b64encode(m.as_bytes()).decode()}).execute().get("id")
 

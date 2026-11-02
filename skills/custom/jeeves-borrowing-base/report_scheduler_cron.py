@@ -186,7 +186,7 @@ def _wait_for_bb_pipeline(today_str: str, max_wait_seconds: int = 600, poll_inte
         vals = [state.get(k, '') for k in required]
         if all(v == today_str for v in vals):
             return True
-        if any(v == f"{today_str}_failed" for v in vals):
+        if any(v in (f"{today_str}_failed", f"{today_str}_waiting") for v in vals):
             log.warning(f"BB gate: a required build failed today ({dict(zip(required, vals))})")
             return False
         time.sleep(poll_interval)
@@ -211,6 +211,33 @@ def _post_slack(text, blocks=None):
 # ---------------------------------------------------------------------------
 
 _running_tasks: dict[str, threading.Thread] = {}
+
+
+class TapeNotReady(RuntimeError):
+    """capital_markets_dm.loc_tape has no rows yet for the target date."""
+
+
+def _check_tape_ready(dt_str):
+    """2026-11-02: loc_tape for 2026-11-01 had not landed by the 08:30 PT run. NB died
+    (rc=1, 'No tape rows') and was stuck '_failed' for the day; the MX master built
+    'successfully' with the 11/01 day silently empty. Check BEFORE building. A connection
+    error here proceeds, so the build's own zscaler-reauth retry handles it."""
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+        from redshift import connect
+        con = connect()
+        try:
+            cur = con.cursor()
+            cur.execute("select count(*) from capital_markets_dm.loc_tape where dt = %s", (dt_str,))
+            n = int(cur.fetchone()[0] or 0)
+            cur.close()
+        finally:
+            con.close()
+    except Exception as err:
+        log.warning(f"tape readiness check failed ({err}) -- proceeding to build")
+        return
+    if n == 0:
+        raise TapeNotReady(f"capital_markets_dm.loc_tape has no rows for dt={dt_str} yet (upstream load late)")
 
 
 def _launch_background(task_name: str, fn, state_key: str, today_str: str):
@@ -238,6 +265,25 @@ def _launch_background(task_name: str, fn, state_key: str, today_str: str):
         outcome = today_str
         try:
             fn()
+        except TapeNotReady as exc:
+            # Upstream tape late: NOT a failure. '_waiting' does not block the next
+            # hourly tick, so the job re-fires and builds as soon as the tape lands.
+            # One Slack note per job per day; after 17:00 PT it escalates and stops.
+            outcome = f"{today_str}_waiting"
+            log.warning(f"{task_name} waiting on tape: {exc}")
+            with _state_lock:
+                s = load_state()
+                note_key = f"tape_wait_notice_{state_key}"
+                first = s.get(note_key) != today_str
+                s[note_key] = today_str
+                save_state(s)
+            if datetime.now().hour >= 17:
+                outcome = f"{today_str}_failed"
+                _post_slack(f":warning: *{task_name}* -- {exc}. Still missing at 17:00 PT; "
+                            f"stopped retrying for today. Run by hand once the tape lands.")
+            elif first:
+                _post_slack(f":hourglass_flowing_sand: *{task_name}* -- {exc}. Retrying every hour; "
+                            f"it will build and deliver as soon as the tape lands.")
         except BaseException as exc:
             # Never record a failed run as complete -- downstream gates
             # (morning brief, dashboard) treat '<today>' as "data is ready".
@@ -533,7 +579,9 @@ def run_sofom_distribution(message_id: str, subject: str):
         # SOFOM_AUTO_SEND=0 reverts to draft-only.
         _per_day = [len(x) for x in dfs]
         _complete = len(_per_day) == 3 and all(n > 0 for n in _per_day)
-        _auto = os.environ.get('SOFOM_AUTO_SEND', '1') != '0'
+        # 2026-11-02 Brian supersedes the 09-30 auto-send: every external message needs his
+        # per-message approval, so the SOFOM tape is a reply-all DRAFT he sends. Do not re-enable.
+        _auto = False
         _draft_id = None
         for _ln in result.stdout.splitlines():
             if 'Draft ID:' in _ln:
@@ -547,8 +595,7 @@ def run_sofom_distribution(message_id: str, subject: str):
                 if _gdir not in _sys.path:
                     _sys.path.insert(0, _gdir)
                 import gmail_tool as _gt
-                _sent = _gt._get_service().users().drafts().send(
-                    userId='me', body={'id': _draft_id}).execute()
+                raise RuntimeError('auto-send removed 2026-11-02 (outbound policy)')
                 log.info(f"SOFOM reply SENT: message {_sent.get('id')} (draft {_draft_id})")
                 _post_slack(_hdr + 'Sent reply-all on the distribution thread.')
             except Exception as _se:
@@ -556,7 +603,7 @@ def run_sofom_distribution(message_id: str, subject: str):
                 _post_slack(_hdr + f':warning: Auto-send failed (`{str(_se)[:150]}`) '
                             '-- draft left in Gmail. Review and send.')
         else:
-            _why = ('SOFOM_AUTO_SEND=0' if not _auto else
+            _why = ('external sends need your approval' if not _auto else
                     'a day returned 0 rows' if not _complete else
                     'draft id not found in gmail_tool output')
             log.warning(f'SOFOM auto-send skipped: {_why}')
@@ -624,6 +671,7 @@ def run_mx_bb():
     skills_dir  = os.path.dirname(os.path.abspath(__file__))
 
     log.info(f"run_mx_bb: building MX SOFOM BB for {yesterday} (direct pipeline)")
+    _check_tape_ready(yesterday)
     _post_slack(f":flag-mx: Running scheduled *MX Borrowing Base* for {yesterday}...")
 
     def _run(cmd, step, timeout=600):
@@ -827,6 +875,7 @@ def run_nb_bb(as_of=None, variant='weekly', cico_msg=None):
     NB_REPORTING_FOLDER = '17Eji0ZgVcaAZcdoPDKNNJaClN8PKuTLW'
 
     log.info(f"run_nb_bb: building NB BB as of {yesterday}")
+    _check_tape_ready(yesterday)
     _post_slack(f":bank: Running scheduled *{_label}* as of {yesterday}...")
 
     def _run(cmd, step, timeout=900):

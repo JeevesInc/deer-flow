@@ -135,6 +135,25 @@ def cmd_lookup(email):
     print(f'  Email:        {email}')
 
 
+def _policy_check(clients, channel_id, context):
+    """Outbound policy (Brian, 2026-11-02): refuse any Slack post that reaches a non-Jeeves party.
+    Tries each client in turn only to *verify* the conversation; fails closed."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '_shared'))
+    from outbound_policy import assert_slack_conversation_internal, ExternalSendBlocked
+    last = None
+    uc = _get_client()  # user token: users:read for member checks
+    for c in clients:
+        try:
+            assert_slack_conversation_internal(c, channel_id, context, user_client=uc)
+            return
+        except ExternalSendBlocked as e:
+            last = e
+            if 'could not verify' not in str(e) and 'could not list' not in str(e):
+                break
+    print(f"ERROR: {last}", file=sys.stderr)
+    sys.exit(2)
+
+
 def cmd_send(recipient, message, thread_ts=None):
     """Send a DM via the bot identity. Recipient can be a Slack user_id (UXXX/WXXX) or an email.
 
@@ -186,6 +205,8 @@ def cmd_send(recipient, message, thread_ts=None):
         except Exception as e:
             print(f"ERROR: couldn't open DM with {user_id} ({recipient_name}): {e}", file=sys.stderr)
             sys.exit(1)
+
+    _policy_check([bot, _get_client()], channel_id, f"slack_tool send {recipient}")
 
     # Send.
     try:
@@ -267,6 +288,7 @@ def cmd_upload(channel, paths, comment, as_owner=False):
             sys.exit(1)
         uploads.append({'file': p, 'title': os.path.basename(p)})
     client = _get_client() if as_owner else _get_bot_client()
+    _policy_check([client, _get_bot_client()], channel, 'slack_tool upload')
     try:
         resp = client.files_upload_v2(file_uploads=uploads, channel=channel,
                                       initial_comment=comment)
@@ -438,6 +460,7 @@ def cmd_send_as_owner(channel, message, thread_ts=None, from_proposal=None):
         print("ERROR: --channel (target conversation id) is required.", file=sys.stderr)
         sys.exit(1)
     user = _get_client()  # user token → posts as Brian
+    _policy_check([user, _get_bot_client()], channel, 'slack_tool send-as-owner')
     kwargs = {'channel': channel, 'text': message, 'unfurl_links': False, 'unfurl_media': False}
     if thread_ts:
         kwargs['thread_ts'] = thread_ts

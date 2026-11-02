@@ -816,6 +816,19 @@ def _truncate_oversized_tool_output(
     return f"{head}{notice}\n\n--- tail ---\n{tail}"
 
 
+_DIRECT_EMAIL_SEND_RE = re.compile(r"(messages|drafts)\(\)\s*\.\s*send\s*\(|\bsmtplib\b|\bsendmail\b")
+
+
+def _reject_direct_email_send(text: str | None) -> None:
+    """Outbound policy (Brian, 2026-11-02): the agent never sends email itself.
+    External mail is a Gmail draft Brian sends; this blocks hand-rolled send scripts."""
+    if text and _DIRECT_EMAIL_SEND_RE.search(text):
+        raise SandboxError(
+            "Blocked by outbound policy: code that sends email directly is not allowed. "
+            "Create a Gmail draft with gmail_tool.py (draft / draft-new) and give Brian the link and the exact text."
+        )
+
+
 @tool("bash", parse_docstring=True)
 def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, command: str) -> str:
     """Execute a bash command in a Linux environment.
@@ -836,6 +849,7 @@ def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, com
         sandbox = ensure_sandbox_initialized(runtime)
         ensure_thread_directories_exist(runtime)
         thread_data = get_thread_data(runtime)
+        _reject_direct_email_send(command)
         if is_local_sandbox(runtime):
             validate_local_bash_command_paths(command, thread_data)
             command = replace_virtual_paths_in_command(command, thread_data)
@@ -967,6 +981,7 @@ def write_file_tool(
             thread_data = get_thread_data(runtime)
             validate_local_tool_path(path, thread_data)
             path = _resolve_and_validate_user_data_path(path, thread_data)
+        _reject_direct_email_send(content)
         sandbox.write_file(path, content, append)
         return "OK"
     except SandboxError as e:
@@ -1013,6 +1028,7 @@ def str_replace_tool(
             return "OK"
         if old_str not in content:
             return f"Error: String to replace not found in file: {requested_path}"
+        _reject_direct_email_send(new_str)
         if replace_all:
             content = content.replace(old_str, new_str)
         else:

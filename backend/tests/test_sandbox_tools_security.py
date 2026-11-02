@@ -5,6 +5,7 @@ import pytest
 
 from deerflow.sandbox.tools import (
     VIRTUAL_PATH_PREFIX,
+    _build_path_env_exports,
     _is_acp_workspace_path,
     _is_skills_path,
     _reject_path_traversal,
@@ -23,6 +24,19 @@ _THREAD_DATA = {
     "uploads_path": "/tmp/deer-flow/threads/t1/user-data/uploads",
     "outputs_path": "/tmp/deer-flow/threads/t1/user-data/outputs",
 }
+
+
+# ---------- _build_path_env_exports ----------
+
+
+def test_build_path_env_exports_disables_interactive_git_auth() -> None:
+    exports = _build_path_env_exports(_THREAD_DATA)
+    assert 'export GIT_TERMINAL_PROMPT="0"' in exports
+    assert 'export GCM_INTERACTIVE="never"' in exports
+
+
+def test_build_path_env_exports_none_thread_data_is_empty() -> None:
+    assert _build_path_env_exports(None) == ""
 
 
 # ---------- replace_virtual_path ----------

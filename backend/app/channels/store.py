@@ -56,12 +56,13 @@ class ChannelStore:
     def _save(self) -> None:
         fd = tempfile.NamedTemporaryFile(
             mode="w",
+            encoding="utf-8",
             dir=self._path.parent,
             suffix=".tmp",
             delete=False,
         )
         try:
-            json.dump(self._data, fd, indent=2)
+            json.dump(self._data, fd, indent=2, ensure_ascii=False)
             fd.close()
             Path(fd.name).replace(self._path)
         except BaseException:

@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+"""Dossier auto-briefing cron: checks upcoming calendar events and posts
+pre-meeting dossier briefings to Slack ~15 minutes before each meeting.
+
+Runs as a background process alongside LangGraph + Gateway.
+
+Env vars required:
+  - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+  - SLACK_BOT_TOKEN (xoxb-... for posting DMs)
+  - SLACK_USER_TOKEN (xoxp-... for searching messages)
+  - SLACK_OWNER_USER_ID (the user's Slack ID for DM delivery)
+  - ANTHROPIC_API_KEY (for synthesis calls)
+
+Optional:
+  - DOSSIER_CRON_INTERVAL (seconds between checks, default: 600)
+  - DOSSIER_PATH (override dossier storage dir)
+"""
+
+import json
+import logging
+import os
+import sys
+import tempfile
+import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta, timezone
+
+# Load .env before anything else (belt-and-suspenders: uv run loads it too,
+# but subprocess invocations don't inherit the env automatically)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from env_loader import load_env
+load_env()
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[DossierCron %(asctime)s] %(message)s',
+    datefmt='%H:%M:%S',
+)
+log = logging.getLogger('dossier_cron')
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+CHECK_INTERVAL = int(os.environ.get('DOSSIER_CRON_INTERVAL', '600'))  # 10 min
+LOOKAHEAD_MIN = 15  # Look for events starting in 15-25 min
+LOOKAHEAD_MAX = 25
+MY_EMAIL = os.environ.get('GOOGLE_CALENDAR_EMAIL', 'brian.mauck@tryjeeves.com')
+SYNTHESIS_MODEL = os.environ.get('DOSSIER_SYNTHESIS_MODEL', 'claude-opus-5-5')
+SYNTHESIS_MAX_RETRIES = 3
+ALERT_FAILURE_THRESHOLD = 3  # consecutive failures before alerting
+
+# Track consecutive failures for alerting
+_consecutive_failures = 0
+
+
+def _state_path():
+    base = os.environ.get('DOSSIER_PATH', '')
+    if not base:
+        backend = Path(__file__).resolve().parent.parent.parent.parent / 'backend' / '.deer-flow' / 'dossiers'
+        base = str(backend)
+    os.makedirs(base, exist_ok=True)
+    return os.path.join(base, '_cron_state.json')
+
+
+def _dossier_dir():
+    base = os.environ.get('DOSSIER_PATH', '')
+    if not base:
+        backend = Path(__file__).resolve().parent.parent.parent.parent / 'backend' / '.deer-flow' / 'dossiers'
+        base = str(backend)
+    os.makedirs(base, exist_ok=True)
+    return base
+
+
+def _dossier_path(email):
+    safe = email.replace('@', '_at_').replace('.', '_')
+    return os.path.join(_dossier_dir(), f'{safe}.json')
+
+
+# ---------------------------------------------------------------------------
+# State management
+# ---------------------------------------------------------------------------
+
+def load_state():
+    path = _state_path()
+    if os.path.exists(path):
+        with open(path, 'r') as f:
+            return json.load(f)
+    return {"prepped_events": {}, "last_check": None}
+
+
+def _atomic_json_write(path, data):
+    """Write JSON atomically: write to temp file then rename."""
+    dir_name = os.path.dirname(path)
+    fd, tmp_path = tempfile.mkstemp(suffix='.tmp', dir=dir_name)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, default=str)
+        os.replace(tmp_path, path)
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def save_state(state):
+    state['last_check'] = datetime.now().isoformat()
+    # Clean entries older than 24 hours
+    cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+    state['prepped_events'] = {
+        k: v for k, v in state.get('prepped_events', {}).items()
+        if v > cutoff
+    }
+    _atomic_json_write(_state_path(), state)
+
+
+# ---------------------------------------------------------------------------
+# Google Calendar
+# ---------------------------------------------------------------------------
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '_shared'))
+from google_auth import get_credentials as _get_google_creds_required
+
+
+def _get_google_creds():
+    return _get_google_creds_required(required=False)
+
+
+def get_upcoming_events():
+    """Find events starting in LOOKAHEAD_MIN to LOOKAHEAD_MAX minutes."""
+    creds = _get_google_creds()
+    if not creds:
+        log.warning("Google creds not configured, skipping.")
+        return []
+    from googleapiclient.discovery import build
+    service = build('calendar', 'v3', credentials=creds)
+
+    now = datetime.now(timezone.utc)
+    time_min = (now + timedelta(minutes=LOOKAHEAD_MIN)).isoformat()
+    time_max = (now + timedelta(minutes=LOOKAHEAD_MAX)).isoformat()
+
+    result = service.events().list(
+        calendarId='primary',
+        timeMin=time_min,
+        timeMax=time_max,
+        singleEvents=True,
+        orderBy='startTime',
+        maxResults=10,
+    ).execute()
+
+    return result.get('items', [])
+
+
+# ---------------------------------------------------------------------------
+# Data gathering (reuses dossier_tool logic inline)
+# ---------------------------------------------------------------------------
+
+def gather_for_contact(email, days=14):
+    """Lightweight gather — runs dossier_tool.py as subprocess."""
+    import subprocess
+    tool_path = os.path.join(os.path.dirname(__file__), 'dossier_tool.py')
+    try:
+        result = subprocess.run(
+            [sys.executable, tool_path, 'gather', email, '--days', str(days)],
+            capture_output=True, text=True, timeout=120,
+            env={**os.environ},
+        )
+        output = result.stdout
+        # Extract JSON from output (skip the summary lines)
+        json_start = output.find('{')
+        if json_start >= 0:
+            return json.loads(output[json_start:])
+    except Exception as e:
+        log.error(f"Gather failed for {email}: {e}")
+    return None
+
+
+def read_existing_dossier(email):
+    """Read existing dossier JSON if it exists."""
+    path = _dossier_path(email)
+    if os.path.exists(path):
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return None
+
+
+def save_dossier(email, data):
+    """Save dossier JSON atomically."""
+    data['email'] = email
+    data['last_updated'] = datetime.now().isoformat()
+    path = _dossier_path(email)
+    _atomic_json_write(path, data)
+    log.info(f"Saved dossier for {email}")
+
+
+# ---------------------------------------------------------------------------
+# Synthesis via Anthropic API
+# ---------------------------------------------------------------------------
+
+SYNTHESIS_PROMPT = """You are a relationship analyst creating a contact dossier briefing for Brian Mauck (brian.mauck@tryjeeves.com) at Jeeves Financial Technology. All dossiers are from Brian's perspective — "you" = Brian, the contact = the other person.
+
+Given the raw interaction data and any existing dossier, produce an UPDATED dossier JSON.
+
+Rules:
+- NEVER fabricate interactions — only cite what's in the gathered data
+- Preserve existing coaching notes — append new ones
+- Keep recent_interactions to last 10 entries
+- If gathered data is empty for a source, skip it
+- MERGE with existing dossier — don't replace
+- health_score default: 6 if insufficient data
+- Be conservative with scores
+
+Output ONLY valid JSON matching this schema:
+{
+  "email": "...",
+  "name": "...",
+  "last_updated": "...",
+  "relationship": {"health_score": 1-10, "trend": "improving|stable|cooling", "summary": "..."},
+  "communication_style": {"observations": ["..."], "formality_trend": "..."},
+  "recent_interactions": [{"date": "...", "type": "...", "source": "...", "summary": "...", "sentiment": "...", "key_topics": ["..."], "action_items": ["..."]}],
+  "coaching_notes": [{"date": "...", "note": "...", "suggestion": "...", "category": "..."}],
+  "open_threads": [{"topic": "...", "last_mentioned": "...", "status": "...", "context": "..."}],
+  "meeting_frequency": {"meetings_30d": N, "cadence": "...", "last_meeting": "..."}
+}"""
+
+
+def build_synthesis_user_msg(email, gathered_data, existing_dossier, honcho_read=None):
+    """Assemble the synthesis input (pure, testable). The Honcho dialectic
+    read (H3) — when available — feeds relationship state into the dossier,
+    making the dossier the projection of the Honcho representation rather
+    than a parallel silo."""
+    user_msg = f"Contact email: {email}\n\n"
+    user_msg += f"## Raw gathered data (last {gathered_data.get('days_back', 30)} days):\n"
+    user_msg += json.dumps(gathered_data, indent=2, default=str)[:15000]  # Limit size
+
+    if honcho_read:
+        user_msg += (
+            "\n\n## Relationship read from the Honcho dialectic "
+            "(theory-of-mind model over the FULL interaction history, not just the window above):\n"
+            f"{honcho_read[:4000]}\n"
+            "Use this to inform relationship.health_score/trend, communication_style, "
+            "and open_threads. Where it conflicts with the raw gathered data above, "
+            "prefer the raw data — and never copy a claim the gathered data contradicts."
+        )
+
+    if existing_dossier:
+        user_msg += f"\n\n## Existing dossier:\n"
+        user_msg += json.dumps(existing_dossier, indent=2, default=str)[:5000]
+    else:
+        user_msg += "\n\n## No existing dossier — create a new one."
+    return user_msg
+
+
+def synthesize_dossier(email, gathered_data, existing_dossier, honcho_read=None):
+    """Call Anthropic API to synthesize/update a dossier."""
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
+    if not api_key:
+        log.error("ANTHROPIC_API_KEY not set, cannot synthesize.")
+        return None
+
+    try:
+        import anthropic
+    except ImportError:
+        import subprocess
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'anthropic'])
+        import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    user_msg = build_synthesis_user_msg(email, gathered_data, existing_dossier, honcho_read)
+
+    for attempt in range(1, SYNTHESIS_MAX_RETRIES + 1):
+        try:
+            response = client.messages.create(
+                model=SYNTHESIS_MODEL,
+                max_tokens=8192,
+                system=SYNTHESIS_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            from llm import text_from_response  # _shared (sys.path at top) — ThinkingBlock-safe
+            text = text_from_response(response)
+            if response.stop_reason == "max_tokens":
+                log.warning(f"Synthesis hit max_tokens for {email} (attempt {attempt}) — JSON may be truncated")
+
+            # Extract JSON from response
+            json_start = text.find('{')
+            json_end = text.rfind('}') + 1
+            if json_start >= 0 and json_end > json_start:
+                candidate = text[json_start:json_end]
+                try:
+                    return json.loads(candidate)
+                except json.JSONDecodeError:
+                    # Best-effort repair for truncated/sloppy JSON (trailing commas,
+                    # unterminated objects). json_repair is forgiving where json is not.
+                    try:
+                        from json_repair import repair_json
+                        return json.loads(repair_json(candidate))
+                    except ImportError:
+                        import subprocess
+                        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'json_repair'])
+                        from json_repair import repair_json
+                        return json.loads(repair_json(candidate))
+            log.warning(f"Synthesis returned non-JSON for {email} (attempt {attempt})")
+        except Exception as e:
+            log.error(f"Synthesis failed for {email} (attempt {attempt}/{SYNTHESIS_MAX_RETRIES}): {e}")
+            if attempt < SYNTHESIS_MAX_RETRIES:
+                time.sleep(2 ** attempt)  # exponential backoff: 2s, 4s, 8s
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Slack DM posting
+# ---------------------------------------------------------------------------
+
+_honcho_modules = None  # (peer_card_tool, ona_tool) or False after a failed load
+
+
+def _load_honcho_modules():
+    """Lazily import the honcho-peers skill modules (peer_card_tool, ona_tool).
+    Cached; returns None if the skill is missing so callers fail open."""
+    global _honcho_modules
+    if _honcho_modules is not None:
+        return _honcho_modules or None
+    try:
+        import importlib.util
+        skill_dir = Path(__file__).resolve().parent.parent / 'honcho-peers'
+        mods = []
+        for name in ('peer_card_tool', 'ona_tool'):
+            spec = importlib.util.spec_from_file_location(f'{name}_dossier_prep', skill_dir / f'{name}.py')
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mods.append(mod)
+        _honcho_modules = tuple(mods)
+        return _honcho_modules
+    except Exception as e:
+        log.warning(f"honcho-peers modules unavailable, briefing will omit peer intel: {e}")
+        _honcho_modules = False
+        return None
+
+
+def _honcho_dossier_read(email):
+    """Dialectic relationship read for synthesis input (H3). Fail-open."""
+    mods = _load_honcho_modules()
+    if not mods:
+        return None
+    try:
+        return mods[0].peer_dossier_read(email)
+    except Exception as e:
+        log.warning(f"peer_dossier_read failed for {email}: {e}")
+        return None
+
+
+def gather_prep_extras(emails, max_attendees=4):
+    """Per-attendee Honcho theory-of-mind brief (H2) + warmest mutual
+    connections from the ONA graph (H5). Fail-open: any failure just means
+    the briefing posts without that section."""
+    extras = {}
+    mods = _load_honcho_modules()
+    if not mods:
+        return extras
+    pct, ona = mods
+    for email in list(emails)[:max_attendees]:
+        brief, mutuals = None, []
+        try:
+            brief = pct.peer_brief(email)
+        except Exception as e:
+            log.warning(f"peer_brief failed for {email}: {e}")
+        try:
+            mutuals = ona.warmest_mutuals(MY_EMAIL, email, limit=2)
+        except Exception as e:
+            log.warning(f"warmest_mutuals failed for {email}: {e}")
+        if brief or mutuals:
+            extras[email] = {'brief': brief, 'mutuals': mutuals}
+    return extras
+
+
+# Brian 2026-08-20: "The pre meeting prep messages are too long and I never
+# read them." The push is now ONE plain message, one line per attendee, and is
+# SUPPRESSED ENTIRELY when no attendee has an open thread. Everything that used
+# to be pushed (relationship summary, coaching notes, Honcho theory-of-mind
+# brief, warm mutuals) still lives in the dossier JSON and is served on demand
+# when Brian replies "more" in the DM thread.
+MAX_ATTENDEE_LINES = 5
+OPEN_STATUSES = ('pending', 'open', 'blocked', 'waiting', 'in_progress')
+
+
+def format_prep_extras(ex):
+    """Render one attendee's prep extras as mrkdwn lines (pure, testable).
+
+    No longer used in the push message; retained for the on-demand "more"
+    expansion and for existing tests.
+    """
+    parts = []
+    if ex.get('brief'):
+        parts.append(f"\n:brain: *Read on them:* {ex['brief'][:800]}")
+    mutuals = ex.get('mutuals') or []
+    if mutuals:
+        names = ', '.join(m.get('email', '?') for m in mutuals)
+        parts.append(f"\n:handshake: *Warm mutual connections:* {names}")
+    return ''.join(parts)
+
+
+def attendee_line(name, dossier):
+    """One compact line for one attendee. Returns (line, has_open_thread)."""
+    rel = dossier.get('relationship', {}) or {}
+    health = rel.get('health_score', '?')
+    trend = (rel.get('trend') or '').strip()
+    bits = f"{health}/10"
+    if trend and trend != '?':
+        bits += f" {trend}"
+
+    threads = [t for t in (dossier.get('open_threads') or [])
+               if str(t.get('status', '')).lower() in OPEN_STATUSES]
+    if not threads:
+        return f"\u2022 {name} \u2014 {bits}", False
+
+    topic = str(threads[0].get('topic', '') or '').strip()[:70]
+    extra = f" \u00b7 open: {topic}"
+    if len(threads) > 1:
+        extra += f" (+{len(threads) - 1})"
+    return f"\u2022 {name} \u2014 {bits}{extra}", True
+
+
+def build_briefing_text(event, dossiers):
+    """Compact briefing text, or None when the briefing should be suppressed."""
+    summary = (event.get('summary') or 'Meeting')[:60]
+    start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', '')) or ''
+    when = start[11:16] if len(start) >= 16 else start
+
+    scored = []
+    for email, dossier in dossiers.items():
+        if not dossier:
+            continue
+        line, has_open = attendee_line(dossier.get('name') or email, dossier)
+        scored.append((0 if has_open else 1, line, has_open))
+
+    if not scored or not any(s[2] for s in scored):
+        return None
+
+    scored.sort(key=lambda s: s[0])
+    lines = [s[1] for s in scored]
+    shown = lines[:MAX_ATTENDEE_LINES]
+    if len(lines) > MAX_ATTENDEE_LINES:
+        shown.append(f"\u2022 +{len(lines) - MAX_ATTENDEE_LINES} others")
+
+    head = f"Mtg prep \u00b7 {summary}"
+    if when:
+        head += f" \u00b7 {when}"
+    return "\n".join([head] + shown + ['reply "more" for full dossiers'])
+
+
+def post_briefing(event, dossiers, prep_extras=None):
+    """Post a compact pre-meeting briefing to Slack DM.
+
+    Returns True when posted OR deliberately suppressed (nothing open) \u2014
+    suppression must not count toward ALERT_FAILURE_THRESHOLD.
+    """
+    text = build_briefing_text(event, dossiers)
+    if text is None:
+        log.info(f"Briefing suppressed (no open threads): {event.get('summary', '')}")
+        return True
+
+    bot_token = os.environ.get('SLACK_BOT_TOKEN')
+    owner_id = os.environ.get('SLACK_OWNER_USER_ID')
+
+    if not bot_token or not owner_id:
+        log.warning("SLACK_BOT_TOKEN or SLACK_OWNER_USER_ID not set, skipping Slack post.")
+        return False
+
+    try:
+        from slack_sdk import WebClient
+    except ImportError:
+        import subprocess
+        subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'slack_sdk'])
+        from slack_sdk import WebClient
+
+    client = WebClient(token=bot_token)
+
+    try:
+        dm = client.conversations_open(users=[owner_id])
+        channel_id = dm['channel']['id']
+
+        client.chat_postMessage(channel=channel_id, text=text)
+        log.info(f"Posted briefing ({len(text)} chars) for: {event.get('summary', '')}")
+        return True
+    except Exception as e:
+        log.error(f"Slack post failed: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+def _post_alert(message):
+    """Post an error alert to Slack DM (best-effort)."""
+    bot_token = os.environ.get('SLACK_BOT_TOKEN')
+    owner_id = os.environ.get('SLACK_OWNER_USER_ID')
+    if not bot_token or not owner_id:
+        return
+    try:
+        from slack_sdk import WebClient
+        client = WebClient(token=bot_token)
+        dm = client.conversations_open(users=[owner_id])
+        channel_id = dm['channel']['id']
+        client.chat_postMessage(
+            channel=channel_id,
+            text=f":warning: *Dossier Cron Alert*\n{message}",
+        )
+    except Exception as e:
+        log.error(f"Failed to post alert: {e}")
+
+
+def process_event(event, state):
+    """Process one upcoming event: gather, synthesize, post briefing."""
+    global _consecutive_failures
+    event_id = event.get('id', '')
+    summary = event.get('summary', '(No title)')
+
+    if event_id in state.get('prepped_events', {}):
+        return  # Already prepped
+
+    attendees = event.get('attendees', [])
+    external = [a for a in attendees if not a.get('self') and a.get('email', '') != MY_EMAIL]
+
+    if not external:
+        return  # No one to prep for
+
+    log.info(f"Prepping for: {summary} ({len(external)} attendee(s))")
+
+    # Gather data for all attendees in parallel
+    emails = [a.get('email', '') for a in external if a.get('email')]
+    gather_results = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(gather_for_contact, email, 14): email for email in emails}
+        for future in as_completed(futures):
+            email = futures[future]
+            try:
+                gather_results[email] = future.result()
+            except Exception as e:
+                log.error(f"Gather failed for {email}: {e}")
+                gather_results[email] = None
+
+    def synthesize_one(email):
+        gathered = gather_results.get(email)
+        existing = read_existing_dossier(email)
+
+        if gathered:
+            honcho_read = _honcho_dossier_read(email)
+            updated = synthesize_dossier(email, gathered, existing, honcho_read)
+            if updated:
+                save_dossier(email, updated)
+                return updated
+        return existing
+
+    # Synthesis parallelized like the gather step above — sequential Claude
+    # calls (each with up to 3 retries) made a 19-attendee meeting's briefing
+    # land 46 minutes after the meeting started (2026-07-06 incident).
+    dossiers = {}
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(synthesize_one, email): email for email in emails}
+        for future in as_completed(futures):
+            email = futures[future]
+            try:
+                result = future.result()
+                if result:
+                    dossiers[email] = result
+            except Exception as e:
+                log.error(f"Synthesis failed for {email}: {e}")
+
+    if dossiers:
+        # H2/H5: Honcho theory-of-mind brief + ONA warm mutuals per attendee.
+        prep_extras = gather_prep_extras(list(dossiers.keys()))
+        success = post_briefing(event, dossiers, prep_extras)
+        if success:
+            _consecutive_failures = 0
+        else:
+            _consecutive_failures += 1
+    else:
+        _consecutive_failures += 1
+
+    if _consecutive_failures >= ALERT_FAILURE_THRESHOLD:
+        _post_alert(
+            f"Dossier cron has failed {_consecutive_failures} consecutive times. "
+            f"Last event: {summary}. Check gateway logs."
+        )
+        _consecutive_failures = 0  # reset after alerting
+
+    # Mark as prepped
+    state.setdefault('prepped_events', {})[event_id] = datetime.now().isoformat()
+
+
+def run_loop():
+    """Main cron loop."""
+    log.info(f"Dossier cron started. Checking every {CHECK_INTERVAL}s.")
+    log.info(f"Looking for events {LOOKAHEAD_MIN}-{LOOKAHEAD_MAX} min ahead.")
+
+    while True:
+        try:
+            state = load_state()
+            events = get_upcoming_events()
+
+            if events:
+                log.info(f"Found {len(events)} upcoming event(s) in window.")
+                for event in events:
+                    try:
+                        process_event(event, state)
+                    except Exception as e:
+                        log.error(f"Error processing event: {e}")
+                        traceback.print_exc()
+
+            save_state(state)
+
+        except Exception as e:
+            log.error(f"Cron loop error: {e}")
+            traceback.print_exc()
+
+        time.sleep(CHECK_INTERVAL)
+
+
+if __name__ == '__main__':
+    # Ensure UTF-8
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+    run_loop()

@@ -1,0 +1,284 @@
+"""Supervised background cron runner for the gateway process.
+
+Runs cron jobs (like dossier_cron) as daemon threads that auto-restart
+on crash. Starts/stops with the gateway lifecycle -- no separate process
+management needed.
+
+Crash alerting: on first crash (and again at each backoff doubling),
+posts a Slack DM to the owner so silent failures are visible.
+"""
+
+import importlib.util
+import logging
+import os
+import threading
+import time
+import traceback
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+_INITIAL_RESTART_DELAY = 5
+_MAX_RESTART_DELAY = 300
+_RESET_AFTER = 600
+
+
+def _slack_alert(text: str) -> None:
+    """Post a DM to the owner. Best-effort -- never raises.
+
+    Canonical implementation in skills/custom/_shared/slack.py (P2-4);
+    guarded import so a broken skills tree can't take the supervisor down.
+    """
+    try:
+        import sys
+        shared = str(Path(__file__).resolve().parent.parent.parent.parent / "skills" / "custom" / "_shared")
+        if shared not in sys.path:
+            sys.path.insert(0, shared)
+        from notify import dm_owner
+        dm_owner(text)
+    except Exception as e:
+        logger.warning("[CronSupervisor] Slack alert failed: %s", e)
+
+
+class CronSupervisor:
+    """Supervises a blocking cron function in a daemon thread with auto-restart."""
+
+    def __init__(self, name: str, target: callable, startup_delay: float = 0.0):
+        self.name = name
+        self._target = target
+        self._startup_delay = startup_delay
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._restart_delay = _INITIAL_RESTART_DELAY
+        self._crash_count = 0
+        # Observability (read by app/gateway/metrics.py):
+        self.crash_count = 0          # public mirror of _crash_count
+        self.exited = False           # run_loop returned — abnormal, not running
+        self.last_heartbeat = 0.0     # wall-clock ts: target (re)start or record_heartbeat()
+
+    @property
+    def running(self) -> bool:
+        return bool(self._thread and self._thread.is_alive() and not self.exited)
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            logger.warning("[CronSupervisor] %s is already running", self.name)
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._supervised_loop,
+            name="cron-" + self.name,
+            daemon=True,
+        )
+        self._thread.start()
+        logger.info("[CronSupervisor] %s started", self.name)
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=5)
+            logger.info("[CronSupervisor] %s stopped", self.name)
+
+    def _supervised_loop(self) -> None:
+        # Staggered startup: every cron used to fire its first iteration the
+        # instant the gateway started, so ~15 crons (Redshift, Anthropic Vision,
+        # mem0 derivation) hammered at once and starved the async /health probe
+        # on startup → the supervisor SIGKILLed a healthy-but-busy gateway →
+        # restart → same thundering herd (the 2026-06-16 flap). Spread the first
+        # runs out (interruptible so stop() is still responsive).
+        if self._startup_delay > 0 and self._stop_event.wait(timeout=self._startup_delay):
+            return
+        while not self._stop_event.is_set():
+            started_at = time.monotonic()
+            try:
+                logger.info("[CronSupervisor] %s starting", self.name)
+                self.last_heartbeat = time.time()
+                self._target()
+                # run_loop returned. Cron run_loops are `while True` — a return is
+                # ABNORMAL (e.g. bot_dm_history returned on one failed auth_test,
+                # silently disabling itself). Do NOT restart (a returning loop
+                # usually returns again immediately) and do NOT claim "recovered".
+                # Mark it not-running and alert loudly; the gateway must restart
+                # to relaunch it.
+                self.exited = True
+                logger.error("[CronSupervisor] %s exited (run_loop returned) — NOT running", self.name)
+                _slack_alert(
+                    ":warning: *Cron exited: `" + self.name + "`* — run_loop returned, so it is "
+                    + "*not running*. It will not restart on its own; fix the cause and restart the gateway."
+                )
+                break
+            except Exception:
+                self._crash_count += 1
+                self.crash_count = self._crash_count
+                elapsed = time.monotonic() - started_at
+                if elapsed > _RESET_AFTER:
+                    self._restart_delay = _INITIAL_RESTART_DELAY
+
+                tb = traceback.format_exc()
+                logger.exception(
+                    "[CronSupervisor] %s crashed (attempt %d), restarting in %ds",
+                    self.name, self._crash_count, self._restart_delay,
+                )
+
+                # Alert on first crash, then at each power-of-two to avoid spam
+                should_alert = (
+                    self._crash_count == 1
+                    or (self._crash_count & (self._crash_count - 1) == 0)
+                )
+                if should_alert:
+                    last_lines = chr(10).join(tb.strip().splitlines()[-6:])
+                    _slack_alert(
+                        ":rotating_light: *Cron crashed: `" + self.name + "`* "
+                        + "(attempt #" + str(self._crash_count) + ", retry in "
+                        + str(self._restart_delay) + "s)" + chr(10)
+                        + "```" + last_lines + "```"
+                    )
+
+                if self._stop_event.wait(timeout=self._restart_delay):
+                    break
+
+                self._restart_delay = min(self._restart_delay * 2, _MAX_RESTART_DELAY)
+
+
+_supervisors: list[CronSupervisor] = []
+
+
+def record_heartbeat(name: str) -> None:
+    """Record a liveness heartbeat for a cron by name (best-effort, never raises).
+
+    The supervisor only observes crashes and clean exits — a cron whose inner
+    loop hangs on a network call, or catches-and-logs forever, stays 'alive' and
+    is otherwise invisible (GW-F4). Crons that call this once per iteration get a
+    true `deerflow_cron_last_heartbeat_ts` gauge, so a Grafana staleness alert
+    ("heartbeat older than 2x the expected interval") can catch die-in-place.
+    Adoption is incremental; without it the gauge reflects the last (re)start.
+    """
+    try:
+        now = time.time()
+        for sv in _supervisors:
+            if sv.name == name:
+                sv.last_heartbeat = now
+                return
+    except Exception:
+        pass
+
+# Seconds between each cron's first run, to avoid a thundering-herd startup
+# burst that starves the gateway's /health probe (see _supervised_loop).
+_STAGGER_SECONDS = 8.0
+_stagger_index = 0
+
+
+def _load_and_start(name: str, script_path: Path) -> None:
+    global _stagger_index
+    if not script_path.exists():
+        logger.info("[CronSupervisor] %s not found at %s, skipping", name, script_path)
+        return
+    try:
+        spec = importlib.util.spec_from_file_location(name, str(script_path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sv = CronSupervisor(name, mod.run_loop, startup_delay=_stagger_index * _STAGGER_SECONDS)
+        _stagger_index += 1
+        _supervisors.append(sv)
+        sv.start()
+    except Exception:
+        tb = traceback.format_exc()
+        logger.exception("[CronSupervisor] Failed to load %s", name)
+        last_lines = chr(10).join(tb.strip().splitlines()[-6:])
+        _slack_alert(
+            ":rotating_light: *Cron failed to load: `" + name + "`*" + chr(10)
+            + "Path: `" + str(script_path) + "`" + chr(10)
+            + "```" + last_lines + "```" + chr(10)
+            + "This cron is *not running*. Fix the script and restart the gateway."
+        )
+
+
+def start_crons() -> None:
+    """Start all configured cron jobs. Called from gateway lifespan."""
+    skills_dir = Path(__file__).resolve().parent.parent.parent.parent / "skills" / "custom"
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+
+    _load_and_start("dossier-cron", skills_dir / "jeeves-dossier" / "dossier_cron.py")
+    _load_and_start("analytics-cron", skills_dir / "jeeves-analytics" / "analytics_cron.py")
+    # email-monitor disabled 2026-05-20 -- replaced by webhook_receiver.py
+    # _load_and_start("email-monitor", skills_dir / "gmail" / "email_monitor_cron.py")
+    _load_and_start("report-scheduler", skills_dir / "jeeves-borrowing-base" / "report_scheduler_cron.py")
+    _load_and_start("knowledge-crawler", skills_dir / "knowledge-crawler" / "knowledge_cron.py")
+    _load_and_start("revenue-comp", skills_dir / "jeeves-analytics" / "revenue_comp_cron.py")
+    _load_and_start("state-backup", backend_dir / "scripts" / "backup_state.py")
+    # Runs at 03:30, after dreams (~02:00) and the 03:00 backup, so the day's
+    # self-edits are settled before they are committed.
+    _load_and_start("selfedit-commit", backend_dir / "scripts" / "selfedit_commit_cron.py")
+    _load_and_start("checkpoint-cleanup", backend_dir / "scripts" / "checkpoint_cleanup_cron.py")
+    _load_and_start("idle-thread-cleanup", backend_dir / "scripts" / "idle_thread_cleanup_cron.py")
+    _load_and_start("slack-dm-monitor", skills_dir / "slack-search" / "slack_dm_monitor_cron.py")
+    # owner-slack-draft: drafts replies to DMs BRIAN receives (user token) and posts
+    # them to the approval queue channel. 30-min settle + skip-if-replied keep it quiet.
+    _load_and_start("owner-slack-draft", skills_dir / "slack-search" / "owner_slack_draft_cron.py")
+    _load_and_start("bot-dm-history", backend_dir / "scripts" / "bot_dm_history_cron.py")
+    _load_and_start("cap-markets-refresh", backend_dir / "scripts" / "cap_markets_metrics_refresh.py")
+    _load_and_start("cico-cash", backend_dir / "scripts" / "cico_cash_extract.py")
+    # cash-planner-refresh retired 2026-10-27 (Brian): Cash Planner is retired; One Plan calls the CICO challenger itself.
+    _load_and_start("diligence-registry", skills_dir / "jeeves-diligence" / "diligence_registry_cron.py")
+    _load_and_start("dreams-cron", skills_dir / "gmail" / "dreams_cron.py")
+    _load_and_start("eod-review", skills_dir / "gmail" / "eod_review_cron.py")
+    _load_and_start("weekly-open-items", skills_dir / "gmail" / "weekly_open_items_cron.py")
+    # nb-monthly-reporting: fires the 14th of each month. Chases the prior
+    # month's Sec 6.01(c) financials from Accounting (drafts, never sends) and
+    # restates the Sec 6.02(b)(y)/(f) month-end BBC + cash report deadline.
+    # Moved out of gmail/ 2026-09-14: it drafts an e-mail, but it is a monthly
+    # servicer-reporting obligation, not a mail utility.
+    _load_and_start("nb-monthly-reporting", skills_dir / "jeeves-servicer-report" / "nb_monthly_reporting_cron.py")
+    _load_and_start("latent-learning", skills_dir / "latent-learning" / "latent_learning_cron.py")
+    # classifier-eval: weekly scoring of the email classifier against the golden
+    # set (skills/custom/jeeves-eval). Feeds the jeeves_eval_* gauges and the
+    # "Jeeves Agent Quality" dashboard. Every other cron here answers "is it
+    # running"; this one is the only one that answers "is it still any good".
+    # Silent unless a metric drops materially. EVAL_CRON_DISABLE=1 to idle.
+    _load_and_start("classifier-eval", skills_dir / "jeeves-eval" / "eval_cron.py")
+    _load_and_start("langgraph-pty-watchdog", backend_dir / "scripts" / "langgraph_pty_watchdog.py")
+    _load_and_start("honcho-sync", skills_dir / "honcho-peers" / "honcho_sync_cron.py")
+    # linear-mention-monitor: watches for Linear @mentions of Brian via Gmail
+    # notification emails and autonomously handles them (2026-07-08, Brian: "when
+    # I'm tagged I want you to handle it... automatic").
+    _load_and_start("linear-mention-monitor", skills_dir / "linear" / "linear_mention_cron.py")
+    # gmail-watch-renew: Gmail watch expires after 7 days; without renewal,
+    # Pub/Sub silently stops and inbound-email proposals die (33-day outage
+    # 2026-05-27 → 2026-06-30). Renews on startup + every 5 days.
+    _load_and_start("gmail-watch-renew", backend_dir / "scripts" / "gmail_watch_renew_cron.py")
+    # retention-janitor: prunes intel/scratch, rotates dispatch_audit, monthly
+    # VACUUM of checkpoints.db (P2-7 — .deer-flow only ever grew before this).
+    _load_and_start("retention-janitor", backend_dir / "scripts" / "retention_janitor_cron.py")
+    # ticket-watchdog: re-dispatches open Tickets with no progress for 4 business
+    # hours, then DMs Brian; never closes a Ticket (Super-Agent proposal Phase 1).
+    _load_and_start("ticket-watchdog", backend_dir / "scripts" / "ticket_watchdog_cron.py")
+    # GW-F8: the dispatch queue's drain thread only starts when something new
+    # is enqueued in THIS process — items persisted before a restart stranded
+    # until the 12h expiry deleted them silently. Kick the drain at boot.
+    try:
+        import sys
+        shared = str(skills_dir / "_shared")
+        if shared not in sys.path:
+            sys.path.insert(0, shared)
+        import dispatch_queue
+        dispatch_queue.ensure_drain_on_boot()
+    except Exception:
+        logger.exception("[CronSupervisor] dispatch-queue boot drain failed")
+
+    # cm-dashboard moved OUT of the gateway 2026-06-16. Loading it here called
+    # spec.loader.exec_module() on the Streamlit script, whose UNGUARDED module
+    # top level executed the full dashboard render + 3 synchronous Redshift
+    # queries (load_dq_history / load_roll_rate / load_nco_history) on the
+    # gateway's main thread at EVERY startup. Under slow Redshift/Zscaler that
+    # blocked /health past the supervisor's 60s readiness gate, so the
+    # supervisor kill/restart-looped the gateway (171 "unhealthy" events on
+    # 2026-06-16) and orphaned a Streamlit subprocess each cycle. The dashboard
+    # now runs as a supervised, log-isolated service launched from start.sh
+    # (start_dashboard), decoupled from the gateway lifecycle.
+    # _load_and_start("cm-dashboard", backend_dir / "scripts" / "cm_credit_health_app.py")
+
+
+def stop_crons() -> None:
+    for sv in _supervisors:
+        sv.stop()
+    _supervisors.clear()

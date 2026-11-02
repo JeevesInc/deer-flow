@@ -7,17 +7,56 @@ token_usage:
 
 # ── Models ─────────────────────────────────────────────────────────
 models:
-  - name: claude-sonnet
-    display_name: Claude Sonnet 4.6
+  # Opus 5.5 is the analyst's brain for ALL work: the lead agent, subagents
+  # (which inherit the parent model), and every null-model default resolved via
+  # models[0] (summarization / title / memory / mem0). Listed first so those
+  # defaults land on Opus 5.5. Verified 2026-09-23: claude-opus-5-5 exists on
+  # this key (released 2026-09-21), accepts {type: adaptive} and max_tokens
+  # 64000; {type: enabled, budget_tokens} is rejected with a 400 telling you
+  # to use adaptive + output_config.effort.
+  - name: claude-opus
+    display_name: Claude Opus 5.5
     use: langchain_anthropic:ChatAnthropic
-    model: claude-sonnet-4-6
+    model: claude-opus-5-5
     api_key: $ANTHROPIC_API_KEY
-    max_tokens: 8192
-    temperature: 0.0
+    fallback: claude-sonnet  # step down to Sonnet 5.5 only if Opus 5.5 errors
+    max_tokens: 64000
+    # 2026-10-07: a hung API call sat silent until the stuck-run monitor killed the run
+    # (thread d3878e0d, 13:18-13:28). Fail the attempt after 300s and retry instead.
+    default_request_timeout: 300
+    max_retries: 2
+    # Opus 5.5 is adaptive-thinking ONLY: {type: enabled,
+    # budget_tokens} 400s ("use thinking.type.adaptive"); sampling params
+    # (temperature/top_p/top_k) are also rejected. Same surface as Opus 4.8.
     supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: adaptive
 
-basic_model: claude-sonnet
-reasoning_model: claude-sonnet
+  # Retained ONLY as the resilience fallback if Opus 5.5 errors. No role points
+  # here directly — it is reached solely via claude-opus's fallback chain.
+  - name: claude-sonnet
+    display_name: Claude Sonnet 5.5
+    use: langchain_anthropic:ChatAnthropic
+    model: claude-sonnet-5-5   # 2026-09-30 Brian: Sonnet 5.5 replaces Sonnet 5 (verified on key, adaptive+effort OK)
+    api_key: $ANTHROPIC_API_KEY
+    fallback: claude-opus   # step back up to Opus 5.5 if Sonnet 5 fails
+    max_tokens: 64000
+    # 2026-10-07: a hung API call sat silent until the stuck-run monitor killed the run
+    # (thread d3878e0d, 13:18-13:28). Fail the attempt after 300s and retry instead.
+    default_request_timeout: 300
+    max_retries: 2
+    # Adaptive-thinking ONLY, same constraints as Opus 5.5.
+    supports_vision: true
+    supports_thinking: true
+    thinking:
+      type: adaptive
+
+# All roles run Opus 5.5 (claude-opus). Sonnet 5.5 (claude-sonnet) is the resilience
+# fallback only, reached via the fallback chain — never selected directly.
+basic_model: claude-opus
+reasoning_model: claude-opus
+coding_model: claude-opus
 
 # ── Tools ──────────────────────────────────────────────────────────
 tool_groups:
@@ -81,19 +120,31 @@ title:
   model_name: null
 
 # ── Summarization ──────────────────────────────────────────────────
+# DISABLED — Each Slack thread is its own focused conversation with
+# full context preserved in SQLite checkpoints. Claude's 200K context
+# window is large enough for even heavy threads. Cross-thread knowledge
+# is handled by the memory system (memory.json), not summarization.
+#
+# Short-term memory: summarize older messages to prevent token explosion.
+# Triggers at 80% of model max input OR 50 messages, keeps last 20 messages.
 summarization:
   enabled: true
-  model_name: null
   trigger:
-    - type: tokens
-      value: 15564
+    - type: fraction
+      value: 0.8
+    - type: messages
+      value: 200
   keep:
     type: messages
-    value: 10
-  trim_tokens_to_summarize: 15564
-  summary_prompt: null
+    value: 80
+  trim_tokens_to_summarize: 32000
 
 # ── Memory ─────────────────────────────────────────────────────────
+# ── Memory ─────────────────────────────────────────────────────────
+# Profile sections (workContext, personalContext, topOfMind, history)
+# are stored in memory.json. Long-term facts are in mem0 (semantic
+# vector search). max_facts and fact_confidence_threshold are legacy
+# fields kept for backward compat but no longer used.
 memory:
   enabled: true
   storage_path: memory.json
@@ -102,7 +153,7 @@ memory:
   max_facts: 100
   fact_confidence_threshold: 0.7
   injection_enabled: true
-  max_injection_tokens: 2000
+  max_injection_tokens: 1500
 
 # ── Checkpointer ──────────────────────────────────────────────────
 checkpointer:
@@ -117,7 +168,7 @@ channels:
   session:
     assistant_id: lead_agent
     config:
-      recursion_limit: 100
+      recursion_limit: 500
     context:
       thinking_enabled: true
       is_plan_mode: false

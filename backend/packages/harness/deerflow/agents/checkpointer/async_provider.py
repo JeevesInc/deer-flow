@@ -60,6 +60,10 @@ async def _async_checkpointer(config) -> AsyncIterator[Checkpointer]:
         if conn_str != ":memory:" and not conn_str.startswith("file:"):
             pathlib.Path(conn_str).parent.mkdir(parents=True, exist_ok=True)
         async with AsyncSqliteSaver.from_conn_string(conn_str) as saver:
+            # 2026-10-08: default 5s lock wait made runs die with
+            # 'database is locked' when a cron/janitor briefly held the write lock.
+            await saver.conn.execute("PRAGMA busy_timeout=30000")
+            await saver.conn.execute("PRAGMA journal_mode=WAL")
             await saver.setup()
             yield saver
         return

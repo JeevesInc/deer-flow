@@ -1,14 +1,14 @@
 """Middleware for injecting image details into conversation before LLM call."""
 
 import logging
-from typing import NotRequired, override
+from typing import Annotated, NotRequired, override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.runtime import Runtime
 
-from deerflow.agents.thread_state import ViewedImageData
+from deerflow.agents.thread_state import ViewedImageData, merge_viewed_images
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 class ViewImageMiddlewareState(AgentState):
     """Compatible with the `ThreadState` schema."""
 
-    viewed_images: NotRequired[dict[str, ViewedImageData] | None]
+    # Must carry the SAME reducer as ThreadState. A bare dict here overrides it in the
+    # merged graph schema, so two view_image calls in one step raised
+    # InvalidUpdateError ('Can receive only one value per step') and killed the run (2026-10-05).
+    viewed_images: NotRequired[Annotated[dict[str, ViewedImageData], merge_viewed_images]]
 
 
 class ViewImageMiddleware(AgentMiddleware[ViewImageMiddlewareState]):

@@ -1,71 +1,65 @@
-"""Memory updater for reading, writing, and updating memory data."""
+"""Memory updater — profile sections only.
+
+Facts are now handled by mem0 (see mem0_store.py).  This module only
+manages the slim memory.json profile: workContext, personalContext,
+topOfMind, and history summaries.
+"""
 
 import json
 import logging
 import re
-import uuid
-from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, Field, ValidationError
+
 from deerflow.agents.memory.prompt import (
-    MEMORY_UPDATE_PROMPT,
+    PROFILE_UPDATE_PROMPT,
     format_conversation_for_update,
 )
 from deerflow.agents.memory.storage import get_memory_storage
 from deerflow.config.memory_config import get_memory_config
 from deerflow.models import create_chat_model
+from deerflow.utils.text import extract_text as _extract_text
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models for LLM profile update responses
+# ---------------------------------------------------------------------------
+
+class SectionUpdate(BaseModel):
+    shouldUpdate: bool = False
+    summary: str = ""
+
+class UserUpdate(BaseModel):
+    workContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    personalContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    topOfMind: SectionUpdate = Field(default_factory=SectionUpdate)
+
+class HistoryUpdate(BaseModel):
+    recentMonths: SectionUpdate = Field(default_factory=SectionUpdate)
+    earlierContext: SectionUpdate = Field(default_factory=SectionUpdate)
+    longTermBackground: SectionUpdate = Field(default_factory=SectionUpdate)
+
+class ProfileUpdateResponse(BaseModel):
+    """Schema for the JSON the LLM returns when updating the profile."""
+    user: UserUpdate = Field(default_factory=UserUpdate)
+    history: HistoryUpdate = Field(default_factory=HistoryUpdate)
+
 
 logger = logging.getLogger(__name__)
+
 
 def get_memory_data(agent_name: str | None = None) -> dict[str, Any]:
     """Get the current memory data via storage provider."""
     return get_memory_storage().load(agent_name)
+
 
 def reload_memory_data(agent_name: str | None = None) -> dict[str, Any]:
     """Reload memory data via storage provider."""
     return get_memory_storage().reload(agent_name)
 
 
-def _extract_text(content: Any) -> str:
-    """Extract plain text from LLM response content (str or list of content blocks).
-
-    Modern LLMs may return structured content as a list of blocks instead of a
-    plain string, e.g. [{"type": "text", "text": "..."}]. Using str() on such
-    content produces Python repr instead of the actual text, breaking JSON
-    parsing downstream.
-
-    String chunks are concatenated without separators to avoid corrupting
-    chunked JSON/text payloads. Dict-based text blocks are treated as full text
-    blocks and joined with newlines for readability.
-    """
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        pieces: list[str] = []
-        pending_str_parts: list[str] = []
-
-        def flush_pending_str_parts() -> None:
-            if pending_str_parts:
-                pieces.append("".join(pending_str_parts))
-                pending_str_parts.clear()
-
-        for block in content:
-            if isinstance(block, str):
-                pending_str_parts.append(block)
-            elif isinstance(block, dict):
-                flush_pending_str_parts()
-                text_val = block.get("text")
-                if isinstance(text_val, str):
-                    pieces.append(text_val)
-
-        flush_pending_str_parts()
-        return "\n".join(pieces)
-    return str(content)
-
-
-# Matches sentences that describe a file-upload *event* rather than general
-# file-related work.  Deliberately narrow to avoid removing legitimate facts
-# such as "User works with CSV files" or "prefers PDF export".
+# Matches sentences that describe a file-upload *event*.
 _UPLOAD_SENTENCE_RE = re.compile(
     r"[^.!?]*\b(?:"
     r"upload(?:ed|ing)?(?:\s+\w+){0,3}\s+(?:file|files?|document|documents?|attachment|attachments?)"
@@ -77,13 +71,8 @@ _UPLOAD_SENTENCE_RE = re.compile(
 )
 
 
-def _strip_upload_mentions_from_memory(memory_data: dict[str, Any]) -> dict[str, Any]:
-    """Remove sentences about file uploads from all memory summaries and facts.
-
-    Uploaded files are session-scoped; persisting upload events in long-term
-    memory causes the agent to search for non-existent files in future sessions.
-    """
-    # Scrub summaries in user/history sections
+def _strip_upload_mentions(memory_data: dict[str, Any]) -> dict[str, Any]:
+    """Remove sentences about file uploads from all memory summaries and legacy facts."""
     for section in ("user", "history"):
         section_data = memory_data.get(section, {})
         for _key, val in section_data.items():
@@ -92,7 +81,7 @@ def _strip_upload_mentions_from_memory(memory_data: dict[str, Any]) -> dict[str,
                 cleaned = re.sub(r"  +", " ", cleaned)
                 val["summary"] = cleaned
 
-    # Also remove any facts that describe upload events
+    # Also filter legacy facts if still present (migration period)
     facts = memory_data.get("facts", [])
     if facts:
         memory_data["facts"] = [f for f in facts if not _UPLOAD_SENTENCE_RE.search(f.get("content", ""))]
@@ -100,188 +89,225 @@ def _strip_upload_mentions_from_memory(memory_data: dict[str, Any]) -> dict[str,
     return memory_data
 
 
-def _fact_content_key(content: Any) -> str | None:
-    if not isinstance(content, str):
-        return None
-    stripped = content.strip()
-    if not stripped:
-        return None
-    return stripped
+_JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)```", re.DOTALL)
+_JSON_BRACE_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
-class MemoryUpdater:
-    """Updates memory using LLM based on conversation context."""
+def _parse_profile_response(text: str) -> ProfileUpdateResponse:
+    """Parse and validate the LLM's profile update JSON response."""
+    m = _JSON_BLOCK_RE.search(text)
+    raw = m.group(1).strip() if m else text.strip()
+
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+    for candidate in (raw, text):
+        try:
+            data = json.loads(candidate)
+            return ProfileUpdateResponse.model_validate(data)
+        except (json.JSONDecodeError, ValidationError):
+            pass
+
+    m2 = _JSON_BRACE_RE.search(text)
+    if m2:
+        try:
+            data = json.loads(m2.group(0))
+            return ProfileUpdateResponse.model_validate(data)
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.warning("Profile update JSON found but failed validation: %s", e)
+
+    logger.error(
+        "PROFILE PARSE FAILURE: Could not parse response. Length: %d. First 500 chars: %s",
+        len(text), text[:500],
+    )
+    return ProfileUpdateResponse()
+
+
+class ProfileUpdater:
+    """Updates profile sections in memory.json using LLM.
+
+    Facts are NOT managed here — they're in mem0.
+    """
 
     def __init__(self, model_name: str | None = None):
-        """Initialize the memory updater.
-
-        Args:
-            model_name: Optional model name to use. If None, uses config or default.
-        """
         self._model_name = model_name
 
     def _get_model(self):
-        """Get the model for memory updates."""
         config = get_memory_config()
         model_name = self._model_name or config.model_name
         return create_chat_model(name=model_name, thinking_enabled=False)
 
+    # Legacy alias
     def update_memory(self, messages: list[Any], thread_id: str | None = None, agent_name: str | None = None) -> bool:
-        """Update memory based on conversation messages.
+        return self.update_profile(messages, thread_id, agent_name)
 
-        Args:
-            messages: List of conversation messages.
-            thread_id: Optional thread ID for tracking source.
-            agent_name: If provided, updates per-agent memory. If None, updates global memory.
+    def update_profile(
+        self, messages: list[Any], thread_id: str | None = None, agent_name: str | None = None
+    ) -> bool:
+        """Update profile sections based on conversation messages.
 
-        Returns:
-            True if update was successful, False otherwise.
+        Returns True if update was successful.
         """
         config = get_memory_config()
         if not config.enabled:
             return False
-
         if not messages:
             return False
 
         try:
-            # Get current memory
             current_memory = get_memory_data(agent_name)
 
-            # Format conversation for prompt
             conversation_text = format_conversation_for_update(messages)
-
             if not conversation_text.strip():
                 return False
 
-            # Build prompt
-            prompt = MEMORY_UPDATE_PROMPT.format(
-                current_memory=json.dumps(current_memory, indent=2),
+            # Build a slim version of memory for the profile prompt (no facts)
+            profile_data = {
+                "user": current_memory.get("user", {}),
+                "history": current_memory.get("history", {}),
+            }
+
+            prompt = PROFILE_UPDATE_PROMPT.format(
+                current_profile=json.dumps(profile_data, indent=2),
                 conversation=conversation_text,
             )
 
-            # Call LLM
             model = self._get_model()
             response = model.invoke(prompt)
             response_text = _extract_text(response.content).strip()
 
-            # Parse response
-            # Remove markdown code blocks if present
-            if response_text.startswith("```"):
-                lines = response_text.split("\n")
-                response_text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+            update_data = _parse_profile_response(response_text)
+            updated_memory = self._apply_updates(current_memory, update_data)
+            updated_memory = _strip_upload_mentions(updated_memory)
 
-            update_data = json.loads(response_text)
+            # Ensure no facts array in the saved data
+            updated_memory.pop("facts", None)
 
-            # Apply updates
-            updated_memory = self._apply_updates(current_memory, update_data, thread_id)
-
-            # Strip file-upload mentions from all summaries before saving.
-            # Uploaded files are session-scoped and won't exist in future sessions,
-            # so recording upload events in long-term memory causes the agent to
-            # try (and fail) to locate those files in subsequent conversations.
-            updated_memory = _strip_upload_mentions_from_memory(updated_memory)
-
-            # Save
             return get_memory_storage().save(updated_memory, agent_name)
 
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse LLM response for memory update: %s", e)
-            return False
         except Exception as e:
-            logger.exception("Memory update failed: %s", e)
+            logger.exception("Profile update failed: %s", e)
             return False
 
     def _apply_updates(
         self,
         current_memory: dict[str, Any],
-        update_data: dict[str, Any],
-        thread_id: str | None = None,
+        update: ProfileUpdateResponse,
+        thread_id: str | None = None,  # Accepted for backward compat, not used
     ) -> dict[str, Any]:
-        """Apply LLM-generated updates to memory.
+        """Apply validated LLM-generated updates to profile sections."""
+        from datetime import datetime, timezone
 
-        Args:
-            current_memory: Current memory data.
-            update_data: Updates from LLM.
-            thread_id: Optional thread ID for tracking.
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-        Returns:
-            Updated memory data.
-        """
-        config = get_memory_config()
-        now = datetime.utcnow().isoformat() + "Z"
+        _SECTION_CHAR_LIMITS = {
+            "workContext": 500,
+            "personalContext": 400,
+            "topOfMind": 800,
+            "recentMonths": 1200,
+            "earlierContext": 800,
+            "longTermBackground": 600,
+        }
+
+        def _enforce_limit(text, section_name):
+            limit = _SECTION_CHAR_LIMITS.get(section_name, 1200)
+            if len(text) > limit:
+                logger.warning(
+                    "Profile section '%s' exceeds %d char limit (%d chars). Truncating.",
+                    section_name, limit, len(text),
+                )
+                truncated = text[:limit]
+                last_period = truncated.rfind('.')
+                if last_period > limit * 0.6:
+                    return truncated[:last_period + 1]
+                return truncated.rstrip() + "..."
+            return text
 
         # Update user sections
-        user_updates = update_data.get("user", {})
-        for section in ["workContext", "personalContext", "topOfMind"]:
-            section_data = user_updates.get(section, {})
-            if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["user"][section] = {
-                    "summary": section_data["summary"],
+        for section_name in ("workContext", "personalContext", "topOfMind"):
+            section: SectionUpdate = getattr(update.user, section_name)
+            if section.shouldUpdate and section.summary:
+                current_memory.setdefault("user", {})[section_name] = {
+                    "summary": _enforce_limit(section.summary, section_name),
                     "updatedAt": now,
                 }
 
         # Update history sections
-        history_updates = update_data.get("history", {})
-        for section in ["recentMonths", "earlierContext", "longTermBackground"]:
-            section_data = history_updates.get(section, {})
-            if section_data.get("shouldUpdate") and section_data.get("summary"):
-                current_memory["history"][section] = {
-                    "summary": section_data["summary"],
+        for section_name in ("recentMonths", "earlierContext", "longTermBackground"):
+            section = getattr(update.history, section_name)
+            if section.shouldUpdate and section.summary:
+                current_memory.setdefault("history", {})[section_name] = {
+                    "summary": _enforce_limit(section.summary, section_name),
                     "updatedAt": now,
                 }
-
-        # Remove facts
-        facts_to_remove = set(update_data.get("factsToRemove", []))
-        if facts_to_remove:
-            current_memory["facts"] = [f for f in current_memory.get("facts", []) if f.get("id") not in facts_to_remove]
-
-        # Add new facts
-        existing_fact_keys = {fact_key for fact_key in (_fact_content_key(fact.get("content")) for fact in current_memory.get("facts", [])) if fact_key is not None}
-        new_facts = update_data.get("newFacts", [])
-        for fact in new_facts:
-            confidence = fact.get("confidence", 0.5)
-            if confidence >= config.fact_confidence_threshold:
-                raw_content = fact.get("content", "")
-                normalized_content = raw_content.strip()
-                fact_key = _fact_content_key(normalized_content)
-                if fact_key is not None and fact_key in existing_fact_keys:
-                    continue
-
-                fact_entry = {
-                    "id": f"fact_{uuid.uuid4().hex[:8]}",
-                    "content": normalized_content,
-                    "category": fact.get("category", "context"),
-                    "confidence": confidence,
-                    "createdAt": now,
-                    "source": thread_id or "unknown",
-                }
-                current_memory["facts"].append(fact_entry)
-                if fact_key is not None:
-                    existing_fact_keys.add(fact_key)
-
-        # Enforce max facts limit
-        if len(current_memory["facts"]) > config.max_facts:
-            # Sort by confidence and keep top ones
-            current_memory["facts"] = sorted(
-                current_memory["facts"],
-                key=lambda f: f.get("confidence", 0),
-                reverse=True,
-            )[: config.max_facts]
 
         return current_memory
 
 
-def update_memory_from_conversation(messages: list[Any], thread_id: str | None = None, agent_name: str | None = None) -> bool:
-    """Convenience function to update memory from a conversation.
+def update_profile_from_conversation(
+    messages: list[Any], thread_id: str | None = None, agent_name: str | None = None
+) -> bool:
+    """Convenience function to update profile from a conversation."""
+    updater = ProfileUpdater()
+    return updater.update_profile(messages, thread_id, agent_name)
 
-    Args:
-        messages: List of conversation messages.
-        thread_id: Optional thread ID.
-        agent_name: If provided, updates per-agent memory. If None, updates global memory.
 
-    Returns:
-        True if successful, False otherwise.
-    """
-    updater = MemoryUpdater()
-    return updater.update_memory(messages, thread_id, agent_name)
+# ---------------------------------------------------------------------------
+# Backward-compat aliases used by gateway router, tests, and other imports
+# ---------------------------------------------------------------------------
+MemoryUpdater = ProfileUpdater
+update_memory_from_conversation = update_profile_from_conversation
+
+# Legacy aliases for tests that import old names
+MemoryUpdateResponse = ProfileUpdateResponse
+_strip_upload_mentions_from_memory = _strip_upload_mentions
+
+
+class NewFact(BaseModel):
+    """Legacy model kept for backward compat with tests."""
+    content: str = ""
+    category: str = "context"
+    confidence: float = 0.5
+
+
+def _is_similar_to_existing(new_content: str, existing_contents: list[str], threshold: float = 0.55) -> bool:
+    """Legacy function kept for backward compat with tests."""
+    new_lower = new_content.lower().strip()
+    new_tokens = _tokenize(new_content)
+    if not new_tokens:
+        return False
+    for existing in existing_contents:
+        existing_lower = existing.lower().strip()
+        if new_lower in existing_lower or existing_lower in new_lower:
+            return True
+        existing_tokens = _tokenize(existing)
+        if not existing_tokens:
+            continue
+        intersection = new_tokens & existing_tokens
+        union = new_tokens | existing_tokens
+        if len(intersection) / len(union) >= threshold:
+            return True
+    return False
+
+
+def _normalize_token(word: str) -> str:
+    """Legacy function kept for backward compat with tests."""
+    w = word.lower().strip(".,;:!?\"'()")
+    if w.endswith("ing") and len(w) > 4:
+        w = w[:-3]
+    elif w.endswith("ed") and len(w) > 3:
+        w = w[:-2]
+    elif w.endswith("s") and not w.endswith("ss") and len(w) > 2:
+        w = w[:-1]
+    return w
+
+
+def _tokenize(text: str) -> set[str]:
+    """Legacy function kept for backward compat with tests."""
+    return {_normalize_token(w) for w in text.split() if len(w) > 1}
+
+
+def _parse_memory_response(text: str) -> ProfileUpdateResponse:
+    """Legacy alias for _parse_profile_response."""
+    return _parse_profile_response(text)

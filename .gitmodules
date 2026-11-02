@@ -1,0 +1,3 @@
+[submodule "skills/custom/cfo-org-kb"]
+	path = skills/custom/cfo-org-kb
+	url = https://github.com/JeevesInc/cfo-org-kb.git

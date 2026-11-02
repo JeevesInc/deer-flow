@@ -9,49 +9,174 @@ allowed-tools:
 
 # Jeeves Redshift Access
 
-## Setup
+> **Accuracy is mandatory.** Every fact, number, and claim in your output must come from a verified source — a Redshift query result, a document you have actually read, or an explicit user statement. Never guess, assume, extrapolate, or fill gaps with general knowledge. If you do not have a source, say so. Mark unverified items as **[Needs Confirmation]**. Getting it wrong is worse than leaving it blank.
 
-Before running any query, install the driver (once per session):
+
+**CRITICAL: Redshift data is only available through yesterday.** Never use today's date or future dates in queries — the data will be incomplete or missing. When the user says "current" or "latest", use yesterday's date.
+
+**Write it this way every time — do not hand-type today's date.** The runner rejects a bare `CURRENT_DATE`/`GETDATE()` AND a literal today-dated string, and that rejection burned three turns in one day on 2026-08-31 (two literal `'2026-08-31'` filters, one bare `CURRENT_DATE`). Start every dated query from an as-of CTE and reference it everywhere, so there is exactly one date expression to get right:
+
+```sql
+WITH asof AS (SELECT CURRENT_DATE - 1 AS d)          -- latest date with data
+SELECT ...
+FROM   capital_markets_dm.loc_tape t, asof
+WHERE  t.dt = asof.d
+```
+For month-to-date/'so far this month' asks the window runs from the start of the month through `CURRENT_DATE - 1`, never through today — and **write the month start off the offset date, `date_trunc('month', CURRENT_DATE - 1)`, NEVER `date_trunc('month', CURRENT_DATE)`.** The guard (`_bare_today_func_uses`, sql_runner.py line 155) rejects every `CURRENT_DATE` that is **not immediately followed by a minus sign**, so `date_trunc('month', CURRENT_DATE)`, `DATEDIFF(day, x, CURRENT_DATE)`, `EXTRACT(... FROM CURRENT_DATE)` and a bare `WHERE dt < CURRENT_DATE` all fail validation even though they read as safe. This sentence itself used to recommend the rejected form and is what generated the 2026-09-01 rejection on the CIM interchange pull — the lesson was in the skill, the bad example was too. Rule of thumb: **every `CURRENT_DATE` you type must have a `- n` glued to its right**, or come from the `asof` CTE above. When Brian says "today" or "as of now", run as of yesterday and SAY which date you used in the answer — do not use `--allow-today` to force it; that flag is for non-tape tables only.
+
+**CRITICAL — `capital_markets_dm.loc_tape` Jeeves Pay columns are MIS-LABELLED. `jp_fee` holds Jeeves Pay DISBURSEMENT volume and `jp_disbursement` holds the FEE; `fee_amount` is a byte-identical duplicate of `jp_disbursement`.** Verified 2026-08-25 for MX (`country_code = 484`) July 2026 over 95,091 rows: `fee_amount` = 27,090,673.18, `jp_disbursement` = 27,090,673.18, `jp_fee` = 1,269,733,513.79 — cross-checked to the Jeeves Pay source of truth `master_transactions_dm.loc_jeevespay_transactions_dm` for the same month and currency (`send_amount` = 1,304,113,069.41, `total_fees_send_amount` = 25,223,004.17). The names were shifted when the fee column was added and the index was not updated — Brian's own diagnosis, confirmed. **Never read `jp_fee` as a fee or `jp_disbursement` as a disbursement, and never report a `fee_amount`/`jp_disbursement` pair as double counting** — it is one column under two names, not duplicated data. When you need real Jeeves Pay volume or fees, go to `loc_jeevespay_transactions_dm` (not on the runner whitelist: pass `--allow-tables master_transactions_dm.loc_jeevespay_transactions_dm`).
+
+**CRITICAL: `loc_tape` publishes the day's partition BEFORE the balances land**, so `max(dt)` is NOT the latest usable date. On 2026-08-24 the 8/24 partition existed with every balance NULL while 8/23 was the latest complete day. Always select the latest `dt` with non-null balances and state which date you used in the answer.
+
+CRITICAL: dms_mysql_jeeves_raw country_lookup, currency_lookup, and state_lookup do NOT exist as tables -- recurring guess, rejected by the allowlist every time (recurred 2026-07-21 during AIG reconciliation, 4 days after first documented 2026-07-17). For currency code lookups use master_dimensions.currency_lookup_dim (join cur.numeric_code equals rms_transactions.local_currency). Its FIVE columns, listed from information_schema 2026-09-04: dim_id, **alpha_code** (character), numeric_code (integer), is_display (boolean), currency (varchar). It is `alpha_code` -- NOT `alphabetic_code`, NOT `iso_code`, NOT `currency_code`; that guess failed the Colombia fiducia pull on 2026-09-03 and the retry then dropped the join and produced `relation "cur" does not exist`. **Both of those exact guesses recurred on 2026-09-09** during the MX ineligibility-spike diagnosis (`cdm.currency_code`, then `company_name`), i.e. this paragraph existed and did not stop it. Fix applied 2026-09-10 (Dream #114): `sql_runner.py` now answers a `column X does not exist` error by printing the REAL column list for every table in the query, straight from information_schema. **Read that hint and copy a name out of it -- never type a second guess.** For a company's currency on `companies_dm` the columns are `platform_currency` / `platform_currency_alphacode`, `billing_currency` / `billing_currency_alphacode`, `credit_limit_currency`, `balance_currency` (the `*_currency` ones are ISO numeric integers, the `*_alphacode` ones are the letters) -- there is no `currency_code`. Same class of error: **there is no `company_name` column anywhere** -- dms_mysql_jeeves_raw.companies has `name` / `businessname` / `legalname`, master_customer_dm.companies_dm has `name` / `business_name` / `legal_name` / `legal_entity_name`, and capital_markets_dm.loc_tape has NO company-name column at all (only city_name / state_name), so a name must be joined in from companies_dm. For state names use dms_mysql_jeeves_raw.states (id -> statename), confirmed 2026-08-04 and now on the allowlist -- join states.id = company_addresses.stateid, sibling of the already-known .cities. There is no country table: map ISO 3166-1 numeric companies.countrycode with an inline CTE (see sql/aig_invoice_data.sql in cfo-org-kb for the canonical 20-code version).
+
+## Workflow: Always Check the KB First
+
+**Before writing any SQL from scratch**, pull and search `JeevesInc/cfo-org-kb`:
 
 ```bash
-pip install psycopg2-binary
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb && git pull origin main
+ls C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/*.sql
+grep -rl "rollforward" C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/
+cat C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb/sql/total_portfolio_balance.sql
 ```
 
-## Connection
+If an existing query covers 80%+ of what is needed, start from it and adapt.
+
+**Do NOT use `sql_repo.py`.** When a query is worth keeping, commit it to GH:
+
+```bash
+cd C:/Jeeves/redshift-bot/deer-flow/skills/custom/cfo-org-kb
+git add sql/new_query.sql
+git commit -m "Add new_query: description"
+git push origin main
+```
+
+## Running Queries
+
+Use the SQL runner — it handles connection, validation, and output formatting automatically. **The runner always echoes the full SQL being executed so Brian has direct visibility.**
+
+```bash
+# Inline query
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT SUM(balance_usd) FROM capital_markets_dm.loc_tape WHERE dt = '2026-04-02' AND charge_off_flag = false AND is_in_repayment = false"
+
+# Query from file
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --file /mnt/user-data/workspace/query.sql
+
+# Save large results to Excel
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.xlsx
+
+# Save as CSV
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --output /mnt/user-data/outputs/results.csv
+
+# Increase inline display limit (default 100 rows)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --limit 500
+
+# Generate SQL from natural language (uses DSPy + Claude)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py --generate "What's the total portfolio balance by country?"
+```
+
+(Do NOT use `--save`/`sql_repo.py` — queries worth keeping go to `cfo-org-kb` on GitHub, per the workflow above.)
+
+**HARD RULE — inline SQL is only for true one-liners: no division, no regex, no comments.**
+The bash guard scans the WHOLE command string and rejects any token that begins with a slash, so
+an inline query containing `amount / 1e6`, `x / NULLIF(y, 0)`, a `--` comment, or a sed-style
+expression is rejected before it ever reaches Redshift. This burned turns three separate times on
+2026-08-03 alone. Default path for anything longer than one SELECT: `write_file` the SQL into
+`$WORKSPACE_PATH` and run it with `--file`. Never retry variants of an inline command the guard
+rejected — move it to a file on the FIRST failure. Same rule for any Python you would otherwise
+pass with `-c`.
+
+**The same guard rejects NON-SQL content too — it does not know what kind of string it is reading.** Confirmed rejections: `x / NULLIF(y,0)` and `amount / 1e6` (division), `/tmp` (a real path), Excel number formats such as `#,##0` rendered as `/#####`, and Excel formula fragments such as `/B17=Payment`. So **anything that builds a workbook, a number format or a formula string belongs in a `write_file` script too** — never in a bash heredoc or `-c`.
+
+**HARD RULE — do NOT hand-roll a Redshift connection script when `sql_runner.py` will do.** On 2026-08-24 (MX MSR investigation, thread 7ed6747d) a chain of ad-hoc `pandas.read_sql(..., connect())` scripts produced BOTH a `ModuleNotFoundError: redshift_util` AND three separate path-guard rejections in one thread. `sql_runner.py` needs no imports, echoes the SQL, validates it and formats the output. Reach for a hand-written script only when you genuinely need post-processing in pandas — and then the first statement must be
+```python
+import os, sys
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', 'jeeves-borrowing-base'))
+from redshift_util import connect
+```
+`redshift_util` lives in `jeeves-borrowing-base` and exports `connect()`. Nothing else.
+
+**`sql_runner.py` IS A CLI, NOT A LIBRARY — it exports no query function.** On 2026-09-02
+(thread e59a194a) a script did `from sql_runner import run_query` and got
+`ImportError: cannot import name 'run_query' from 'sql_runner'`, burning a turn. There is no
+`run_query`, no `query`, no `run` — the only module-level names are private helpers
+(`_connect`, `_format_inline`, `validate_sql`, `main`). Never import from `sql_runner`.
+Two legal ways to get rows inside Python, in preference order:
 
 ```python
-import psycopg2, os
+# A. shared module (preferred for scripts) - has ZPA-deauth detection and auto-reauth request
+import os, sys
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', '_shared'))
+from redshift import query, connect      # query(sql, params=None) -> (columns, rows)
 
-conn = psycopg2.connect(
-    host=os.environ['REDSHIFT_HOST'],
-    port=int(os.environ['REDSHIFT_PORT']),
-    dbname=os.environ['REDSHIFT_DB'],
-    user=os.environ['REDSHIFT_USER'],
-    password=os.environ['REDSHIFT_PASSWORD'],
-    sslmode='require',
-    sslrootcert='disable'
-)
-cur = conn.cursor()
-cur.execute("<query>")
-columns = [desc[0] for desc in cur.description]
-rows = cur.fetchall()
-conn.close()
+# B. borrowing-base helper (connect() only, you manage the cursor)
+sys.path.insert(0, os.path.join(os.environ['SKILLS_PATH'], 'custom', 'jeeves-borrowing-base'))
+from redshift_util import connect
 ```
+`_shared/redshift.py` is the better choice when connectivity is flaky: it recognises ZPA deauth
+signatures and files a reauth request itself instead of surfacing a bare TCP timeout.
+
+
+### Enforced guards (errors, not warnings)
+
+The runner **rejects**: non-SELECT statements, multi-statement input, tables outside the known whitelist, and today/future dates (literal or bare `CURRENT_DATE`/`GETDATE()` — data lags a day; `CURRENT_DATE - 1` is fine). Overrides when genuinely needed:
+
+```bash
+# Query a legitimate table missing from the whitelist
+python .../sql_runner.py "SELECT ..." --allow-tables "some_schema.new_table"
+# Intentionally reference today (non-tape tables only)
+python .../sql_runner.py "SELECT ..." --allow-today
+# Long-running query (default statement_timeout is 60s)
+python .../sql_runner.py --file big_waterfall.sql --statement-timeout 900 -o out.xlsx
+```
+
+**HARD RULE - never build a "long" copy of the runner.** When a query exceeds the 60s statement timeout, pass `--statement-timeout <seconds>`. Copying or regenerating sql_runner.py into a sql_runner_long.py variant is prohibited: on 2026-08-20 (AIG loc_tape rebuild, thread 6fcba15a) that detour burned two failed tool calls - the bash path guard rejected the bare script path, then the copy script crashed reading its source - before a single row came back.
+
+The runner automatically:
+- **Echoes the full SQL** being executed (always visible to the user)
+- Validates SQL before executing (catches common mistakes, warns on missing filters)
+- Blocks non-SELECT queries
+- Formats small results inline, saves large results to files
+- Provides actionable error hints on failure
+
+## Saving Queries to the Repo
+
+**After every successful query, save it to the repo** so it can be reused:
+
+```bash
+# Save via sql_runner --save flag (after execution)
+python /mnt/skills/custom/jeeves-redshift/sql_runner.py "SELECT ..." --save "descriptive_name" --tags "tag1,tag2"
+
+# Or save directly via sql_repo.py
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py save "descriptive_name" "SELECT ..." --tags "tag1,tag2" --description "What this query does"
+
+# Delete an outdated query
+python /mnt/skills/custom/jeeves-redshift/sql_repo.py delete "old_query_name"
+```
+
+**Naming convention:** Use snake_case descriptive names like `total_portfolio_balance`, `dpd_90plus_by_country`, `monthly_charge_off_trend`, `top_borrowers_with_names`.
+
+**When to save:** Save every query that answers a real question. Don't save one-off debugging queries. If an existing query was adapted, update it with the improved version.
 
 ## Key Tables
 
 | Table | Description |
 |-------|-------------|
 | `master_transactions_dm.transactions_ssot` | All transactions — revenue, GTV, fees, FX. 88 columns. |
-| `master_customer_dm.companies_dm` | Company master dimension — 167 columns covering company profile, credit, activation, deposits, activity. |
+| `master_customer_dm.companies_dm` | Company master dimension — **253 columns** (counted from information_schema 2026-09-10; the old "167" in this table was stale) covering company profile, credit, activation, deposits, activity. |
 | `capital_markets_dm.loc_tape` | LOC (Line of Credit) daily tape — balance snapshots, disbursements, payments, delinquency, charge-offs. By company by day. |
 | `capital_markets_dm.gwc_tape` | GWC (Global Working Capital) daily tape — principal, interest, VAT/fees/tax breakdowns, obligation tracking. By company by day. |
 | `analytics_sandbox.loc_vintage_data` | LOC vintage/cohort data — BOP/EOP balances, charge-offs, repayments, period-over-period deltas. |
 
-### TODO — Tables to add after verification:
-- `analytics_sandbox.jurs_test` — JURS loss rate scores (needs validation)
-- `capital_markets_dm.rms_transactions` — RMS transaction-level collections data (needs validation)
-- Borrowing base table — not found in schema, may be derived or in a different location
+### Additional Tables
+
+| Table | Description |
+|-------|-------------|
+| `analytics_sandbox.jurs_test` | JURS loss rate scores. |
+| `capital_markets_dm.rms_transactions` | RMS transaction-level collections data (~9.2M rows). Has `local_currency` (numeric ISO code) + `local_currency_amount` -- customer's actual paid currency/amount; prefer over `usd_currency_amount` when the ask is "customer currency" / "local currency". |
+| `capital_markets_dm.intraday_collections` | Intraday collection events. |
+| `master_dimensions.currency_lookup_dim` | Numeric -> alpha currency code lookup (`numeric_code`, `alpha_code`). Join `cur.numeric_code = rms_transactions.local_currency`. Confirmed 2026-07-17 (Kroll payment tracing rebuild). Do NOT guess `dms_mysql_jeeves_raw.country_lookup`/`currency_lookup`/`state_lookup` -- those tables do not exist.
 
 ---
 
@@ -147,8 +272,9 @@ Daily LOC portfolio tape. One row per company per day. Use for **balances, disbu
 - `jp_balance_usd` (numeric): Jeeves Pay balance
 - `disbursement_amount_usd` (numeric): Card spend/disbursements
 - `jeeves_pay_disbursement_amount_usd` (numeric): Jeeves Pay spend
+- `fee_amount` / `fee_amount_usd` (numeric): Fee amounts
 - `payment_amount_usd` (numeric): Payments received
-- `days_past_due` (integer): Days overdue (0 = current)
+- `days_past_due` (integer): Days overdue (0 = current). **There is NO `max_dpd` column on `loc_tape`** — `column "max_dpd" does not exist in loc_tape` was hit on 2026-08-19 AND again on 2026-08-25. `max_dpd` exists only as an output alias of the `max_dq` CTE in cfo-org-kb `sql/data_tape.sql`; against the raw tape compute `max(days_past_due)` grouped by `company_id` yourself. Current DPD is always `days_past_due`.
 - `dq_bucket` (varchar): Delinquency bucket (current, 1-30, 31-60, 61-90, 90+)
 - `dq_bucket_daily` (varchar): Daily DQ bucket
 - `dq_bucket_monthly` (varchar): Monthly DQ bucket
@@ -222,15 +348,275 @@ Vintage/cohort analysis data for LOC portfolio.
 - **Filter test companies:** `WHERE is_company_test = false` (transactions_ssot) or `WHERE is_test = false` (companies_dm)
 - **Filter by market:** Use `country_code` — 840=US, 484=MX, 170=CO, 124=CA, 76=BR
 - **Latest snapshot:** `WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)`
-- **Active portfolio:** `WHERE charge_off_flag = false` on loc_tape/gwc_tape
+- **Active portfolio:** `WHERE charge_off_flag = false AND is_in_repayment = false` on loc_tape (ALWAYS include both filters)
+**A guardrail warning on a query whose output leaves Jeeves must be RESOLVED, never passed through (2026-08-07).** sql_runner.py prints warnings but still returns rows. On 2026-08-06 the 24-month Mastercard charge-off cut ran without `is_in_repayment`, warned, and shipped to Alex at **$4,637,646 all-in** when the house convention (below) gives **$3,859,397 ex-repayment-plan** -- a $778,249 / 16.8% gap on an externally delivered number. If a warning fires on a figure headed for a lender, counterparty or board, either fix the query or state the basis explicitly in the deliverable.
+
+**CRITICAL: is_in_repayment = false must be applied to ALL loc_tape queries without exception** — repayment plan accounts are tracked separately in the mods/GWC rollforward and must never be mixed into standard portfolio, DQ, charge-off, or loss calculations. This applies even when querying charged-off accounts (e.g. recoveries, charge-off amounts).
 - **DPD buckets:** current (0), 1-30, 31-60, 61-90, 90+
 - **Date filtering on loc_tape/gwc_tape:** Always use `dt` column with BETWEEN, never DATE_TRUNC
 - **NULL arithmetic:** When adding columns, wrap each in `COALESCE(col, 0)` — NULL + value = NULL
 - **Revenue vs spend:** `revenue_usd` from transactions_ssot = Jeeves revenue; `disbursement_amount_usd` from loc_tape = customer spend
 - **String matching:** Use `ILIKE '%pattern%'` for case-insensitive partial matches
 - **CTEs:** Fully supported and encouraged for complex queries
+- **`column X does not exist` -> LIST the columns, never guess a second name.** Two
+  guesses in a row (`t.transaction_date`, then `t.created_at`) burned turns on
+  2026-08-14. On the FIRST such error, run:
+  `SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='<schema>' AND table_name='<table>' ORDER BY ordinal_position;`
+  and pick from the result. Column names differ per table -- `transactions_ssot` has
+  `created_at`/`posted_at`/`completed_at`, `loc_tape`/`gwc_tape` key off `dt`. An alias
+  (`t.`) proves nothing about which table is behind it: re-read your own FROM clause
+  before assuming the schema doc is wrong.
+
+## Query Examples by Intent
+
+## SQL Style
+
+ALWAYS write SQL with leading commas, not trailing commas. Example:
+
+```sql
+SELECT
+    col1
+  , col2
+  , col3
+FROM ...
+ORDER BY
+    col1
+  , col2
+```
+
+## RPP Data Model
+
+RPP accounts are LOC balances financed into GWC loans. Key facts:
+- Identify via: `gwc_tape WHERE loan_reference_number ILIKE 'RPP%'`
+- One row per installment = rows WHERE `principal_amount_due_usd != 0`
+- `dt` on those rows = the invoice due date
+- `balance_usd` = running unpaid balance at that point
+- `days_past_due` = days since that installment was due
+- `delinquent_dt` = date the current installment became overdue
+- ~99 RPP loans (as of May 2026), one row per installment
+- `gwc_tape` is the source of truth for RPP **population** (which loans exist, charge_off_flag, latest snapshot) — always filter `charge_off_flag = false` to exclude charged-off RPPs (tracked separately in the charged-off report). For the **payment schedule** (per-installment due dates, status, paid flag), JOIN `dms_mysql_jeeves_raw.instalments` on `i.loanid = g.loan_id` — gwc_tape's own `dt`/`principal_amount_due_usd` rows do not reliably capture per-installment paid status. Corrected 2026-07-06 per Brian (this line previously said the opposite — 'do not use instalments for RPP' — which was wrong).
+
+Use these as templates. Every loc_tape query MUST include `charge_off_flag = false AND is_in_repayment = false` to get the active portfolio.
+
+### Balance (portfolio snapshot)
+**Q:** "What's the total portfolio balance?"
+```sql
+SELECT SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+
+### Spend / disbursements
+**Q:** "How much did customers spend on cards in March?"
+```sql
+SELECT SUM(COALESCE(disbursement_amount_usd, 0)) AS card_spend
+FROM capital_markets_dm.loc_tape
+WHERE dt BETWEEN '2026-03-01' AND '2026-03-31'
+  AND charge_off_flag = false AND is_in_repayment = false
+```
+⚠️ `disbursement_amount_usd` = customer card spend. Do NOT use `loan_allocation_amount` (internal accounting).
+
+### Delinquency / DPD
+**Q:** "What's our 90+ DPD rate by country?"
+```sql
+SELECT country_code,
+       SUM(CASE WHEN days_past_due > 90 THEN balance_usd ELSE 0 END)
+         / NULLIF(SUM(balance_usd), 0) AS dpd_90plus_rate,
+       SUM(balance_usd) AS total_balance
+FROM capital_markets_dm.loc_tape
+WHERE dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND charge_off_flag = false AND is_in_repayment = false
+GROUP BY country_code
+```
+
+### Charge-offs
+**Q:** "What was the charge-off amount for company 456?"
+```sql
+SELECT company_id, balance_usd AS charge_off_amount, charge_off_dt
+FROM capital_markets_dm.loc_tape
+WHERE company_id = 456 AND dt = charge_off_dt
+```
+⚠️ Charge-off amount = `balance_usd` on the `charge_off_dt` date. Never use deprecated `v0_charge_off_amount_usd`.
+
+### Revenue
+**Q:** "Total revenue in Q1 2026?"
+```sql
+SELECT SUM(revenue_usd) AS total_revenue
+FROM master_transactions_dm.transactions_ssot
+WHERE posted_at BETWEEN '2026-01-01' AND '2026-03-31'
+  AND is_company_test = false
+```
+⚠️ Revenue is ONLY in `transactions_ssot.revenue_usd`. The `loc_tape` table has spend, not revenue.
+
+### Date ranges on loc_tape
+```sql
+-- CORRECT: use BETWEEN on dt
+WHERE dt BETWEEN '2025-10-01' AND '2025-10-31'
+
+-- WRONG: never DATE_TRUNC on dt
+-- WHERE DATE_TRUNC('month', dt) = '2025-10-01'  ← DO NOT DO THIS
+```
+
+### Company lookup with join
+**Q:** "Top 10 borrowers by balance with company names"
+```sql
+SELECT c.name, c.country_name, lt.balance_usd
+FROM capital_markets_dm.loc_tape lt
+JOIN master_customer_dm.companies_dm c ON c.company_id = lt.company_id
+WHERE lt.dt = (SELECT MAX(dt) FROM capital_markets_dm.loc_tape)
+  AND lt.charge_off_flag = false AND lt.is_in_repayment = false
+  AND c.is_test = false
+ORDER BY lt.balance_usd DESC LIMIT 10
+```
+
+---
 
 ## Output Rules
 
 - Single metric or <10 rows: respond inline in Slack
 - Large dataset or multi-metric: write to .xlsx using openpyxl, present the file, and summarize inline
+
+---
+
+## dms_mysql_jeeves_raw Schema
+
+Raw MySQL replication of the Jeeves production database via AWS DMS. **209 tables, 3,530 columns.** Source-of-truth operational data — use for company/user/card/loan/transfer details not available in the DM layer.
+
+**Key differences from DM layer:**
+- Column names are camelCase (e.g. `companyid`, `createdat`, `deletedat`)
+- No `_usd` suffix — amounts are in native currency unless column ends in `usd`
+- Booleans stored as `smallint` (0/1), not boolean
+- Soft deletes: always add `WHERE deletedat IS NULL` for active records
+- `_dms_created` = DMS replication timestamp, not business creation time
+- Join to DM layer: `dms_mysql_jeeves_raw.companies.id` = `master_customer_dm.companies_dm.company_id`
+
+### Core Entity Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `companies` | 102 | Raw company records — EIN, business type, billing method, credit line, status, KYB/KYC, platform currency |
+| `users` | 72 | All users — role, email, spend limit, 2FA, status, login history |
+| `cards` | 48 | Physical/virtual cards — cardstatus, spendlimit, cardtype, processor IDs (Galileo, Stripe, Tutuka) |
+| `primary_account_owners` | 37 | KYB primary account owners — identity verification, TruNarrative |
+| `business_ownerships` | 39 | Beneficial owners — percentofownership, KYB status, isdirector |
+| `invite_users` | 39 | Invited users — role, spendlimit, department, location |
+| `waitlists` | 47 | Onboarding waitlist/leads — country, product interest, referral |
+
+### Transaction & Payment Tables
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `transactions` | 65 | Raw card transactions — acttype, networkcode, transactionamount, merchantid, cardid, transactionstatus |
+| `transfers` | 51 | Jeeves Pay / wire transfers — beneficiaryid, transferamount, paymenttype, transferstatus, usdamount |
+| `loans` | 77 | GWC/JP loans — principal, interestrate, originationfeerate, VAT, term, disbursementtype, paymentstructure |
+| `loan_payments` | 17 | Loan payment records — loanid, paymentdate, paymentsource, transactionstatus |
+| `instalments` | 30 | Loan instalment schedule — duedate, paiddate, status, dayspastdue, usdcurrencyamount |
+| `statement_transactions` | 35 | Statement-level transactions — producttype, billingcycletag, usdcurrencyamount |
+| `reimbursements` | 31 | Employee reimbursements — amount, currency, merchantname, expensecategory, paymentstatus |
+
+### Billing & Statements
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_statements` | 52 | Monthly billing statements — month/year, invoicedamount, endingbalance, duedate, autodebit, settlementdatetime |
+
+> **DEFECT — `company_statements.usdcurrencyexchangerate` IS NOT A MARKET RATE (DEN-277, raised to the org 2026-08-18).** Every USD figure on a statement is `platforminvoicedamount x usdcurrencyexchangerate = usdinvoicedamount` (ties to the cent), and that rate is off-market or frozen on most non-USD statements. Latest statement per company across 2,319 non-USD companies: only **13.4% within 2% of `capital_markets_dm.loc_tape.spot_rate`** on the same date; USD as booked $226.03M vs $246.19M at spot = **$20.16M (8.2%) understated**. Worst first: COP 640 cos / 4 clean / median 32% below spot / -$11.50M; MXN 1,012 / 17% clean / -$5.97M; BRL 386 / 32% clean / -$2.24M (rates stored as 1.99+ where USDBRL is ~0.19); GBP 174 / 1 clean / -$0.34M; EUR 92 / 4 clean / -$0.12M; CAD overstated $6.6K. 33,404 of 37,211 statements affected.
+> **SCOPE OF THE BAN - read this before you widen it. Only the two USD-derived columns are banned: `usdinvoicedamount` and `usdcurrencyexchangerate`. `company_statements` itself is NOT banned and its LOCAL-currency fields stay authoritative.** Specifically, **`platforminvoicedamount` is the invoiced amount of record - it is what Jeeves showed the customer on the statement**, and for the AIG/TEX claims file "invoiced" is defined as *statement invoiced (local) less any prior-invoice carry-forward*, then converted once at the end with `loc_tape.spot_rate` (Brian, 2026-08-21: *"we already discovered that usdinvoicedamount is wrong, that's the only problem"* / *"the invoiced amount is what we showed them on the statement. that's in company statements."*). Over-reading a **column** ban as a **table** ban cost four corrections in 80 minutes on 2026-08-21 and forced the AIG file to be rebuilt from v4 through v6.
+> **Corollaries settled in the same rebuild:** `loc_tape.balance` is the **true daily local outstanding** - `platformendingbalanceamount` is a gross invoice figure, NOT a balance, and must never be used as one (this broke v4); and `loc_tape.payment_amount` **cannot split cash between the prior and the current cycle**, so prior-invoice carry-forward has to be proxied - the v6 proxy is 95.0% exact and -1.04% conservative, which Brian accepted. Do not re-derive carry-forward from scratch when the basis changes; **port the logic that already worked** ("the carry forward amounts were solved before, why is this a new issue?", 2026-08-21).
+>
+> **Rule: never convert a statement to USD with `usdcurrencyexchangerate`. Join to `loc_tape.spot_rate` on the invoice date** (lineage: Airflow `v2_automation` DAG -> dbt `lt_loc_base_tape` -> `daily_forex` from `exchange_rate_logs`). This feeds the AIG/TEX insurance file, so any AIG tie-out must be rebuilt on spot. Also note `usdinvoicedamount` is NOT an aggregation of `statement_transactions` at settlement rates — on zero-carry-forward statements the transaction sums differ several-fold (369143 MXN: txns $7.31M vs $2.32M booked; 361236 COP: $1.75M vs $167.7K).
+> `dms_mysql_jeeves_raw.statement_transactions` was **not** in `sql_runner.py`s `ALLOWED_TABLES` as of 2026-08-18 and blocked this analysis mid-flight — check the allowlist before promising a statement-level cut.
+| `company_billing_configurations` | 14 | Billing day, due date interval, billing interval per company |
+| `company_bank_accounts` | 61 | Linked bank accounts — ACH/Plaid details, autodebit status, verification status |
+| `bank_accounts` | 21 | Internal credit line ledger — cl (credit limit), ab (available balance), tb (total balance), bb (billing balance) |
+
+### Beneficiaries & Payments
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `beneficiaries` | 11 | Payment beneficiary master — companyid, beneficiaryname |
+| `beneficiary_payment_details` | 50 | Bank details — CLABE, SWIFT/BIC, routing, account number, currency, country |
+| `transfer_details` | 22 | Transfer detail records |
+| `transfer_approvals` | 12 | Approval workflow for transfers |
+
+### Credit & Collateral
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `collateral_records` | 24 | Collateral — type, local/USD amount, advancerate, effectivecollateralvalue, expiry, status |
+| `credit_product_requests` | 13 | Credit line requests |
+| `bank_accounts` | 21 | cl/ab/tb/bb/ar ledger columns (credit line accounting) |
+
+### KYB / Compliance / Tax
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `company_tax_status` | 20 | MX SAT tax status — RFC, regimens, obligations, economic activity |
+| `company_tax_returns` | 28 | MX SAT annual tax returns — ISR, deductions, declarations |
+| `sardine_audit_logs` | 10 | Sardine fraud/risk audit logs |
+| `sardine_transaction_risks` | 14 | Transaction-level risk scores from Sardine |
+| `device_fingerprints` | 27 | Device fingerprint records for fraud detection |
+
+### SAT / Mexico Invoicing
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `satws_invoices` | 43 | SAT invoices (CFDI) — issuer, receiver, total, tax, status, issuedat |
+| `satws_invoice_items` | 19 | Line items on SAT invoices |
+| `satws_invoice_payments` | 20 | Payment records against SAT invoices |
+| `satws_extractions` | 19 | SAT data extraction jobs |
+| `company_satws_accounts` | 18 | Company SAT account linkages |
+
+### Cards & Spend Controls
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `card_transaction_details` | 21 | Detailed card transaction metadata |
+| `temporary_spend_limits` | 19 | Temporary spend limit overrides |
+| `needs_attention_items` | 26 | Expense policy violations — missing receipts, notes, policy breaches |
+| `policies` | 17 | Spend policies |
+| `mcc_custom_categories` | 13 | Custom MCC category mappings |
+
+### Open Banking & FX
+
+| Table | Cols | Description |
+|-------|------|-------------|
+| `open_banking_balances` | 12 | Open banking balance snapshots |
+| `open_banking_transactions` | 28 | Open banking transaction feed |
+| `exchange_rates` | 11 | Exchange rate records |
+| `exchange_rate_logs` | 13 | Exchange rate change log |
+| `routefusion_entities` | 22 | Routefusion payment entity records |
+| `cross_border_fees` | 11 | Cross-border fee schedules |
+
+### Example Joins
+
+```sql
+-- Company name + credit limit from raw + DM
+SELECT r.id, r.name, r.ein, c.credit_limit_usd, c.activity_status
+FROM dms_mysql_jeeves_raw.companies r
+JOIN master_customer_dm.companies_dm c ON c.company_id = r.id
+WHERE r.deletedat IS NULL AND c.is_test = false
+
+-- Active cards for a company
+SELECT c.id, c.cardtype, c.cardstatus, c.spendlimit, u.email
+FROM dms_mysql_jeeves_raw.cards c
+JOIN dms_mysql_jeeves_raw.users u ON u.id = c.userid
+WHERE c.companyid = 12345 AND c.deletedat IS NULL
+
+-- Loan instalment schedule
+SELECT i.id, i.duedate, i.paiddate, i.usdcurrencyamount, i.status, i.dayspastdue
+FROM dms_mysql_jeeves_raw.instalments i
+JOIN dms_mysql_jeeves_raw.loans l ON l.id = i.loanid
+WHERE l.companyid = 12345 AND i.deletedat IS NULL
+ORDER BY i.duedate
+
+-- SAT invoices for a company
+SELECT s.invoiceid, s.total, s.tax, s.status, s.issuedat
+FROM dms_mysql_jeeves_raw.satws_invoices s
+WHERE s.companyid = 12345
+ORDER BY s.issuedat DESC
+```
+
+### Full Table List (209 tables)
+accounting_sync_cycles, activity_logs, admin_settings, admins, all_product_transactions, api_client_calendar_configurations, api_client_credentials, auto_debit_bank_accounts, autopay_logs, backend_dead_letters, bank_account_link_logs, bank_accounts, bank_histories, banks, beneficiaries, beneficiary_payment_details, bill_pay_billers, bulk_transfers, business_ownerships, card_digital_wallets, card_product_configurations, card_product_requests, card_requests, card_shipment_approvals, card_transaction_details, card_transaction_settlement, cards, cards_gateway_dead_letters, cities, collateral_records, companies, company_account_mappings, company_accounting_integration_settings, company_accounting_integrations, company_addresses, company_bank_accounts, company_bank_accounts_fallback, company_billing_configuration_logs, company_billing_configurations, company_business_leaderships, company_cardservices, company_contacts, company_investors, company_jp_credit_contact_details, company_mexico_credit_bureau_data, company_migrations, company_operating_cou

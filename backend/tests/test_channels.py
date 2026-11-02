@@ -277,19 +277,19 @@ class TestChannelBase:
 
 class TestExtractResponseText:
     def test_string_content(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "ai", "content": "hello"}]}
         assert _extract_response_text(result) == "hello"
 
     def test_list_content_blocks(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "ai", "content": [{"type": "text", "text": "hello"}, {"type": "text", "text": " world"}]}]}
         assert _extract_response_text(result) == "hello world"
 
     def test_picks_last_ai_message(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -301,24 +301,24 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == "second"
 
     def test_empty_messages(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         assert _extract_response_text({"messages": []}) == ""
 
     def test_no_ai_messages(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {"messages": [{"type": "human", "content": "hi"}]}
         assert _extract_response_text(result) == ""
 
     def test_list_result(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = [{"type": "ai", "content": "from list"}]
         assert _extract_response_text(result) == "from list"
 
     def test_skips_empty_ai_content(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -329,7 +329,7 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == "actual response"
 
     def test_clarification_tool_message(self):
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -342,7 +342,7 @@ class TestExtractResponseText:
 
     def test_clarification_over_empty_ai(self):
         """When AI content is empty but ask_clarification tool message exists, use the tool message."""
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -354,7 +354,7 @@ class TestExtractResponseText:
 
     def test_does_not_leak_previous_turn_text(self):
         """When current turn AI has no text (only tool calls), do not return previous turn's text."""
-        from app.channels.manager import _extract_response_text
+        from app.channels.manager_helpers import extract_response_text as _extract_response_text
 
         result = {
             "messages": [
@@ -373,6 +373,62 @@ class TestExtractResponseText:
         assert _extract_response_text(result) == ""
 
 
+class TestClassifyErrorText:
+    """classify_error_text maps run exceptions to short user-facing messages."""
+
+    def test_usage_limit(self):
+        from app.channels.manager import classify_error_text
+
+        exc = Exception(
+            "Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', "
+            "'message': 'You have reached your specified API usage limits. "
+            "You will regain access on 2026-07-01 at 00:00 UTC.'}}"
+        )
+        text = classify_error_text(exc)
+        assert "usage limit" in text.lower()
+        assert "Anthropic Console" in text
+        # Short, single user-facing message — no stack trace / raw error code.
+        assert "Traceback" not in text
+        assert "400" not in text
+
+    def test_recursion_limit(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(Exception("GraphRecursionError: recursion_limit reached"))
+        assert "continue" in text.lower()
+
+    def test_timeout(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("Run timed out after 20 minutes"))
+        assert "cancelled" in text.lower()
+        assert "continue" in text.lower()
+
+    def test_stalled_run_reports_the_real_reason(self):
+        """Runs are no longer cancelled for taking a while, so the message must
+        say the run went quiet — not that it "took too long", which would now
+        be a lie and would push the user to needlessly split up healthy work."""
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("run on thread t1 made no progress for 15.0 minutes"))
+        assert "stalled" in text.lower()
+        assert "no progress" in text.lower()
+        assert "too long" not in text.lower()
+
+    def test_absolute_cap_message(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(TimeoutError("run on thread t1 exceeded the 6.0h absolute cap"))
+        assert "stalled" in text.lower()
+        assert "continue" in text.lower()
+
+    def test_generic_fallback(self):
+        from app.channels.manager import classify_error_text
+
+        text = classify_error_text(ValueError("something unexpected"))
+        assert text == "An internal error occurred. Please try again."
+
+
 # ---------------------------------------------------------------------------
 # ChannelManager tests
 # ---------------------------------------------------------------------------
@@ -388,7 +444,9 @@ def _make_mock_langgraph_client(thread_id="test-thread-123", run_result=None):
     # threads.get() returns thread info (succeeds by default)
     mock_client.threads.get = AsyncMock(return_value={"thread_id": thread_id})
 
-    # runs.wait() returns the final state with messages
+    # threads.search() returns empty list (no zombie runs)
+    mock_client.threads.search = AsyncMock(return_value=[])
+
     if run_result is None:
         run_result = {
             "messages": [
@@ -396,7 +454,15 @@ def _make_mock_langgraph_client(thread_id="test-thread-123", run_result=None):
                 {"type": "ai", "content": "Hello from agent!"},
             ]
         }
-    mock_client.runs.wait = AsyncMock(return_value=run_result)
+    # The manager creates a run, then joins THAT run id, so a queued sibling
+    # cannot resolve its wait with a mid-flight snapshot (2026-08-27).
+    mock_client.runs.create = AsyncMock(return_value={"run_id": "run-test-1"})
+    mock_client.runs.join = AsyncMock(return_value=run_result)
+    mock_client.runs.get = AsyncMock(return_value={"run_id": "run-test-1", "status": "success"})
+    mock_client.runs.cancel = AsyncMock(return_value=None)
+    # Retained so any test still asserting on the old surface fails loudly
+    # rather than silently passing against a call the manager no longer makes.
+    mock_client.runs.wait = AsyncMock(side_effect=AssertionError("manager must use runs.create + runs.join"))
 
     return mock_client
 
@@ -447,11 +513,11 @@ class TestChannelManager:
             assert thread_id == "test-thread-123"
 
             # runs.wait should be called with the thread_id
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][0] == "test-thread-123"  # thread_id
             assert call_args[0][1] == "lead_agent"  # assistant_id
-            assert call_args[1]["input"]["messages"][0]["content"] == "hi"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("hi")
 
             assert len(outbound_received) == 1
             assert outbound_received[0].text == "Hello from agent!"
@@ -496,8 +562,8 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][1] == "mobile_agent"
             assert call_args[1]["config"]["recursion_limit"] == 55
             assert call_args[1]["context"]["thinking_enabled"] is False
@@ -554,8 +620,8 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
             assert call_args[0][1] == "vip_agent"
             assert call_args[1]["config"]["recursion_limit"] == 77
             assert call_args[1]["context"]["thinking_enabled"] is True
@@ -622,12 +688,17 @@ class TestChannelManager:
                 thread_ts="om-source-1",
             )
             await bus.publish_inbound(inbound)
-            await _wait_for(lambda: len(outbound_received) >= 3)
+            # Expect 2 outbound messages: one non-final progress ("Hello") and one final ("Hello world").
+            # The second messages-tuple ("Hello world") and the values event both produce the same text,
+            # so the non-final dedup in _publish_progress correctly skips the duplicate.
+            await _wait_for(lambda: any(m.is_final for m in outbound_received))
             await manager.stop()
 
             mock_client.runs.stream.assert_called_once()
-            assert [msg.text for msg in outbound_received] == ["Hello", "Hello world", "Hello world"]
-            assert [msg.is_final for msg in outbound_received] == [False, False, True]
+            assert outbound_received[0].text == "Hello"
+            assert outbound_received[0].is_final is False
+            assert outbound_received[-1].text == "Hello world"
+            assert outbound_received[-1].is_final is True
             assert all(msg.thread_ts == "om-source-1" for msg in outbound_received)
 
         _run(go())
@@ -797,15 +868,15 @@ class TestChannelManager:
                         topic_id=f"topic-{i}",
                     )
                 )
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called twice (different topics)
             assert mock_client.threads.create.call_count == 2
 
             # runs.wait should be called twice with different thread_ids
-            assert mock_client.runs.wait.call_count == 2
-            wait_thread_ids = [c[0][0] for c in mock_client.runs.wait.call_args_list]
+            assert mock_client.runs.create.call_count == 2
+            wait_thread_ids = [c[0][0] for c in mock_client.runs.create.call_args_list]
             assert "thread-1" in wait_thread_ids
             assert "thread-2" in wait_thread_ids
 
@@ -842,15 +913,15 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called only ONCE (second message reuses the thread)
             mock_client.threads.create.assert_called_once()
 
             # Both runs.wait calls should use the same thread_id
-            assert mock_client.runs.wait.call_count == 2
-            for call in mock_client.runs.wait.call_args_list:
+            assert mock_client.runs.create.call_count == 2
+            for call in mock_client.runs.create.call_args_list:
                 assert call[0][0] == "topic-thread-1"
 
         _run(go())
@@ -886,15 +957,15 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create should be called only ONCE (second message reuses the thread)
             mock_client.threads.create.assert_called_once()
 
             # Both runs.wait calls should use the same thread_id
-            assert mock_client.runs.wait.call_count == 2
-            for call in mock_client.runs.wait.call_args_list:
+            assert mock_client.runs.create.call_count == 2
+            for call in mock_client.runs.create.call_args_list:
                 assert call[0][0] == "private-thread-1"
 
         _run(go())
@@ -931,14 +1002,14 @@ class TestChannelManager:
                 )
                 await bus.publish_inbound(msg)
 
-            await _wait_for(lambda: mock_client.runs.wait.call_count >= 2)
+            await _wait_for(lambda: mock_client.runs.create.call_count >= 2)
             await manager.stop()
 
             # threads.create called twice (different topics)
             assert mock_client.threads.create.call_count == 2
 
             # runs.wait used different thread_ids
-            wait_thread_ids = [c[0][0] for c in mock_client.runs.wait.call_args_list]
+            wait_thread_ids = [c[0][0] for c in mock_client.runs.create.call_args_list]
             assert set(wait_thread_ids) == {"thread-A", "thread-B"}
 
         _run(go())
@@ -976,11 +1047,11 @@ class TestChannelManager:
             await manager.stop()
 
             # Should go through the chat path (runs.wait), not the command reply path
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
 
             # The text sent to the agent should be the part after /bootstrap
-            assert call_args[1]["input"]["messages"][0]["content"] == "setup my workspace"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("setup my workspace")
 
             # run_context should contain is_bootstrap=True
             assert call_args[1]["context"]["is_bootstrap"] is True
@@ -1025,11 +1096,11 @@ class TestChannelManager:
             await _wait_for(lambda: len(outbound_received) >= 1)
             await manager.stop()
 
-            mock_client.runs.wait.assert_called_once()
-            call_args = mock_client.runs.wait.call_args
+            mock_client.runs.create.assert_called_once()
+            call_args = mock_client.runs.create.call_args
 
             # Default text should be used when no text is provided
-            assert call_args[1]["input"]["messages"][0]["content"] == "Initialize workspace"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("Initialize workspace")
             assert call_args[1]["context"]["is_bootstrap"] is True
 
         _run(go())
@@ -1087,7 +1158,7 @@ class TestChannelManager:
             mock_client.runs.stream.assert_called_once()
             call_args = mock_client.runs.stream.call_args
 
-            assert call_args[1]["input"]["messages"][0]["content"] == "hello"
+            assert call_args[1]["input"]["messages"][0]["content"].endswith("hello")
             assert call_args[1]["context"]["is_bootstrap"] is True
 
             # Final message should be published
@@ -1175,7 +1246,7 @@ class TestChannelManager:
 
 class TestExtractArtifacts:
     def test_extracts_from_present_files_tool_call(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1193,7 +1264,7 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == ["/mnt/user-data/outputs/report.md"]
 
     def test_empty_when_no_present_files(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1204,14 +1275,14 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == []
 
     def test_empty_for_list_result_no_tool_calls(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = [{"type": "ai", "content": "hello"}]
         assert _extract_artifacts(result) == []
 
     def test_only_extracts_after_last_human_message(self):
         """Artifacts from previous turns (before the last human message) should be ignored."""
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1239,7 +1310,7 @@ class TestExtractArtifacts:
         assert _extract_artifacts(result) == ["/mnt/user-data/outputs/chart.png"]
 
     def test_multiple_files_in_single_call(self):
-        from app.channels.manager import _extract_artifacts
+        from app.channels.manager_helpers import extract_artifacts as _extract_artifacts
 
         result = {
             "messages": [
@@ -1258,13 +1329,13 @@ class TestExtractArtifacts:
 
 class TestFormatArtifactText:
     def test_single_artifact(self):
-        from app.channels.manager import _format_artifact_text
+        from app.channels.manager_helpers import format_artifact_text as _format_artifact_text
 
         text = _format_artifact_text(["/mnt/user-data/outputs/report.md"])
         assert text == "Created File: 📎 report.md"
 
     def test_multiple_artifacts(self):
-        from app.channels.manager import _format_artifact_text
+        from app.channels.manager_helpers import format_artifact_text as _format_artifact_text
 
         text = _format_artifact_text(
             ["/mnt/user-data/outputs/a.txt", "/mnt/user-data/outputs/b.csv"],
@@ -1415,7 +1486,7 @@ class TestHandleChatWithArtifacts:
             }
 
             mock_client = _make_mock_langgraph_client(thread_id="thread-dup-test")
-            mock_client.runs.wait = AsyncMock(side_effect=[turn1_result, turn2_result])
+            mock_client.runs.join = AsyncMock(side_effect=[turn1_result, turn2_result])
             manager._client = mock_client
 
             outbound_received = []
@@ -1553,6 +1624,10 @@ class TestFeishuChannel:
         _run(go())
 
     def test_streaming_reuses_single_running_card(self):
+        # lark_oapi's message API transitively imports Crypto (pycryptodome), an
+        # optional dep not installed on this Slack-only deployment. Skip cleanly
+        # rather than erroring when it's absent (CI installs it).
+        pytest.importorskip("Crypto")
         from lark_oapi.api.im.v1 import (
             CreateMessageReactionRequest,
             CreateMessageReactionRequestBody,

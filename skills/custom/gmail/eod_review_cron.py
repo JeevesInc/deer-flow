@@ -1,0 +1,394 @@
+#!/usr/bin/env python3
+"""End of Day Review Cron — proactively surfaces unhandled items directed at Brian
+and surfaces what is open. No drafts are created.
+
+Runs once daily at 5:00 PM local time (configurable).
+
+What it does:
+  1. Fetches Gmail + Slack messages from the past 24h addressed to Brian
+  2. Uses LLM classification on each item to determine if it is a genuine
+     action item (reads full content -- NOT a 'last recipient' heuristic)
+  3. Reads Gemini meeting notes and classifies action items from today's meetings
+  4. Lists ACTIONABLE items with context Brian needs to respond
+  5. Posts a structured HIGH/MEDIUM/LOW EOD briefing to Brian's Slack DM
+  6. Saves full summary to Google Drive
+
+The goal: Brian should be able to clear his day in < 15 minutes by reviewing
+this brief and acting on open items.
+
+Env vars required:
+  - SLACK_BOT_TOKEN, SLACK_OWNER_USER_ID
+  - GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN
+  - LANGGRAPH_URL (default: http://localhost:2024)
+
+Optional:
+  - EOD_REVIEW_HOUR (default: 17 — 5 PM)
+"""
+
+import json
+import logging
+import os
+import sys
+import time
+import traceback
+from datetime import datetime, timedelta
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
+from env_loader import load_env
+load_env()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[EOD %(asctime)s] %(message)s',
+    datefmt='%H:%M:%S',
+)
+log = logging.getLogger('eod_review')
+
+EOD_HOUR = int(os.environ.get('EOD_REVIEW_HOUR', '17'))   # 5 PM
+CHECK_INTERVAL_SECS = 3600  # Check every hour, skip if not EOD time
+
+BRIAN_EMAIL    = 'brian.mauck@tryjeeves.com'
+# Canonical resolution incl. the bot-id-as-owner misconfig guard (P3-5).
+# Using the bot's ID here would surface DMs the bot received (Anish/Chin/
+# Kacper etc.) as if they were addressed to Brian.
+from identity import owner_slack_id  # noqa: E402  (_shared already on sys.path)
+BRIAN_SLACK_ID = owner_slack_id()
+
+# ------------------------------------------------------------------ #
+# State                                                                #
+# ------------------------------------------------------------------ #
+
+def _state_path() -> Path:
+    here = Path(__file__).resolve()
+    return here.parents[3] / 'backend' / '.deer-flow' / '_eod_review_state.json'
+
+
+def load_state() -> dict:
+    p = _state_path()
+    if p.exists():
+        with open(p) as f:
+            return json.load(f)
+    return {'last_eod': None, 'review_count': 0}
+
+
+def save_state(state: dict) -> None:
+    # Callers stamp last_eod explicitly — a rejected or failed dispatch must
+    # not look like a completed review (GW-F3 class).
+    p = _state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, 'w') as f:
+        json.dump(state, f, indent=2)
+
+
+def _already_ran_today(state: dict) -> bool:
+    last = state.get('last_eod')
+    if not last:
+        return False
+    last_dt = datetime.fromisoformat(last)
+    return last_dt.date() == datetime.now().date()
+
+
+# ------------------------------------------------------------------ #
+# Prompt builder                                                       #
+# ------------------------------------------------------------------ #
+
+def _build_eod_prompt(review_number: int) -> str:
+    today = datetime.now().strftime('%A, %B %d %Y')
+    today_short = datetime.now().strftime('%Y-%m-%d')
+    lookback_dt = (datetime.now() - timedelta(hours=24)).strftime('%Y-%m-%d')
+
+    return (
+        "END OF DAY REVIEW #" + str(review_number) + " -- " + today + "\n\n"
+        "You are DeerFlow-Analyst. This is Brian Mauck's automated end-of-day review.\n"
+        "Surface every genuine action item directed at Brian today that has not been\n"
+        "handled. DO NOT create Gmail drafts or Slack reply texts -- Brian only wants\n"
+        "to know what is open. He will handle responses himself.\n\n"
+        "Brian's email: " + BRIAN_EMAIL + "\n"
+        "Brian's Slack ID: " + BRIAN_SLACK_ID + "\n"
+        "Today: " + today_short + "\n"
+        "Lookback: " + lookback_dt + " to now\n\n"
+        "---\n\n"
+        "## CLASSIFIER STANDARD -- apply to every single item in every step below\n\n"
+        "Before flagging ANYTHING as an action item, read the full content and answer:\n\n"
+        "  1. Does this message contain a direct question addressed to Brian?\n"
+        "  2. Does it contain an explicit request for Brian to do something?\n"
+        "  3. Does it reference a decision or approval Brian needs to give?\n"
+        "  4. Does it reference a deliverable Brian is responsible for?\n"
+        "  5. Is there a deadline or time pressure implied?\n\n"
+        "Label each item:\n"
+        "  ACTIONABLE      -- yes to any of 1-5, AND Brian has not yet responded\n"
+        "  FYI_ONLY        -- informational only, no response required\n"
+        "  ALREADY_HANDLED -- Brian already replied or acted on this\n"
+        "  UNCLEAR         -- genuinely ambiguous; list separately for Brian to decide\n\n"
+        "Only ACTIONABLE items are included in the briefing.\n"
+        "FYI_ONLY and ALREADY_HANDLED are silently dropped -- do not mention them.\n\n"
+        "CRITICAL: do NOT use last-recipient-in-thread as a proxy for actionability.\n"
+        "An email where Brian is last recipient may still be FYI_ONLY.\n"
+        "An email where Brian is CC'd may be ACTIONABLE if it contains a genuine ask.\n"
+        "You MUST read the full body before classifying -- snippets are not enough.\n\n"
+        "---\n\n"
+        "## Step 0: Tickets -- read these first\n\n"
+        "Call ticket_list. Lead the briefing with every Ticket in waiting_on_brian (what decision or draft\n"
+        "he owes) and every open Ticket with no progress today. Do not re-surface Gmail/Slack items a\n"
+        "Ticket already covers.\n\n"
+        "## Step 1: Gmail -- fetch and classify\n\n"
+        "Load the gmail skill. Run this search:\n"
+        "  to:brian.mauck@tryjeeves.com after:" + lookback_dt + " -from:brian.mauck@tryjeeves.com\n\n"
+        "For EACH message returned (expect 20-30):\n\n"
+        "  1a. Read the FULL email body -- not the snippet:\n"
+        "        python /mnt/skills/custom/gmail/gmail_tool.py read <message_id>\n\n"
+        "  1b. Apply the CLASSIFIER STANDARD above.\n"
+        "      Ask: what is this person actually asking Brian to do, specifically?\n\n"
+        "  1c. Thread check -- MANDATORY before flagging ANYTHING as ACTIONABLE:\n"
+        "      Search Brian's Sent folder for replies in the same thread:\n"
+        "        python /mnt/skills/custom/gmail/gmail_tool.py search \"from:brian.mauck@tryjeeves.com in:sent after:" + lookback_dt + "\"\n"
+        "      Match on threadId (shown in cmd_read output). If Brian sent ANY message\n"
+        "      in the same thread AFTER the inbound timestamp -> ALREADY_HANDLED, drop silently.\n"
+        "      Do NOT rely on snippets — read the actual sent messages to confirm.\n"
+        "      This step is not optional. Missing it causes false-positive action items.\n\n"
+        "  1d. For ACTIONABLE items only:\n"
+        "      - Quote the specific ask verbatim (paraphrase only if very long)\n"
+        "      - Urgency:\n"
+        "          HIGH   = external counterparty (lender, investor, auditor, legal)\n"
+        "          MEDIUM = internal Jeeves colleague\n"
+        "          LOW    = soft ask, no deadline, low stakes\n"
+        "      - Note what data or context Brian would need to respond.\n"
+        
+        "## Step 2: Slack -- fetch and classify\n\n"
+        "Load the slack-search skill. Search for:\n"
+        "  - DMs to Brian (" + BRIAN_SLACK_ID + ") in the past 24 hours\n"
+        "  - @mentions of Brian in any channel\n\n"
+        "For EACH message, apply the CLASSIFIER STANDARD.\n"
+        "Read the full message AND thread context -- not just the notification text.\n\n"
+        "For ACTIONABLE Slack items:\n"
+        "  - Note: sender, channel, the specific ask\n"
+        "  - Note the channel/DM and specific ask\n\n"
+        "Slack reply check -- MANDATORY before flagging ANYTHING as ACTIONABLE:\n"
+        "  Search for Brian's own outbound messages in the same conversation:\n"
+        "    python /mnt/skills/custom/slack-search/slack_tool.py search \"from:@Brian\" --days 2\n"
+        "  Brian's Slack user ID is " + BRIAN_SLACK_ID + ". Any message in the thread\n"
+        "  with that user_id AFTER the inbound timestamp means he already replied.\n"
+        "  -> ALREADY_HANDLED, drop silently. This step is not optional.\n"
+        "  Missing it causes false-positive action items.\n\n"
+        "Common FYI_ONLY false positives to drop:\n"
+        "  - @mentions that loop Brian in for awareness with no explicit ask\n"
+        "  - Messages Brian has already replied to in the thread\n"
+        "  - Automated bot or workflow notification messages\n"
+        "  - Threads already resolved by another team member\n\n"
+        "## Step 3: Calendar -- today's meetings\n\n"
+        "Load google-calendar. Pull today's calendar events.\n"
+        "Note which meetings occurred today. Do NOT try to extract action items from\n"
+        "calendar metadata -- use Gemini notes (Step 3b) for all meeting action items.\n\n"
+        "## Step 3b: Gemini meeting notes -- classify action items\n\n"
+        "Gemini for Google Meet auto-generates meeting summaries and action item lists.\n"
+        "These are the highest-signal source of commitments made in today's meetings.\n\n"
+        "Search Gmail:\n"
+        "  from:gemini-notes@google.com after:" + today_short + "\n"
+        "That sender ONLY sends meeting notes (subject format: Notes: “Meeting name” Jul 1, 2026).\n"
+        "Do NOT search from:meet-recordings-noreply@google.com or subject:'Notes from your\n"
+        "meeting' -- that sender/format is dead (verified 2026-07-02: one recording email in\n"
+        "2024, zero notes ever) and searching it returns nothing.\n\n"
+        "For EACH set of notes found:\n"
+        "  1. Read the full notes document (gmail_tool.py read <msg_id> or fetch Drive link)\n"
+        "  2. Find the action items / next steps section\n"
+        "  3. Apply CLASSIFIER STANDARD to each action item:\n"
+        "     - Assigned to Brian by name, 'you', or implicitly as the Jeeves representative?\n"
+        "     - Already completed? Look for evidence in Gmail/Slack before flagging.\n"
+        "  4. ACTIONABLE meeting items: include meeting name + counterparty + urgency\n"
+        "  5. Any commitment made to an external counterparty is automatically HIGH\n\n"
+        "## Step 4: Lender pipeline -- proactive check\n\n"
+        "FIRST -- read the CLOSED block at the end of Current Priorities in\n"
+        "STRATEGIC_CONTEXT.md (header starts 'CLOSED ... never re-flag as pending'). Anything\n"
+        "named there is CLOSED: do NOT flag it, do NOT report it as gone quiet, do NOT ask\n"
+        "about it. Silence on a closed item is the expected state, not a stall. CBIZ was\n"
+        "wrongly flagged as stalled twice after closing 2026-08-06 (2026-08-30 and 2026-08-31)\n"
+        "because this step hardcoded it. Never hardcode a counterparty name in this step again\n"
+        "-- derive the live list from Current Priorities each run.\n"
+        "\n"
+        "Then check workstreams still OPEN in Current Priorities for items at risk of going\n"
+        "cold (e.g. NB post-closing punch list, CIM monthly reporting, BBVA Guaranty, Mastercard\n"
+        "collateral, Colombia trust). For each candidate, name the last outbound you actually\n"
+        "found (date + thread id) before flagging it.\n\n"
+        "Before flagging ANY item as still-pending, re-verify directly against Gmail Sent mail\n"
+        "and Slack (same standard as Steps 1/2/3b) -- do NOT rely on STRATEGIC_CONTEXT.md's\n"
+        "framing alone. STRATEGIC_CONTEXT.md can be stale; a stale summary caused EOD #26\n"
+        "(2026-07-03) to wrongly carry an already-answered NB ODD item as pending. Search\n"
+        "Sent mail / Slack replies for each candidate item before including it.\n\n"
+        "Flag any where Brian's last outbound was >3 business days ago with no reply.\n\n## Step 4b: forward-deadline sweep -- dated items, regardless of traffic\n\nSteps 1-4 are all TRAFFIC-driven: an item surfaces because mail arrived today, or\nbecause it went cold. A commitment with a DATED deadline in the near future is\nneither -- it produced its mail once and is not yet stale, so it silently drops out\nof the review on day 2 and reappears only when it is late.\nSo: read the 'Clocks running:' paragraph at the top of Current Priorities in\nSTRATEGIC_CONTEXT.md plus any explicit date in the HIGH items, and list EVERY dated\nobligation falling within the next 5 business days, whether or not it generated\ntraffic today. One line each: what is due, the date, and who owns it. Put anything\nowned by Brian by URGENCY, not by the mere existence of a date: HIGH only if it is due today or next business day, or is late; MEDIUM if work must start tomorrow to make it; otherwise list it under 'Coming up (next 5 business days)' -- never HIGH. (2026-09-24: a weekly NB BB due Mon 9-28 was put in HIGH on Thu; Brian: 'why is this urgent for today?') Skip dates owned entirely by other people unless Brian is\nnamed. Do not invent deadlines -- quote only dates written in the file, and if a\ndate is marked [Needs Confirmation], carry that marker through.\n(Added 2026-09-06, Dream #110: the Mastercard next-steps mail of 2026-09-04 put a\n$4M collateral post on Fri 2026-09-11 and a parent-guarantee review on Mon-Wed\n2026-09-07/09 -- both dated, both fresh, and therefore invisible to Steps 1-4 the\nmoment the originating thread went quiet.)\n\n"
+        "## Step 5: Post EOD briefing to Slack\n\n"
+        "Post to Brian's Slack DM using this format:\n\n"
+        "  EOD Review #" + str(review_number) + " -- " + today + "\n\n"
+        "  HIGH (action today):\n"
+        "  - [Email/Slack/Meeting] [person] -- [specific ask] -> [what Brian needs to do]\n\n"
+        "  MEDIUM (action tomorrow AM):\n"
+        "  - ...\n\n"
+        "  LOW:\n"
+        "  - ...\n\n"
+        "  UNCLEAR (Brian to decide):\n"
+        "  - [item] -- [why it's ambiguous]\n\n"
+                "  Coming up (next 5 business days): [item] -- [date] -- [owner]\n\n"
+        "  Lender pipeline: [any items at risk or gone quiet]\n\n"
+        "Bullets only. No paragraphs. Under 400 words total.\n\n"
+        "## Step 6: Save to Google Drive\n\n"
+        "Save the open items briefing as a Google Doc.\n"
+        "File name: EOD Review - " + today_short + ".md\n"
+        "Upload using upload_to_drive.py with the --new flag (NOT default dedupe) -- the\n"
+        "default dedupe strips dates and collapses each day's EOD Review into one Drive\n"
+        "file's revision history instead of a separate file per day (flagged 2026-07-04,\n"
+        "unresolved through 2026-07-15). --new preserves each day's file separately.\n"
+        "Include the Drive link in the Slack message.\n\n"
+        "---\n\n"
+        "ACCURACY RULES -- mandatory:\n"
+        "- Only flag items you actually found and fully read. Never infer from snippets alone.\n"
+        "- If Brian has already replied: ALREADY_HANDLED, drop it silently.\n"
+        "- Never draft text that commits Brian to deal terms, numbers, or legal language.\n"
+        "  Use placeholders: [CONFIRM AMOUNT], [CHECK WITH ALEX], [VERIFY DATE].\n"
+        "- Uncertain whether action is needed -> UNCLEAR, not ACTIONABLE.\n"
+        "- A broken number from OUR OWN pipeline is never an UNCLEAR item -- diagnose it in\n"
+        "  this run. If a bot-owned cron or report shows an impossible value (exactly zero,\n"
+        "  null, or a component equal to its own total -- e.g. the MX SOFOM BB DM printing\n"
+        "  Eligible $0.00 on 2026-09-04/05/06 with ineligible == total receivables), open the\n"
+        "  state file and the script that writes it, name the mechanism, and say whether the\n"
+        "  number is real. Handing Brian one of our own metrics we did not check is noise.\n"
+    )
+
+
+# ------------------------------------------------------------------ #
+# Dispatch                                                             #
+# ------------------------------------------------------------------ #
+
+def _run_proposal_learner() -> None:
+    """Pair yesterday's proposals with their thread outcomes and synthesize
+    classifier learnings into mem0. Runs as part of the EOD cycle.
+
+    Failures here are logged and swallowed — the rest of EOD must still run.
+    """
+    try:
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from proposal_learner import run_daily as _proposal_run
+        summary = _proposal_run()
+        log.info("Proposal learner finished: %s", summary)
+    except Exception as e:
+        log.error("Proposal learner failed (non-fatal): %s", e)
+        traceback.print_exc()
+
+
+def _run_action_learner() -> None:
+    """Learn triage/voice/substance patterns from what Brian did today on his
+    own -- sent mail, threads he ignored, Slack sends -- into mem0 under
+    user_id brian-behavior. Also runs the weekly consolidation gate.
+
+    Failures here are logged and swallowed -- the rest of EOD must still run.
+    """
+    try:
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        from action_learner import run_daily as _action_run
+        summary = _action_run()
+        log.info("Action learner finished: %s", summary)
+    except Exception as e:
+        log.error("Action learner failed (non-fatal): %s", e)
+        traceback.print_exc()
+
+
+def run_eod_review() -> None:
+    log.info("Starting EOD review...")
+
+    # Step 0: refine the email classifier from yesterday's labeled outcomes
+    # before drafting today's review. Runs synchronously; cheap (a few LLM
+    # calls). If it fails it does not block the EOD agent dispatch.
+    _run_proposal_learner()
+    _run_action_learner()
+
+    state = load_state()
+
+    review_number = state.get('review_count', 0) + 1
+    prompt = _build_eod_prompt(review_number)
+
+    today = datetime.now().strftime('%B %d')
+    # Start ping suppressed 2026-08-30 (Dream #103): SOUL bans interim-progress
+    # narration, and the EOD agent posts its own briefing ~5 min later. Brian was
+    # getting three DMs per review (start ping + briefing + harness echo).
+    # Failures are still reported by autonomous_dispatch regardless of this value.
+    notification = None
+
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
+        # Plain dispatch, NOT enqueue_or_dispatch: run_loop retries every tick
+        # while last_eod is unstamped, and a persisted-queue copy can't stamp
+        # our state — it would re-run a review the queue already dispatched.
+        from autonomous_dispatch import dispatch
+
+        dispatched = dispatch(
+            prompt,
+            notification=notification,
+            report_result=False,
+            category="EOD Review",
+            source_id=f"eod-{datetime.now().strftime('%Y%m%d')}",
+            source_metadata={"review_number": review_number},
+        )
+        if dispatched:
+            state['review_count'] = review_number
+            log.info("EOD review dispatched successfully.")
+        else:
+            log.warning("EOD review rejected — agent at capacity. Will retry next cycle.")
+            # Don't update review_count — allow retry
+            return
+    except Exception as e:
+        log.error("EOD review dispatch failed: %s", e)
+        traceback.print_exc()
+        return
+
+    state['last_eod'] = datetime.now().isoformat()
+    save_state(state)
+
+
+# ------------------------------------------------------------------ #
+# Loop                                                                 #
+# ------------------------------------------------------------------ #
+
+def run_loop() -> None:
+    log.info(f"EOD Review cron started. Will trigger at {EOD_HOUR:02d}:00 daily.")
+
+    while True:
+        now = datetime.now()
+
+        # >= instead of ==: downtime (or tick drift) across the target hour
+        # delays the review to the next tick that day instead of silently
+        # skipping the whole day (GW-F10).
+        if now.hour >= EOD_HOUR:
+            state = load_state()
+            if not _already_ran_today(state):
+                try:
+                    run_eod_review()
+                except Exception as e:
+                    log.error("EOD loop error: %s", e)
+                    traceback.print_exc()
+            else:
+                log.info("Already ran EOD review today, skipping.")
+        else:
+            log.debug(f"Not EOD time yet (current hour: {now.hour}, target: {EOD_HOUR})")
+
+        time.sleep(CHECK_INTERVAL_SECS)
+
+
+if __name__ == '__main__':
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+    import argparse
+    parser = argparse.ArgumentParser(description='EOD Review Cron')
+    parser.add_argument('mode', nargs='?', choices=['once'],
+                        help='Run one review immediately instead of looping')
+    args = parser.parse_args()
+
+    if args.mode == 'once':
+        run_eod_review()
+    else:
+        run_loop()

@@ -321,5 +321,6 @@ class TestLiveErrorResilience:
             client.get_artifact("t", "invalid/path")
 
     def test_path_traversal_blocked(self, client):
-        with pytest.raises(PermissionError):
+        from deerflow.uploads.manager import PathTraversalError
+        with pytest.raises((PermissionError, PathTraversalError)):
             client.delete_upload("t", "../../etc/passwd")

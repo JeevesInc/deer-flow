@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import replace
-from typing import Annotated, Literal
+from typing import Annotated
 
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langgraph.config import get_stream_writer
@@ -23,7 +23,7 @@ async def task_tool(
     runtime: ToolRuntime[ContextT, ThreadState],
     description: str,
     prompt: str,
-    subagent_type: Literal["general-purpose", "bash"],
+    subagent_type: str,
     tool_call_id: Annotated[str, InjectedToolCallId],
     max_turns: int | None = None,
 ) -> str:
@@ -34,12 +34,14 @@ async def task_tool(
     - Handle complex multi-step tasks autonomously
     - Execute commands or operations in isolated contexts
 
-    Available subagent types:
+    Available subagent types (builtins + any named specialist agents configured on this instance):
     - **general-purpose**: A capable agent for complex, multi-step tasks that require
       both exploration and action. Use when the task requires complex reasoning,
       multiple dependent steps, or would benefit from isolated context.
     - **bash**: Command execution specialist for running bash commands. Use for
       git operations, build processes, or when command output would be verbose.
+    - **<specialist-name>**: Any configured specialist soul agent (e.g. "jeeves-redshift",
+      "capital-markets"). Use when the task falls squarely in that agent's domain.
 
     When to use this tool:
     - Complex tasks requiring multiple steps or tools
@@ -60,7 +62,11 @@ async def task_tool(
     # Get subagent configuration
     config = get_subagent_config(subagent_type)
     if config is None:
-        return f"Error: Unknown subagent type '{subagent_type}'. Available: general-purpose, bash"
+        from deerflow.subagents.registry import BUILTIN_SUBAGENTS
+        from deerflow.subagents.custom_agents import list_custom_agent_subagent_names
+
+        available = list(BUILTIN_SUBAGENTS.keys()) + list_custom_agent_subagent_names()
+        return f"Error: Unknown subagent type '{subagent_type}'. Available: {', '.join(available)}"
 
     # Build config overrides
     overrides: dict = {}

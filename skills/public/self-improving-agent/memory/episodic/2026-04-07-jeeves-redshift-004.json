@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-07-004",
+  "timestamp": "2026-04-07T19:52:44.145818+00:00",
+  "skill": "jeeves-redshift",
+  "situation": "Patched skill guidance in jeeves-redshift",
+  "root_cause": "",
+  "solution": "Replaced: Use these as templates. Every loc_tape query MUST include... -> ## SQL Style\\nALWAYS write SQL with leading commas, not trailing commas. Example...",
+  "lesson": "Skill guidance updated based on experience",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

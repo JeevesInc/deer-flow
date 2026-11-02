@@ -1,6 +1,8 @@
 import os
 import shutil
 import subprocess
+import sys
+import threading
 from pathlib import Path
 
 from deerflow.sandbox.local.list_dir import list_dir
@@ -146,29 +148,169 @@ class LocalSandbox(Sandbox):
         for shell in ("/bin/zsh", "/bin/bash", "/bin/sh"):
             if os.path.isfile(shell) and os.access(shell, os.X_OK):
                 return shell
+        # Windows services don't inherit git-bash's PATH (the machine PATH has
+        # Git\cmd but not Git\usr\bin), so resolve Git Bash by explicit path.
+        # Never fall back to shutil.which("bash") on Windows - on a stock PATH
+        # that finds C:\WINDOWS\system32\bash.exe, which is WSL.
+        if os.name == "nt":
+            program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+            for candidate in (
+                os.path.join(program_files, "Git", "bin", "bash.exe"),
+                os.path.join(program_files, "Git", "usr", "bin", "sh.exe"),
+            ):
+                if os.path.isfile(candidate):
+                    return candidate
         shell_from_path = shutil.which("sh")
         if shell_from_path is not None:
             return shell_from_path
-        raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, and `sh` on PATH.")
+        raise RuntimeError("No suitable shell executable found. Tried /bin/zsh, /bin/bash, /bin/sh, Git Bash (Windows), and `sh` on PATH.")
+
+    @staticmethod
+    def _get_subprocess_env() -> dict[str, str]:
+        """Build a sanitized environment for subprocess calls.
+
+        On Windows with Git Bash / MSYS2, sh.exe can crash with a
+        Cygwin/PTY initialization error when TERM is set to a value
+        that expects a real terminal (e.g. xterm-256color) but no PTY
+        is available (subprocess.run captures stdout/stderr via pipes).
+        Setting TERM=dumb and MSYS=disable_pcon avoids this.
+        """
+        env = os.environ.copy()
+        # Windows services get only the machine PATH — prepend our own
+        # interpreter's directory so bare `python` resolves to the venv
+        # python in agent bash commands (it did under start.sh's git-bash).
+        env["PATH"] = os.path.dirname(sys.executable) + os.pathsep + env.get("PATH", "")
+        env["TERM"] = "dumb"
+        env["MSYS"] = "disable_pcon"
+        # Prevent MSYS2 path mangling (e.g. /mnt/ → C:\msys\mnt\)
+        env["MSYS_NO_PATHCONV"] = "1"
+        env["MSYS2_ARG_CONV_EXCL"] = "*"
+        return env
+
+    # A command that outlives this budget is killed, tree and all, and the agent
+    # gets a timeout notice as the tool result so it can recover inside the turn.
+    COMMAND_TIMEOUT_SECONDS = int(os.environ.get("SANDBOX_BASH_TIMEOUT", "600"))
+
+    # Grace period for the reader threads to drain whatever the dying tree left
+    # in the pipes. Short: we already have the output we are going to get.
+    _DRAIN_GRACE_SECONDS = 5
+
+    @staticmethod
+    def _kill_process_tree(proc: subprocess.Popen) -> None:
+        """Kill a process and every descendant it spawned.
+
+        ``Popen.kill()`` terminates only the shell. Agent commands are almost
+        always ``bash -c '$PYTHON_PATH script.py'``, so the real work is a
+        grandchild that inherits the stdout/stderr pipe handles and keeps them
+        open after the shell dies. That is not a theoretical leak: it is why
+        ``subprocess.run(timeout=600)`` could not enforce its own timeout —
+        ``run()`` kills the shell, then blocks in ``communicate()`` waiting on a
+        pipe an orphaned python still holds. Measured on this host 2026-09-14: a
+        3s timeout returned after 25.1s, exactly the grandchild's lifetime. One
+        such hang wedged a live thread for 11 minutes (thread f192dd6c, the
+        Anexo J tape load) until the stuck-run monitor cancelled the run, and
+        the user got nothing back but "that run was interrupted".
+        """
+        try:
+            import psutil
+        except ImportError:
+            # No psutil — kill what we can reach and let the drain grace expire.
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            return
+
+        try:
+            parent = psutil.Process(proc.pid)
+        except (psutil.NoSuchProcess, psutil.Error):
+            return
+
+        try:
+            victims = parent.children(recursive=True)
+        except psutil.Error:
+            victims = []
+        victims.append(parent)
+
+        for victim in victims:
+            try:
+                victim.kill()
+            except (psutil.NoSuchProcess, psutil.Error):
+                continue
+        # Reap so the handles actually close; ignore whatever refuses to die.
+        try:
+            psutil.wait_procs(victims, timeout=3)
+        except psutil.Error:
+            pass
 
     def execute_command(self, command: str) -> str:
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
 
         shell = self._get_shell()
-        result = subprocess.run(
+        timeout = self.COMMAND_TIMEOUT_SECONDS
+
+        proc = subprocess.Popen(
             [shell, "-c", resolved_command],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=600,
+            env=self._get_subprocess_env(),
         )
-        output = result.stdout
-        if result.stderr:
-            output += f"\nStd Error:\n{result.stderr}" if output else result.stderr
-        if result.returncode != 0:
-            output += f"\nExit Code: {result.returncode}"
+
+        # Drain the pipes from dedicated threads rather than communicate(), so a
+        # surviving grandchild can never block our return. The threads are
+        # daemons: if one is still stuck on a held pipe when we give up, it does
+        # not keep the interpreter alive.
+        chunks: dict[str, str] = {"stdout": "", "stderr": ""}
+
+        def _drain(name: str, stream) -> None:
+            try:
+                chunks[name] = stream.read() or ""
+            except (OSError, ValueError):
+                pass
+
+        readers = [
+            threading.Thread(target=_drain, args=("stdout", proc.stdout), daemon=True),
+            threading.Thread(target=_drain, args=("stderr", proc.stderr), daemon=True),
+        ]
+        for reader in readers:
+            reader.start()
+
+        timed_out = False
+        returncode: int | None = None
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            self._kill_process_tree(proc)
+
+        for reader in readers:
+            reader.join(self._DRAIN_GRACE_SECONDS if timed_out else None)
+
+        for stream in (proc.stdout, proc.stderr):
+            try:
+                stream.close()
+            except (OSError, ValueError):
+                pass
+
+        output = chunks["stdout"]
+        if chunks["stderr"]:
+            output += f"\nStd Error:\n{chunks['stderr']}" if output else chunks["stderr"]
+
+        if timed_out:
+            notice = (
+                f"\nTimed out after {timeout}s — the command and everything it "
+                f"spawned were killed. Any output above is partial. Re-run a "
+                f"narrower version (smaller slice, fewer rows, or write "
+                f"intermediate results to a file) rather than repeating this "
+                f"command unchanged."
+            )
+            output = output + notice if output else notice.lstrip()
+        elif returncode != 0:
+            output += f"\nExit Code: {returncode}"
 
         final_output = output if output else "(no output)"
         # Reverse resolve local paths back to container paths in output
@@ -183,7 +325,7 @@ class LocalSandbox(Sandbox):
     def read_file(self, path: str) -> str:
         resolved_path = self._resolve_path(path)
         try:
-            with open(resolved_path, encoding="utf-8") as f:
+            with open(resolved_path, encoding="utf-8", errors="replace") as f:
                 return f.read()
         except OSError as e:
             # Re-raise with the original path for clearer error messages, hiding internal resolved paths

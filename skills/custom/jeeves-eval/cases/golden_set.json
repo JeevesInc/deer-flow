@@ -1,0 +1,1229 @@
+{
+  "schema_version": 1,
+  "built_at": "2026-08-26T17:47:17.212948+00:00",
+  "seed": 20260826,
+  "size": 60,
+  "positives": 30,
+  "negatives": 30,
+  "label_policy": {
+    "positive_outcomes": [
+      "approved",
+      "handled_elsewhere",
+      "redirected"
+    ],
+    "negative_outcomes": [
+      "dismissed",
+      "rejected"
+    ],
+    "excluded_outcomes": [
+      "ignored",
+      "unknown"
+    ],
+    "ambiguous_dispositions_excluded": [
+      "thread_progressed"
+    ],
+    "note": "ignored/unknown are excluded — absence of a reply is not a label. handled_elsewhere counts as positive only when Brian himself replied."
+  },
+  "cases": [
+    {
+      "case_id": "prop-19f3991c3083ec6e",
+      "source": "proposal",
+      "gmail_msg_id": "19f3991c3083ec6e",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "kroll.com",
+      "posted_at": "2026-07-06T22:36:39.257705+00:00",
+      "historical_proposed_action": "Review the attached Kroll transaction files and reply to Nick with any questions or confirmation of receipt by end of day.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (101 msgs).",
+      "inputs": {
+        "sender": "\"Pauzano, Nick\" <Nick.Pauzano@kroll.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Berger, Jay\" <Jay.Berger@nb.com>, \"Surapaneni, Varun\" <Varun.Surapaneni@nb.com>, \"Raia, Joe\" <Joseph.Raia@nb.com>, \"Kee, Jing Shun\" <JingShun.Kee@kroll.com>, \"Weber, Brian\" <Brian.Weber@kroll.com>, Alexander Melikian <alexander@tryjeeves.com>, \"Fernandez, Max\" <Max.Fernandez@nb.com>",
+        "subject": "RE: [EXTERNAL] Re: Kroll intro",
+        "body": "Hi Brian,\r\n\r\nGreat speaking last week and hope you had a great weekend. Please find our attached selected transactions and let us know if you have any questions.\r\n\r\nBest,\r\n\r\n_____________________________________________\r\nNick Pauzano\r\nVice President, Financial Instruments and Technology\r\n\r\nT +1 212 450 8167\r\n\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Wednesday, July 1, 2026 8:17 PM\r\nTo: Pauzano, Nick <Nick.Pauzano@kroll.com>\r\nCc: Berger, Jay <Jay.Berger@nb.com>; Surapaneni, Varun <Varun.Surapaneni@nb.com>; Raia, Joe <Joseph.Raia@nb.com>; Kee, Jing Shun <JingShun.Kee@kroll.com>; Weber, Brian <Brian.Weber@kroll.com>; Alexander Melikian <alexander@tryjeeves.com>; Fernandez, Max <Max.Fernandez@nb.com>\r\nSubject: Re: [EXTERNAL] Re: Kroll intro\r\n\r\nGreat, invite sent. Talk then. Brian Mauck 1 480 710 1344brian.mauck@tryjeeves.com<mailto:1344brian.mauck@tryjeeves.com> On Wed, Jul 1, 2026, 17:01 Pauzano, Nick <Nick.Pauzano@kroll.com<mailto:Nick.Pauzano@kroll.com>> wrote: Hi Brian, We have availability from 11:30am-1pm EST tomorrow. If you could please include Jing Shun on the invite. Best, _________________\r\n<https://report.mimecastcybergraph.com/?magiclink=https%3A%2F%2Fapi.services.mimecast.com%2Foauth2%2Fauthorize%3Fresponse_type%3Dcode%26client_id%3Do20nRkVXf7VUVnANkXhoOwGytEwGN0YAlyeDJn7oBTGNl2kN%26state%3DeyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIn0.QS8pQoJDKHdnCgwpPyuovRX3nHa81rijlM-6tMwNsmp7qyaH72BwIOJ-S5IVYL5Jdkdh5lDCyZbsnqoh37P7TsHM2AG_hOO-UujVabqQYyYlWek8_szlFOQ2eXVgWGTLACWlGyURXbLZ8ADno0I3Kq116e3uwy108aF3IJ7xcpRw8TiATmPAq_1rZwNjoIv8yaXid6vRXU1YEv2Ydnuv4rMshIS9DabYoVbB_upBvdIoMmz2zcWyNmRammMwdnQx5oqaDvcrhBVevKjpX3PEAFBKKuGEvcRTpLMqtfgQF7tyC4zbul1eV_PPIXE9d0FjbGjiJPX8FWnwb8TPmR0XXw.vAKbJ7Wc82N6gnbQ.l0y-JPlp4-b5uJt0OBwYRZuqm7Tv8cZOhttsNQNdPOF4Kj0KhQsMVqayspHAocWamngg1wVIYgi2Abiv0rcxICi-4rB11YxsjnbW9Llb-gO4BhgoQQsj4lXCISTPYvCWHfeh8Hm7KzBTYKwt8Xay4LlmmCxp0iNkNKKaAyFR9xT-ubr7_kvtVAZvIku--u_QzmM24Y6KYA9kuRhtM5IzmQEnYO4prjpyacFD8HcUpcQ7ZC86BNkk4EhDtwnIp-P8GEwdis1ySSk5Pui5SIzUaOKORJokwZpKtWpWh_Wc6rvFWI7OOOuXe6uojTar7zSoVT1wQ-L-gEesHVGjXkJgpJJSdChZoIH8keitbesdirMROqtM2SszSfWsX95fAenCnymI50Rocutqnr29H7UJydcOEC7HPxjgsmnKqG4DhrOcb5mtaNvpdkHzJtPOTuoKs3id47SGxo4CJhSf7ea5gpavpkfIolRyivOvk8RMwvBhlf3rGvN4xcOMRBNFPrmcZM4_UP6lP2BMF70XIq6nKdzWyLDG5Y2iRacrzAAWggfkMBQKRB4YMi-J7UA4HJjd0JOCYEv6sCGSI3hLaiSAQCD2gtCOb3Ji68fnjT_2LEo_Vt1S4PFqeg5TcX-_lFq9XjvZsb7NWF6CAB__WCYASNdeIAdp_ggGRupn6nTQUXNa-g5cvpCXpd0LkUPcrCYZ0X0ADgrzXvuN9w46Ig9LNHUPry5bXnasZ3LbZl6B05lumqRlamNLlKLZ6cnFR0mOWrHnfHM1PNVDXjJSEpN6pFlPC-MCVA6JNsLHOsBx.5edNcA5XNGasTfgHzSyNWw%26redirect_uri%3Dhttps%3A%2F%2Freport.mimecastcybergraph.com%2Fcallback>\r\nCGBANNERINDICATOR\r\nGreat, invite sent. Talk then.\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Wed, Jul 1, 2026, 17:01 Pauzano, Nick <Nick.Pauzano@kroll.com<mailto:Nick.Pauzano@kroll.com>> wrote:\r\nHi Brian,\r\n\r\nWe have availability from 11:30am-1pm EST tomorrow. If you could please include Jing Shun on the invite.\r\n\r\nBest,\r\n\r\n_____________________________________________\r\nNick Pauzano\r\nVice President, Financial Instruments and Technology\r\n\r\nT +1 212 450 8167\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Wednesday, July 1, 2026 7:17 PM\r\nTo: Pauzano, Nick <Nick.Pauzano@kroll.com<mailto:Nick.Pauzano@kroll.com>>\r\nCc: Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>>; Surapaneni, Varun <Varun.Surapaneni@nb.com<mailto:Varun.Surapaneni@nb.com>>; Raia, Joe <Joseph.Raia@nb.com<mailto:Joseph.Raia@nb.com>>; Kee, Jing Shun <JingShun.Kee@kroll.com<mailto:JingShun.Kee@kroll.com>>; Weber, Brian <Brian.Weber@kroll.com<mailto:Brian.Weber@kroll.com>>; Alexander Melikian <alexander@tryjeeves.com<mailto:alexander@tryjeeves.com>>; Fernandez, Max <Max.Fernandez@nb.com<mailto:Max.Fernandez@nb.com>>\r\nSubject: Re: [EXTERNAL] Re: Kroll intro\r\n\r\nHi Nick-\r\n\r\nI have some things to share with you, but think we should have"
+      }
+    },
+    {
+      "case_id": "prop-19f52a4f2cd35a38",
+      "source": "proposal",
+      "gmail_msg_id": "19f52a4f2cd35a38",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-11T19:26:45.278012+00:00",
+      "historical_proposed_action": "Draft a reply to Alex outlining the pledge conflict with BBVA and propose a specific solution (e.g., carve-outs, collateral segregation, or alternative loan party structure) that addresses both NB's and BBVA's requirements, and suggest a call to align.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (37 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Re: NB Docs",
+        "body": "If we do this, how do we solve for the pledge that BBVA has?\r\n\r\nOn Sat, Jul 11, 2026 at 12:41 PM Brian Mauck <brian.mauck@tryjeeves.com>\r\nwrote:\r\n\r\n> These are fundamentally opposing ideas. The easiest solve is adding the\r\n> SAdCV as a loan party. Then we can borrow against the collateral at the SA,\r\n> get credit for the MXN not in the SPV towards min liq and can move cash to\r\n> the SAdCV without restrictions.\r\n>\r\n> I talked to Melissa this morning about it, happy to discuss this weekend\r\n> if you want\r\n>\r\n> Brian Mauck\r\n> [image: phone-icon] 1 480 710 1344\r\n> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>\r\n> On Sat, Jul 11, 2026, 08:43 Alexander Melikian <alexander@tryjeeves.com>\r\n> wrote:\r\n>\r\n>> Thank you.\r\n>>\r\n>> What we need to solve and happy to discuss\r\n>>\r\n>> 1) not adding collateral in MX even if loan party 2) if not loan party,\r\n>> maximize amount of cash that can be moved, with specific carve out for MX\r\n>>\r\n>>\r\n>>\r\n>> On Sat, Jul 11, 2026 at 10:57 AM Brian Mauck <brian.mauck@tryjeeves.com>\r\n>> wrote:\r\n>>\r\n>>> Yes, that generally makes sense and is the spirit of the agreement. You\r\n>>> can't just move cash to entities that aren't loan parties without\r\n>>> restrictions. Adding MX as a loan party is trying to help us avoid those\r\n>>> restrictions.\r\n>>>\r\n>>> Regardless of the ability to police it, running afoul is still an event\r\n>>> of default.\r\n>>>\r\n>>> Brian Mauck\r\n>>> [image: phone-icon] 1 480 710 1344\r\n>>> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>>>\r\n>>> On Sat, Jul 11, 2026, 07:51 Alexander Melikian <alexander@tryjeeves.com>\r\n>>> wrote:\r\n>>>\r\n>>>> Hi Brian\r\n>>>>\r\n>>>> Good morning.\r\n>>>>\r\n>>>> Spoke with Melissa - apparently NB is trying to make MX a loan party.\r\n>>>> Melissa is telling me that if MX is NOT a loan party, we would have\r\n>>>> restrictions of investments of $500K cash movements into MX from US, and\r\n>>>> that they would police it.\r\n>>>>\r\n>>>> I didn't delve deeper with Melissa - I asked her to send the issues\r\n>>>> list so we could review internally.\r\n>>>>\r\n>>>> Are you aware of cash movement restrictions into MX from US? That was\r\n>>>> not how I understood any of our chats, and is definitely not aligned with\r\n>>>> the spirit of the facility. In practice, I don't know how they would be\r\n>>>> able to police any of this.\r\n>>>>\r\n>>>> ---------- Forwarded message ---------\r\n>>>> From: Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>\r\n>>>> Date: Sat, Jul 11, 2026 at 9:59 AM\r\n>>>> Subject: RE: NB Docs\r\n>>>> To: Alexander Melikian <alexander@tryjeeves.com>\r\n>>>> CC: Cohen, Avia <AviaCohen@goodwinlaw.com>, Brian Mauck <\r\n>>>> brian.mauck@tryjeeves.com>, Garaffa, Tyler <TGaraffa@goodwinlaw.com>,\r\n>>>> Brandon McGathy <brandon@tryjeeves.com>, DG-JeevesGoodwin <\r\n>>>> DG-JeevesGoodwin@goodwinlaw.com>\r\n>>>>\r\n>>>>\r\n>>>> Alex:\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Could you connect quickly live? I was hoping to take your temperature\r\n>>>> on something. I am at 917-375-7136.\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Melissa\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>\r\n>>>>\r\n>>>> *Melissa Schwab Wright*\r\n>>>> *she/her/hers*\r\n>>>>\r\n>>>> <https://www.goodwinlaw.com/>\r\n>>>>\r\n>>>>\r\n>>>> Goodwin Procter LLP\r\n>>>> 100 Northern Avenue\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>\r\n>>>> Boston, MA 02210\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>\r\n>>>>\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>\r\n>>>> o\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>+1\r\n>>>> 617 570 8233\r\n>>>>\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>\r\n>>>> f\r\n>>>> <https://www.google.com/maps/search/100+Northern+Avenue+%0D%0A+Boston,+MA+02210?entry=gmail&source=g>  +1\r\n>>>> 617 801 8"
+      }
+    },
+    {
+      "case_id": "obs-19fee1719a2d7bee",
+      "source": "observation",
+      "gmail_msg_id": "19fee1719a2d7bee",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "goodwinlaw.com",
+      "posted_at": "2026-08-10T23:50:36+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "\"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>, \"Neutel, Avia\" <AviaNeutel@goodwinlaw.com>, Alexander Melikian <alexander@tryjeeves.com>",
+        "cc": "\"Garaffa, Tyler\" <TGaraffa@goodwinlaw.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "subject": "Jeeves / NB - Post-Closing - DACA",
+        "body": "Jeeves team,\n\nAs part of the post-closing requirements for the Jeeves-NB credit facility, we will need to deliver a Deposit Account Control Agreement (a “DACA”) for any U.S. Deposit Account and Securities Account that are not excluded accounts. Could you please review the list below and confirm whether any bank accounts will be closed in the near future? To the extent any account will remain open in the near future, could you please provide the bank contact information so we can request their form of springing DACA for review?\n\nLoan Party\nBank/Financial Institution\nAccount Name\nAccount Number\nAccount Type\nPurpose\nExcluded (Y/N)\nBank Contact Information\nJeeves Intermediate Holdco, LLC\nCitibank\nJeeves Intermediate Holdco LLC\n31393601\nOperating\nMastercard USD settlement (benefits, accounts payable)\nN\n[__]\nJeeves Intermediate Holdco, LLC\nJPMorgan\nJeeves Intermediate Holdco LLC\n933056167\nOper"
+      }
+    },
+    {
+      "case_id": "obs-19db050eb3d601db",
+      "source": "observation",
+      "gmail_msg_id": "19db050eb3d601db",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-04-21T13:52:52+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Pradeep Manoharan <pradeepan@tryjeeves.com>",
+        "subject": "2027-2028 High-Level Forecast",
+        "body": "Hi Brian,\n\nGood morning.\n\nPlease find attached here the high-level 2027 and 2028 financial plan for\nBBVA Spark.\n\nThanks a lot to Pradeep for all the hard work. We will strongly caveat this\nas preliminary. I will go in now to box and upload.\n\nPlease do not use this forecast for anything but BBVA, as we will be\niterating on this over coming days.\n\nThanks,\nAlex"
+      }
+    },
+    {
+      "case_id": "prop-19e6ac54308c096c",
+      "source": "proposal",
+      "gmail_msg_id": "19e6ac54308c096c",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "cbiz.com",
+      "posted_at": "2026-05-27T18:50:10.099071+00:00",
+      "historical_proposed_action": "Confirm availability for a call with Vincent McAndress today or tomorrow afternoon, and prepare brief responses addressing: (1) how Jeeves matches customer payments using identifiers (tax ID, bank account, etc.) and handles de minimis misallocations, and (2) the Payment Rate formula logic and why the unpaid portion calculation uses 23 days past due.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (21 msgs).",
+      "inputs": {
+        "sender": "\"McAndress, Vincent\" <vmcandress@cbiz.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "RE: [ EXT ] Re: Summary of final requests from our call",
+        "body": "Hi Brian,\r\n\r\nThanks for sending this over; do you have time this afternoon or tomorrow to discuss two quick questions before I submit our report for internal review:\r\n\r\n\r\n  1.  Can you provide details regarding the sentence the was added in RED to the following; Finding #3:  The consultants were unable to determine if payments are only being made by the customer as the bank transactions details do not include any identification numbers.\r\n\r\n\r\n\r\nManagement Response #3:  The Company stated that they use unique customer identifiers, such as tax ID, bank account number, or registered tax name, to accurately match incoming payments to the correct customer record in our internal database and automatically apply the payment to their account. There are also de minimis customer complaints related to misallocation\r\n\r\n\r\n  1.  Payment Rate calculation in the borrowing base report as of 9/30:  I don’t think we have discussed this formula yet in comparison to the legal definition, and the formula for the unpaid portion appears to be limited to accounts with Day past due defined as “23”.\r\n\r\n\r\n\r\n“Payment Rate” shall mean, for any calendar month, a fraction (express as a percentage), (x) the numerator of which is the total aggregate amount of Collections received with respect to Lines of Credit in the Tested Portfolio on or prior to the date which is thirty (30) days past the Statement Cycle Date for spend attributable to such calendar month, and (y) the denominator of which is the Monthly Invoiced Amount attributable to Lines of Credit and related Receivables in the Tested Portfolio for such calendar month.\r\n\r\nVincent McAndress\r\nSenior Manager\r\nCBIZ Risk & Advisory Services\r\n[CBIZ]<https://www.cbiz.com/>\r\nThe information in this e-mail message may be privileged, confidential, and protected from disclosure. If you are not the intended recipient, any dissemination, distribution, or copying is strictly prohibited. If you think that you have received this e-mail message in error, please e-mail the sender and delete all copies.\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Tuesday, May 26, 2026 10:57 AM\r\nTo: McAndress, Vincent <vmcandress@CBIZ.com>\r\nSubject: Re: [ EXT ] Re: Summary of final requests from our call\r\n\r\nHi VIncent-\r\n\r\nTHanks for the patience. Few minor comments from me, basically errors on the quantum of the findings.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Fri, May 22, 2026 at 12:34 PM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nHi Vincent-\r\n\r\nThanks, I will finish that up today.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Fri, May 22, 2026 at 6:49 AM McAndress, Vincent <vmcandress@cbiz.com<mailto:vmcandress@cbiz.com>> wrote:\r\nHi Brian,\r\n\r\nDid you have any input on the findings and suggestions attachment that you wanted to share at this time?  I will be discussing separately with Barry from CIM on Tuesday and see let you know how he wants to proceed.\r\n\r\nRegards,\r\n\r\nVincent McAndress\r\nSenior Manager\r\nCBIZ Risk & Advisory Services\r\nThe information in this e-mail message may be privileged, confidential, and protected from disclosure. If you are not the intended recipient, any dissemination, distribution, or copying is strictly prohibited. If you think that you have received this e-mail message in error, please e-mail the sender and delete all copies.\r\n-----Original Message-----\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Wednesday, May 20, 2026 3:45 PM\r\nTo: McAndress, Vincent <vmcandress@CBIZ.com<mailto:vmcandress@CBIZ.com>>\r\nCc: Barry Joseph <bjoseph@cim-llc.com<mailto:bjoseph@cim-llc.com>>\r\nSubject: RE: [ EXT ] Re: Summary of final requests from our call\r\n\r\nHi Vincent,\r\n\r\nJust uploaded the remaining items. I'll be reviewing the report and providin"
+      }
+    },
+    {
+      "case_id": "prop-19f1afd01858e787",
+      "source": "proposal",
+      "gmail_msg_id": "19f1afd01858e787",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "bu.com.co",
+      "posted_at": "2026-07-01T00:04:53.562227+00:00",
+      "historical_proposed_action": "Review the attached Fiduciaria Bancolombia proposal (Spanish + English versions) and reply to Alejandro Cardozo with Jeeves' position on the terms and whether to move forward with onboarding.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (100 msgs).",
+      "inputs": {
+        "sender": "Alejandro Cardozo Coral <acardozoc@bu.com.co>",
+        "to": "\": Juan Esteban Rey Torres\" <jurey@bancolombia.com.co>, Juan Carlos Vergara Serrano <JCVERGAR@bancolombia.com.co>, \"Heidy Viviana Rincon Bareño\" <HVRINCON@bancolombia.com.co>, Brandon McGathy <brandon@tryjeeves.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, \"Garaffa, Tyler Adam\" <TGaraffa@goodwinlaw.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Isabel Diaz Miranda <isabel@tryjeeves.com>",
+        "cc": "\"Jorge Alberto Padilla Sánchez\" <jpadillas@bu.com.co>, \"Diana Carolina Quintero Díaz\" <dquintero@bu.com.co>",
+        "subject": "Jeeves I Fiduciaria Bancolombia Proposal for Services",
+        "body": "Dear Brandon and Jeeves team,\r\n\r\nWe hope this finds you well.\r\n\r\nThis afternoon we received a service proposal from Fiduciaria Bancolombia, which you'll find attached to this email.\r\n\r\nSince the proposal is in Spanish, we're also including an English version so you can confirm whether you're comfortable with the terms.\r\n\r\nWe have copied in this email Fiduciaria Bancolombia soy you may have a direct contact with them re. this proposal and the onboarding process.\r\n\r\nBest regards.\r\n\r\nAlejandro Cardozo Coral\r\nAsociado | Associate\r\n[cid:image001.png@01DD08C2.36C3EB70]<http://bu.com.co/>\r\nacardozoc@bu.com.co<mailto:acardozoc@bu.com.co> · www.bu.com.co<http://bu.com.co/>\r\n+57-60-1-3462011 Ext.8527\r\n+57-60-1-7442211 Ext.8527\r\nCalle 70 Bis No. 4 - 41\r\nBogotá, Colombia\r\nNIT: 800.134.536-3\r\n[cid:image002.png@01DD08C2.36C3EB70]<https://www.linkedin.com/company/brigard-urrutia>[cid:image003.png@01DD08C2.36C3EB70]<https://twitter.com/Brigard_Urrutia>[cid:image004.png@01DD08C2.36C3EB70]<https://www.facebook.com/BrigardUrrutia>\r\n\r\n________________________________\r\nInformación confidencial protegida por la reserva profesional del abogado. Si usted no es el destinatario del correo, por favor comuníqueselo de inmediato al remitente y proceda a destruirlo. En este evento, estará prohibida la retención, utilización, copia o divulgación por cualquier medio de la información que se encuentre en el mensaje y en sus archivos adjuntos. Se deberá cumplir con lo dispuesto en la Ley 1581 de 2012 y demás normas que la complementen, sustituyan o modifiquen, en caso de ser aplicable.\r\n\r\nConfidential information protected by attorney-client privilege. If you are not the intended recipient of this e-mail, please notify the sender immediately and proceed to delete it. In such an event, the retention, use, copy or distribution of the information contained herein or in any attachments, by any means is strictly prohibited. Law 1581 of 2012 should be adhered to as well as any other complementary, substitute or modifications to the norms, in the case that they are applicable.\r\n\r\n\r\n\r\n"
+      }
+    },
+    {
+      "case_id": "prop-19f1a2842558b0cc",
+      "source": "proposal",
+      "gmail_msg_id": "19f1a2842558b0cc",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-06-30T20:11:44.170721+00:00",
+      "historical_proposed_action": "Confirm with Goodwin whether they reviewed the PwC NRL access letter, and reply to Alex with their sign-off status or any concerns.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (3 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "Re: Please Sign: Access Letter - PwC NRL Jeeves - 20260630.pdf",
+        "body": "Brian -\r\n\r\nDid Legal review this?\r\n\r\nThanks\r\nAlex\r\n\r\nOn Tue, Jun 30, 2026 at 3:09 PM Brian Mauck | Box Sign <no-reply@box.com>\r\nwrote:\r\n\r\n>\r\n> [image: Box Sign]\r\n>\r\n> Brian Mauck (brian.mauck@tryjeeves.com) has requested your signature on a\r\n> document\r\n>\r\n> Review document\r\n> <https://app.box.com/sign/document/b2b24f40-1892-4f53-813a-bb61058989ac/05b72d6a-9012-46d7-ae2f-ea643374758b/?utm_source=signrequest&utm_medium=email&utm_campaign=signrequest-received&signer_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiMDViNzJkNmEtOTAxMi00NmQ3LWFlMmYtZWE2NDMzNzQ3NThiIiwiZW1haWwiOiJhbGV4YW5kZXJAdHJ5amVldmVzLmNvbSIsImlhdCI6MTc4Mjg0NjU0MC43ODYxMDIsImV4cCI6MTc4MzQ1MTM0MC43ODYxMDcsImxpbmtfdHlwZSI6InNpZ25pbmcifQ.RWaxeelSlV1_M7halPbx7kP6vmLXZpVgb8twvDgbh14>\r\n>\r\n> *Brian Mauck (brian.mauck@tryjeeves.com)* <brian.mauck@tryjeeves.com>:\r\n>\r\n> Please sign this document.\r\n>\r\n> Kind regards,\r\n>\r\n> Brian Mauck (brian.mauck@tryjeeves.com)\r\n>\r\n>\r\n>\r\n> *Do not share this email.*\r\n> Receivers of this email will be able to view and sign the document on your\r\n> behalf.\r\n> *Document ID:*\r\n> 1JZX5WK8\r\n> *Sender information:*\r\n> This message was sent to you by Brian Mauck (brian.mauck@tryjeeves.com),\r\n> who is using Box Sign, an electronic signature tool provided by Box, Inc.\r\n> *Report abuse:*\r\n> abuse@box.com\r\n> <abuse@box.com?subject=Abuse%20report%20for%20File%20ID%3A%202318983328912%20Document%20ID%3A%201JZX5WK8%20Internal%20ID%3A%20b2b24f40-1892-4f53-813a-bb61058989ac&body=Please%20summarize%20the%20issues%20regarding%20the%20abuse%20below.%20We%20will%20review%20all%20complaints%20for%20validity%20and%20take%20appropriate%20action.%0A%5B%20%5D%20Copyright%20-%20DMCA%20submit%20to%20https%3A%2F%2Fwww.box.com%2Flegal%2Fdmca%0A%5B%20%5D%20Malicious%20Content%2FVirus%0A%5B%20%5D%20Adult%2FIllegal%20Content%0A%5B%20%5D%20Spam%2FUnsolicited%20Advertisement%0A%5B%20%5D%20Other%3A>\r\n> *Does the button not work?*\r\n> Copy the link below and paste it in your browser\r\n>\r\n> https://app.box.com/sign/document/b2b24f40-1892-4f53-813a-bb61058989ac/05b72d6a-9012-46d7-ae2f-ea643374758b/?utm_source=signrequest&utm_medium=email&utm_campaign=signrequest-received&signer_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1dWlkIjoiMDViNzJkNmEtOTAxMi00NmQ3LWFlMmYtZWE2NDMzNzQ3NThiIiwiZW1haWwiOiJhbGV4YW5kZXJAdHJ5amVldmVzLmNvbSIsImlhdCI6MTc4Mjg0NjU0MC43ODYxMDIsImV4cCI6MTc4MzQ1MTM0MC43ODYxMDcsImxpbmtfdHlwZSI6InNpZ25pbmcifQ.RWaxeelSlV1_M7halPbx7kP6vmLXZpVgb8twvDgbh14\r\n> About Box <https://www.box.com/en-gb/about-us> • Privacy Policy\r\n> <https://www.box.com/en-gb/legal/privacypolicy>\r\n> Copyright © 2021-2024 Box, Inc. and/or its affiliates. All rights reserved.\r\n>\r\n>\r\n"
+      }
+    },
+    {
+      "case_id": "prop-19f4344d28a71ae3",
+      "source": "proposal",
+      "gmail_msg_id": "19f4344d28a71ae3",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-08T19:47:06.902596+00:00",
+      "historical_proposed_action": "Reply to Alex with a brief answer confirming whether the 7+18 design assumptions (weekly cycle preference + capital efficiency) still hold, or if the product/GTM team's requirements have shifted to support the two-payment-per-month alternative.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (13 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Douglas Germano <douglas@tryjeeves.com>",
+        "cc": "Gustavo Monsanto <gustavo@tryjeeves.com>, Kunal Malhotra <kunal@tryjeeves.com>, \"Letícia Doniak\" <leticiad@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Camila Fernandez <camila@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>",
+        "subject": "Re: Approval Request: New Shorter Billing Cycle Option for Brazil",
+        "body": "Hi Gustavo and team -\r\n\r\nHope you are doing well.\r\n\r\nWhen designing the 7+18, there were 2 primary drivers\r\n\r\n1) The feedback from Product and GTM was that customer wanted to have\r\nweekly cycles - did that assumption change?\r\n2) From capital efficiency perspective, it's much better to have the spend\r\nin the shorter period of time (7)\r\n\r\nOn Wed, Jul 8, 2026 at 2:45 PM Douglas Germano <douglas@tryjeeves.com>\r\nwrote:\r\n\r\n> + @Kunal Malhotra <kunal@tryjeeves.com>\r\n>\r\n> On Wed, Jul 8, 2026 at 1:45 PM Gustavo Monsanto <gustavo@tryjeeves.com>\r\n> wrote:\r\n>\r\n>> Hello Alex,\r\n>>\r\n>> Hope you are doing well.\r\n>>\r\n>> As part of our efforts to migrate more customers in Brazil to shorter\r\n>> billing cycles while keeping the total cycle length below 25 days, we have\r\n>> been exploring additional options beyond the current 7+18 model.\r\n>>\r\n>> We came up with a second structure that could make adoption easier for\r\n>> some customers by reducing the number of payments to just two per month:\r\n>>\r\n>>    -\r\n>>\r\n>>    *Cycle 1:* 1st–15th of the month → Payment on the 25th (15+10)\r\n>>    -\r\n>>\r\n>>    *Cycle 2:* 16th–end of the month → Payment on the 9th/10th of the\r\n>>    following month (15/16+10/9)\r\n>>\r\n>> This option keeps the payment terms under 25 days while simplifying the\r\n>> customer experience.\r\n>>\r\n>> We've found that some customers have been reluctant to migrate to shorter\r\n>> cycles because of the operational complexity of having four billing cycles\r\n>> per month.\r\n>>\r\n>> I've already discussed this proposal with Douglas (Product) and Leticia\r\n>> (Ops), and both confirmed that it is technically feasible and that they do\r\n>> not foresee any operational issues.\r\n>>\r\n>> Would you be comfortable approving this as an additional billing cycle\r\n>> option for the Brazil GTM team?\r\n>>\r\n>> We believe it could help us migrate more customers to shorter cycles\r\n>> while maintaining our payment term policy.\r\n>>\r\n>> Thanks!\r\n>>\r\n>> --\r\n>>\r\n>> <https://d2qCfH04.na1.hs-sales-engage.com/Ctc/UB+23284/d2qCfH04/JjT4YGXpW50kH_H6lZ3pyVZGjfC2WVhQrW5sbbN-7q2yX9W2K_TJV5JtxFbW5vqmXR3bpFKyW1W1bdC3sVnqVW6Xdxc423w2SwW5tklql3QfN_1N27CMsSR2Rd4W44FYs01qnFR2W6W567616zw3zN28stzJVVNnKW6Sd15K68GYVrW2btDKg6n0pVfW4TnCTQ1Xq1VmW5Kd9jF5c3T2qVl664B1gs4nBW6dBVXc5XQ66cVSQjtc2NhXtDW1T1Pm55T5NfLW4-Dp0w5-Ts8KW8xmpx96KRkKXW16SMd45Rw5nGW5YHP9v65ClT9W65-ySX6lWFtxW4--SJ26LSGzDVlkqNX3LTDJxW6Y4Jwb6dvyvPW40qjxF6rX_NsW5XHS6F4MZKfGW8JL6jw4W_FS4N5pqpzYJ58cNW8ZQbYy1z8LZJf8lDTl404> Gustavo\r\n>> Monsanto*Sales Manager, Key Accounts | Brasil *🇧🇷\r\n>>   www.tryjeeves.com\r\n>> <https://d2qCfH04.na1.hs-sales-engage.com/Ctc/UB+23284/d2qCfH04/Jks2-6qcW69sMD-6lZ3nqN3QVmfPm5J17W3lSKtz1RnMwFVrYqz289NrFFW1B9gZB4ZJ62nN40mtp5qWCKSW7mxnMm56JpXzW51Y1np6pYM7-W6WnM6t2hkptDN93vg4fZz1kjW4FxHYJ885MfjW4xzyyZ7d2s05W242Xwf95MZqYW5Tv1qT2HYvp3N8mn8P77CYMkW4V9_vd4x75nyW46ZMGQ4knQF-W4J7sgw1kYXYBW2nbMMs2pMB5zN4VDL3Rt9qVYVhgKP06HtJqvf8Wx_YC04>\r\n>>   gustavo@tryjeeves.com\r\n>>\r\n>>\r\n>>\r\n>>\r\n>> Whatsapp link:\r\n>> <https://d2qCfH04.na1.hs-sales-engage.com/Ctc/UB+23284/d2qCfH04/Jll2-6qcW7Y8-PT6lZ3pFW7xsSC-3WFx0NW4FBpvc325SV0W3D7qXT6Jf65BW28CM4z5htm1DW2-8ytG1wNRwyW3dsffD6HxLBdW6PFC_j1NfFyVW5r9jgl6T7w6qW8shWX63z8YyTW1LCdMl4wHfdpW1Zng6j5tLDF7W9kt18X3r2F_qVlsFMK2ptQh1W6jBZRB2wV565VZZCmw7N7vFHW6YtBtX4rcCF4W3T_d8h7nKxZXW6cf2zb95MFpSW7mC4d_75Y5l3W1ryBgp34PC6gW5TrFHw6D3NBZV3BTZb8PSS-FW25yhH48yZtPTW5MTxZ74vJ8ZdW7_Rpc46QttdqMnhwBGN8Qqbf89xDZP04>\r\n>>\r\n>> <https://d2qCfH04.na1.hs-sales-engage.com/Ctc/UB+23284/d2qCfH04/Jll2-6qcW7Y8-PT6lZ3pFW7xsSC-3WFx0NW4FBpvc325SV0W3D7qXT6Jf65BW28CM4z5htm1DW2-8ytG1wNRwyW3dsffD6HxLBdW6PFC_j1NfFyVW5r9jgl6T7w6qW8shWX63z8YyTW1LCdMl4wHfdpW1Zng6j5tLDF7W9kt18X3r2F_qVlsFMK2ptQh1W6jBZRB2wV565VZZCmw7N7vFHW6YtBtX4rcCF4W3T_d8h7nKxZXW6cf2zb95MFpSW7mC4d_75Y5l3W1ryBgp34PC6gW5TrFHw6D3NBZV3BTZb8PSS-FW25yhH48yZtPTW5MTxZ74vJ8ZdW7_Rpc46QttdqMnhwBGN8Qqbf89xDZP04> +55\r\n>> 11 99995-5077\r\n>> <https://d2qCfH04.na1.hs-sales-engage.com/Ctc/UB+23284/d2qCfH04/Jll2-6qcW7Y8-PT6lZ3pFW7xsSC-3WFx0NW4FBpvc325SV0W3D7qXT6Jf65BW28CM4z5htm1DW2-8ytG1wNRw"
+      }
+    },
+    {
+      "case_id": "prop-19f809696d098b01",
+      "source": "proposal",
+      "gmail_msg_id": "19f809696d098b01",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "nb.com",
+      "posted_at": "2026-07-20T17:33:27.989028+00:00",
+      "historical_proposed_action": "Call or message Jay Berger today to confirm whether the Vista RP qualified equity raise provision should be included in tomorrow's credit agreement draft, and relay the decision so NB can incorporate it.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (7 msgs).",
+      "inputs": {
+        "sender": "\"Berger, Jay\" <Jay.Berger@nb.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "RE: Vista RP",
+        "body": "Brian, let me know if we should include this in the credit agreement that we are planning to turn by tomorrow. Thanks\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Friday, July 17, 2026 11:54 AM\r\nTo: Berger, Jay <Jay.Berger@nb.com>\r\nSubject: Re: Vista RP\r\n\r\nThanks Jay, you have a few minutes today to chat about this?\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Fri, Jul 17, 2026, 07:58 Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>> wrote:\r\nGot it, thought you were going to propose terms – please see below for our proposal.\r\n\r\nQualified Equity Raise definition:\r\n\r\n  *   Minimum cash proceeds raised: $50m\r\n\r\n•         Pre money valuation of new equity raise is at least 20% higher than prior round, and\r\n\r\n  *   Equity Raise closing date is at least one year after the NB debt Closing Date and at least 6 months prior to the NB Maturity Date (6 month window)\r\n\r\nConditions precedent for using proceeds of Qualified Equity Raise to repay Vista:\r\n\r\n1.      Pro forma fin covs have cushion (borrower to deliver certificate demonstrating compliance):\r\n\r\na.      3mo avg DQ rate <1.5%\r\n\r\nb.     Liquidity prior to and pro forma the Qualified Equity Raise is at least $15m above the Minimum Liquidity\r\n\r\nc.      EBITDA coverage TBD (we still need to figure this one out together)\r\n\r\n2.      Repayment to occur no more than two business days after the Qualified Equity Raise closing date\r\n\r\n3.      No more than 50% of the cash proceeds from the new equity raise can be used to repay pref equity, and\r\n\r\n4.      For every dollar that the borrower repays to the pref equity holder, the borrower will repay the NB debt by an equal amount; NB retains the right to waive repayment in whole or in part\r\n\r\n\r\n\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Friday, July 17, 2026 10:27 AM\r\nTo: Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>>\r\nSubject: Re: Vista RP\r\n\r\nHi Jay -\r\n\r\nThis is from 7.08, but really what we were hoping is to have language added to the intercreditor that permits what we discussed earlier this week, which is to be permitted to pay off Vista in the event that we raise more than their position in an up round prior to the termination of your facility. We haven't seen a copy of the intercreditor but given this language we added, wanted it permit us to do that.\r\n\r\n[cid:image001.png@01DD184C.41935A60]\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Fri, Jul 17, 2026 at 3:27 AM Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>> wrote:\r\nBrian, I reviewed the docs and sent my comments to Akin but haven’t been able to discuss with them yet. Can you please screenshot in this email the language you are referring to and explain to me what it is trying to accomplish? Thanks\r\n\r\n\r\n\r\nJay Berger\r\nSenior Vice President\r\nSpecialty Finance\r\nP: +1 212 476 5744\r\nE: jay.berger@nb.com<mailto:jay.berger@nb.com>\r\nneuberger.com<https://www.nb.com/>\r\n\r\n[Neuberger]\r\n\r\n\r\n\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Thursday, July 16, 2026 3:21 PM\r\nTo: Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>>\r\nSubject: Vista RP\r\n\r\nHi Jay-\r\n\r\nWe're trying to finalize the Vista docs this weekend, and so was hoping to get your advance feedback on the restricted payment we added, in the case of an up round equity raise. This would need to be in the intercreditor between you and them, so we're hoping to get any feedback on that specifically as soon as possible so we can get the Vista docs done. That way we can get consents out early next week.\r\n\r\nLet me know if it's easier to jump on the phone today to discuss?\r\n\r\n\r\nThanks\r\n\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\n--------\r\n\r\nNeuberger Berman Eu"
+      }
+    },
+    {
+      "case_id": "obs-19e50a7d8b79e6a6",
+      "source": "observation",
+      "gmail_msg_id": "19e50a7d8b79e6a6",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-05-22T17:07:15+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. ´\n´La instrucción ya fue cargada al sistema Power Trust\n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "prop-19f3f2489543ae53",
+      "source": "proposal",
+      "gmail_msg_id": "19f3f2489543ae53",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-08T00:33:32.189888+00:00",
+      "historical_proposed_action": "Forward to Alex Melikian and CIM contact (or relevant ops lead) asking: (1) confirm CIM Bridge payoff status and whether we can share those docs with Akin, (2) confirm Vista subordination docs are ready to share, and (3) get confirmation from CIM on FX Guaranty termination timeline so Goodwin can relay to Akin/NB. Copy Goodwin and flag for response by end of week.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (100 msgs).",
+      "inputs": {
+        "sender": "Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Brandon McGathy <brandon@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Alexander Melikian <alexander@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "Hi everyone, please find a minor addition below in *green* :\r\n\r\n\r\n*Akin Supplemental Requests*\r\n\r\n   1. Could you please confirm if the CIM Bridge Facility is the one being\r\n   paid off?  If not, could you please provide the Credit Documents for our\r\n   review? Confirmed that only the CIM Bridge Facility is being paid off.\r\n   Please confirm if/when we can share the CIM Bridge Facility documents with\r\n   Akin. *Do not share the CIM Bridge documents with anyone; it is being\r\n   refinanced by NB. *\r\n\r\n   2. Could you please provide the underlying Vista Documents that need to\r\n   be subordinated? Please let us know when we can share the underlying\r\n   Vista Documents that need to be subordinated.\r\n      1. *No issue sharing the VCP docs *\r\n   3. On the Jeeves MX Loan Agreement, we noticed that Jeeves, Inc. and\r\n   Jeeves Intermediate Holdco, LLC have all assets liens over them in\r\n   connection with the facility and that both Jeeves Inc and Jeeves\r\n   Intermediate Holdco are Guarantors and Credit Parties to the secured\r\n   facility and under Section 7.2 of the Agreement are prohibited to have\r\n   liens that interfere with the Collateral under the existing Jeeves MX Loan\r\n   Agreement. We understand the FX Guaranty for the Mexico Warehouse\r\n   facility will be terminated that the all-asset liens on Jeeves Inc. and\r\n   Jeeves Intermediate Holdco, LLC securing those guaranty obligations will be\r\n   released. We haven’t told Akin/NB that the FX Guaranty will be terminated,\r\n   but this should address their concerns. Let us know once you’ve discussed\r\n   the FX termination with CIM and we can relay this information to\r\nAkin. @Cohen,\r\n   Avia <AviaCohen@goodwinlaw.com> *can you connect with W&C on this\r\n   point? *\r\n      1. For the Jeeves MX Loan Agreement, could you please provide the\r\n      underlying Guarantee / Security Documents? Please confirm we can\r\n      share the MX Loan underlying Guarantee and Security Documents.\r\n      *Confirmed.*\r\n      2. Akin is concerned that this creates a consent issue for the\r\n      granting of NB’s liens, but we would like to get your\r\nperspective as well.\r\n      Could you please let us know your thoughts? Once the CIM FX guaranty\r\n      is released and the UCC-3 termination statements are filed, the all-asset\r\n      liens on Jeeves Inc. and Jeeves Intermediate Holdco, LLC will be\r\nreleased.\r\n      As a result, Section 7.2 of the Loan Agreement will no longer restrict\r\n      either entity from granting liens under a new credit facility, since it\r\n      applies only to Collateral, and the termination of the FX\r\nguaranty removes\r\n      the only basis for the US parent company assets to constitute Collateral.\r\n       *Agreed.*\r\n   4. Would you please provide any details on what collateral is associated\r\n   with the high-risk jurisdictions of Mexico and Colombia? We’d like to\r\n   understand if the collateral connected to those jurisdictions involves\r\n   physical collateral in those locations (versus say shares in the legal\r\n   entities incorporated in those jurisdictions). @Cohen, Avia\r\n   <AviaCohen@goodwinlaw.com>  *This question is not clear to me. Our\r\n   shares are subject to pledges in these countries, but we have not offered\r\n   physical collateral. Jeeves does not have physical assets (property, etc.),\r\n   so it would not make sense to do so.  Regarding our customer, we also do\r\n   not take physical collateral. *\r\n\r\n\r\n\r\n*Additional Vista Questions.*\r\n\r\n   1. Proskauer/Vista would like to engage with your Mexican local counsel,\r\n   Cuatrecasas, regarding the below questions. Could you please confirm\r\n   whether they may contact local counsel directly, or if you’d prefer to\r\n   handle the below inquiries directly? Note: Coinfund also wanted to\r\n   engage Cuatrecasas as local counsel. Please let us know if Vista and\r\n   Coinfund can reach out to Cuatrecasas. We understand W&C is local counsel\r\n   for Jeeves so there shouldn’t be an issue from the Jeeves\r\nperspective.   *Confirmed\r\n   they can us"
+      }
+    },
+    {
+      "case_id": "obs-19f4d328d33368ad",
+      "source": "observation",
+      "gmail_msg_id": "19f4d328d33368ad",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-07-10T18:03:04+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. \n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "obs-19d73dd2a4042816",
+      "source": "observation",
+      "gmail_msg_id": "19d73dd2a4042816",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "user.luma-mail.com",
+      "posted_at": "2026-04-09T20:09:26+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Prolink Events Ltd <CETS2026@user.luma-mail.com>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "Master Cross-Border Payments with Jairo Riveros(Paysend), VISA and others",
+        "body": "https://luma.com/hc5vvhql?pk=g-kIpx7xi4UJEv7uh\nCanada FinTech Symposium 2026\nMay 20, 8:00 AM EDT · Metro Toronto Convention Centre\nhttps://luma.com/hc5vvhql?pk=g-kIpx7xi4UJEv7uh\n\nhttps://luma.com/hc5vvhql?pk=g-kIpx7xi4UJEv7uh\n\nMaster Cross-Border Payments with Jairo Riveros(Paysend), VISA and others\nProlink Events Ltd\n\nWe are thrilled to officially welcome Jairo Riveros, MBA, President for the Americas and Head of Strategy at Paysend, to the Canada FinTech Symposium 2026! Jairo will be moderating a critical powerhouse session: 🎤 Panel Discussion: Cross-border money movement and the importance of real-time rails. As the global economy moves toward instant connectivity, Jairo will lead a deep dive into the infrastructure driving this shift, joined by leaders from Visa Visa Direct and other industry giants. 🤝 Double Impact: Speaker & Exhibition Partner We are also proud to announce that Pay"
+      }
+    },
+    {
+      "case_id": "obs-19d4c0d864a32b0d",
+      "source": "observation",
+      "gmail_msg_id": "19d4c0d864a32b0d",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-04-02T02:37:00+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Axel Orendain <axel@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Isabel Diaz Miranda <isabel@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Martha Pozas Magdaleno <martha@tryjeeves.com>, Pradeep Manoharan <pradeepan@tryjeeves.com>, Lizz Sanchez <lizz@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Debbie Esquivel <debbie@tryjeeves.com>, Axel Orendain <axel@tryjeeves.com>, \"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>, Mariana Patricia Herrera Cruz <mariana.herreracruz@tryjeeves.com>",
+        "cc": "",
+        "subject": "260401 CICO- Daily balances",
+        "body": "*Bank balances*\n\n[image: image.png]\n[image: image.png]\n[image: image.png]\n[image: image.png]\n[image: image.png]\n[image: image.png]\n\n\n*Best, *\n*Axel.*"
+      }
+    },
+    {
+      "case_id": "prop-19f3dfc38d4b31e0",
+      "source": "proposal",
+      "gmail_msg_id": "19f3dfc38d4b31e0",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-07T19:11:51.478206+00:00",
+      "historical_proposed_action": "Follow up with AIG to confirm receipt and status of the updated invoice submission file Brian sent, and provide Pablo/Lucio with an update on when AIG can confirm the system will correctly calculate limits.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (57 msgs).",
+      "inputs": {
+        "sender": "Lucio Cota <lucio@tryjeeves.com>",
+        "to": "Pablo Cortina <pabloc@tryjeeves.com>",
+        "cc": "Alexander Melikian <alexander@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "subject": "Re: Submitting AIG Claims",
+        "body": "Hi Pablo,\r\n\r\nI shared on May 21 regarding the AIG claims process.\r\n\r\nI haven't received any feedback on this yet. Could you please take a look\r\nso we can incorporate it into the planning Alex requested?\r\n\r\nThanks,\r\nLucio Cota\r\n\r\n\r\nOn Tue, Jul 7, 2026 at 3:50 PM Pablo Cortina <pabloc@tryjeeves.com> wrote:\r\n\r\n> Hi Alex,\r\n>\r\n> Thanks for the prompt. I will work on documenting roles and\r\n> responsibilities, as well as building the necessary reporting.\r\n>\r\n> I want to flag one impediment to our first filings. Brian has been working\r\n> with AIG to update our invoice submission method so their system can\r\n> correctly calculate the limits. Brian sent an updated file with additional\r\n> information a week ago, but we have not yet received an update. I am\r\n> following up on this.\r\n>\r\n> Thanks,\r\n> Pablo\r\n> On Tue, Jul 7, 2026 at 9:49 AM Alexander Melikian <alexander@tryjeeves.com>\r\n> wrote:\r\n>\r\n>> Hi Pablo -\r\n>>\r\n>> Good morning!\r\n>>\r\n>> Can you please coordinate with Shalom, Lucio and Brian this morning so we\r\n>> can plan to start submitting AIG claims later this month? A couple thoughts\r\n>>\r\n>>    1. Please establish a claim submission process, with clear R&R\r\n>>    2. Please establish a rolling centralized list / report with\r\n>>    submissions that we will be making that can ask as our single source of\r\n>>    truth. Within this, we should have a clear understanding of the amount of\r\n>>    the claim, the first possible date of claim submission with the goal of\r\n>>    having an estimated collected amount that we can include in our forecast\r\n>>    3. With that list, we should start a monthly report that shows the\r\n>>    summary from the month of submissions, amount collected, etc\r\n>>\r\n>> Please let me know the earliest possible date that we can submit\r\n>> something, but would imagine it's within the next 3 weeks or so?\r\n>>\r\n>> Thanks,\r\n>> Alex\r\n>>\r\n>\r\n"
+      }
+    },
+    {
+      "case_id": "prop-19f518fa0ac74c65",
+      "source": "proposal",
+      "gmail_msg_id": "19f518fa0ac74c65",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-11T14:23:47.401238+00:00",
+      "historical_proposed_action": "Review the attached ZIP file containing the 25-transaction spreadsheet with Jeeves and customer bank statements, confirm accuracy, and reply to Alex confirming it's ready to send to Kroll today.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (7 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "\"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>",
+        "cc": "Brian Mauck <brian.mauck@tryjeeves.com>, Axel Orendain <axel@tryjeeves.com>",
+        "subject": "Re: Kroll Phase 2 - FinOps Items Needed (Final Sample - 25 Transactions)",
+        "body": "Thank you Will\r\n\r\n@Brian - can you please review so we can get this back to Kroll today?\r\nLet's do everything possible to have collateral audit and trust complete by\r\nJul 17, so we can close early the following week.\r\n\r\nOn Fri, Jul 10, 2026 at 9:44 PM William S. Brum Vilar Filho <\r\nwilliam.filho@tryjeeves.com> wrote:\r\n\r\n> Hi Brian,\r\n>\r\n> Happy Friday! I hope this email finds you well and safe.\r\n>\r\n> Attached is a ZIP file containing the original spreadsheet you provided,\r\n> along with the Jeeves Bank Statement and Customer Bank Statement\r\n> corresponding to each outlined transaction.\r\n>\r\n> You will notice that we added two tabs to the spreadsheet. That is\r\n> because, in order to assist with the reconciliation, we pulled data from\r\n> Metabase.\r\n>\r\n> Two tables were used:\r\n>\r\n>    - ext_incoming_payments\r\n>    <https://jeeves.metabaseapp.com/question#eyJjb2xsZWN0aW9uX2lkIjo0NzI2LCJkYXRhc2V0X3F1ZXJ5Ijp7ImRhdGFiYXNlIjoyLCJsaWIvdHlwZSI6Im1icWwvcXVlcnkiLCJzdGFnZXMiOlt7ImxpYi90eXBlIjoibWJxbC5zdGFnZS9tYnFsIiwic291cmNlLXRhYmxlIjoxODV9XX0sImRpc3BsYXkiOiJ0YWJsZSIsInR5cGUiOiJxdWVzdGlvbiIsInZpc3VhbGl6YXRpb25fc2V0dGluZ3MiOnt9fQ==>,\r\n>    which has all payments gathered by our API connections to each of the\r\n>    banks,\r\n>    - and the custom_transactions\r\n>    <https://jeeves.metabaseapp.com/question/2000-custom-transactions-reloaded>\r\n>    table, which records the manually applied payments (for banks we lack API\r\n>    connections to or for payments that required manual intervention at the\r\n>    time of application).\r\n>\r\n> Please let me know if there are any questions. We will be happy to help.\r\n>\r\n> Kind regards,\r\n>\r\n>\r\n> William S. Brum Vilar Filho\r\n> Finance Operations\r\n>\r\n>\r\n>   www.tryjeeves.com\r\n> <https://na01.safelinks.protection.outlook.com/?url=http%3A%2F%2Fwww.tryjeeves.com%2F&data=05%7C02%7C%7C7d3fa15a759f475beb4908de42524a64%7C84df9e7fe9f640afb435aaaaaaaaaaaa%7C1%7C0%7C639021118386231865%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=i4MzZmXnioHs8OjX8l%2BwEXkI8NBQsdQLarhC2xjXP%2B8%3D&reserved=0>\r\n>   *william.filho@tryjeeves.com <william.filho@tryjeeves.com>*\r\n>\r\n> <https://na01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.facebook.com%2Ftryjeeves&data=05%7C02%7C%7C7d3fa15a759f475beb4908de42524a64%7C84df9e7fe9f640afb435aaaaaaaaaaaa%7C1%7C0%7C639021118386263784%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=0jb%2Frhzl0Q3viO%2FFXmLW3IdB%2B4fhavzngvy1EUf3kaw%3D&reserved=0>\r\n> <https://na01.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.linkedin.com%2Fcompany%2Ftryjeeves%2Fmycompany%2F&data=05%7C02%7C%7C7d3fa15a759f475beb4908de42524a64%7C84df9e7fe9f640afb435aaaaaaaaaaaa%7C1%7C0%7C639021118386285846%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=cFKXL3uqU26dUQYVXnu8wMjuN7dbIK4sC3xttGHd%2BoM%3D&reserved=0>\r\n> <https://na01.safelinks.protection.outlook.com/?url=https%3A%2F%2Ftwitter.com%2Fjeeves_inc&data=05%7C02%7C%7C7d3fa15a759f475beb4908de42524a64%7C84df9e7fe9f640afb435aaaaaaaaaaaa%7C1%7C0%7C639021118386302987%7CUnknown%7CTWFpbGZsb3d8eyJFbXB0eU1hcGkiOnRydWUsIlYiOiIwLjAuMDAwMCIsIlAiOiJXaW4zMiIsIkFOIjoiTWFpbCIsIldUIjoyfQ%3D%3D%7C0%7C%7C%7C&sdata=TDD6F6oDCVde1O9nwABx0zPS8K%2Bp11UyBOP8%2F7hYuNE%3D&reserved=0>\r\n>\r\n>\r\n> On Wed, Jul 8, 2026 at 2:50 PM Brian Mauck <brian.mauck@tryjeeves.com>\r\n> wrote:\r\n>\r\n>> Just to follow up, can you please aim to provide these by end of the\r\n>> week? I would like to provide Monday. Let me know if that's not reasonable.\r\n>>\r\n>>\r\n>> Thanks,\r\n>>\r\n>> Brian Mauck\r\n>> [image: phone-icon] 1 480 710 1344\r\n>> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>>\r\n>>\r\n>> On Wed, Jul 8, 2026 at 10:36 AM Brian Mauck <brian.mauck@tryjeeves.com>\r\n>> wrote:\r\n>>\r\n>>> William, Axel -\r\n>>>\r\n>>> Kroll has finalized their Phase 2 sample selection "
+      }
+    },
+    {
+      "case_id": "obs-19d8d62c1b02e84e",
+      "source": "observation",
+      "gmail_msg_id": "19d8d62c1b02e84e",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "google.com",
+      "posted_at": "2026-04-14T19:05:52+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Gemini <gemini-notes@google.com>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "Notes: “MBR Walkthrough” Apr 14, 2026",
+        "body": "Notes from “MBR Walkthrough”\n\nThese notes have been sent to invited guests in your organization.\n\nOpen meeting notes\n\nThe content was auto-generated on April 14, 2026, 12:01 PM PDT and may  \ncontain errors.\n\n\nSummary\nMeeting reviewed record credit growth and insurance tracking improvements  \nwith board material preparation and marketing alignment outcomes.\n\n\nBoard preparation and capital\nLeadership aligned on finalizing board materials within 2 weeks. The team  \nestablished updated criteria for eligibility and excess work streams with  \nexternal partners.\n\nPerformance and credit growth\nCredit book expanded 178 percent to 154 million in March. Enhanced  \ninsurance tracking visibility successfully reduced top 10 portfolio  \nexposure from 23 percent to 13 percent.\n\nMarket insights and marketing\nOutbound prospecting drove higher approval amounts compared to inbound  \nchannels. Insights on un"
+      }
+    },
+    {
+      "case_id": "obs-19d30a0ff478bab5",
+      "source": "observation",
+      "gmail_msg_id": "19d30a0ff478bab5",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-03-27T18:48:59+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "\"Jesús Juárez Sánchez\" <jesus@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, \"Angélica Medina Barrios\" <angelica@tryjeeves.com>, Angelo Piscitelli Filho <angelof@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Camila Terán\" <camilat@tryjeeves.com>, Chin Tan <chin@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Elizabeth Zamudio <elizabeth@tryjeeves.com>, Fabian Moreno Guerrero <fabian@tryjeeves.com>, Fer Cruz Salvador <fer@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Gustavo Monsanto <gustavo@tryjeeves.com>, Haizea Garmendia <haizea@tryjeeves.com>, \"João Nascimento\" <joao@tryjeeves.com>, Jordan Bulkoski <jordan@tryjeeves.com>, Jose Jimenez <josej@tryjeeves.com>, Juan Abusaid <juana@tryjeeves.com>, Juliana Ramos <juliana.ramos@tryjeeves.com>, Juliana Santana <juliana.santana@tryjeeves.com>, Liana Alves <liana.chiromatzo@tryjeeves.com>, \"Libertad Anaya Castañeda\" <libertad@tryjeeves.com>, Lluvia Lara <lluvialara@tryjeeves.com>, Marcelo Araujo <marcelo@tryjeeves.com>, Valentina Luquetta <maria@tryjeeves.com>, \"Mateo Salazar Gómez\" <mateo@tryjeeves.com>, Matheus Emmerich <matheuse@tryjeeves.com>, Mathias Ferraz <mathias@tryjeeves.com>, Nitin Kalla <nkalla@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>, Pedro Inzunza <pedro@tryjeeves.com>, Pedro Zerboni <pedroz@tryjeeves.com>, Rodrigo Roa Ramirez <rodrigor@tryjeeves.com>, Shafic Villarreal <shafic@tryjeeves.com>, Vitor Nucitelli <vitorn@tryjeeves.com>, Vytor Zeidan <vytor@tryjeeves.com>, Wadi Bisteni <wadi@tryjeeves.com>",
+        "cc": "",
+        "subject": "Additional Credit Committee (F) @ Fri, Mar 27, 2026 3:30pm – 3:45pm (GMT-06)",
+        "body": "Hi all,\n\nSharing the tentative agenda for today's committee meeting:\n\n   - Cedialco @Camila Terán <camilat@tryjeeves.com>\n   - Inversiones Salmotors @Juan Abusaid <juana@tryjeeves.com>\n   - Gabriel Tecnologia @Liana Alves <liana.chiromatzo@tryjeeves.com>\n   - VB Travel Group @Lluvia Lara <lluvialara@tryjeeves.com>\n   - Ecro Capital @Libertad Anaya Castañeda <libertad@tryjeeves.com>\n\n\n* Riopaila Castilla is in 'Compliance Escalation' stage – if it arrives\nsoon at UW, we will try to have it ready for discussion.\n\nThanks,\nJ\nJesús Juárez\n\n*Credit Risk* | Mexico City, CST\n\njesus@tryjeeves.com\n\n+52 55 2702 1313"
+      }
+    },
+    {
+      "case_id": "prop-19f1b37bea45c480",
+      "source": "proposal",
+      "gmail_msg_id": "19f1b37bea45c480",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-01T01:08:06.707842+00:00",
+      "historical_proposed_action": "Confirm with Alex Hughes (Vista) that docs have been sent to Goodwin, then notify Goodwin's contact with the expected delivery time or ask for an ETA.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (53 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Alex Hughes <ahughes@vistacreditpartners.com>",
+        "cc": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "subject": "Re: Timing update",
+        "body": "Thanks for the update\r\n\r\nOn Tue, Jun 30, 2026 at 9:02 PM Alex Hughes <ahughes@vistacreditpartners.com>\r\nwrote:\r\n\r\n> Was told “very soon”\r\n>\r\n> *ALEXANDER HUGHES*\r\n>\r\n> M *+1 929.213.0195*\r\n> ------------------------------\r\n> *From:* Alex Hughes <ahughes@vistacreditpartners.com>\r\n> *Sent:* Tuesday, 30 June 2026 20:44:14\r\n> *To:* Alexander Melikian <alexander@tryjeeves.com>; Brian Mauck <\r\n> brian.mauck@tryjeeves.com>\r\n> *Subject:* Re: Timing update\r\n>\r\n> Will hit PK now\r\n>\r\n> *ALEXANDER HUGHES*\r\n>\r\n> M *+1 929.213.0195*\r\n> ------------------------------\r\n> *From:* Alexander Melikian <alexander@tryjeeves.com>\r\n> *Sent:* Tuesday, 30 June 2026 20:40:32\r\n> *To:* Brian Mauck <brian.mauck@tryjeeves.com>\r\n> *Cc:* Alex Hughes <ahughes@vistacreditpartners.com>\r\n> *Subject:* Re: Timing update\r\n>\r\n> Hi Alex\r\n>\r\n> Thanks for all of the work here\r\n>\r\n> Do you know when Goodwin should be expecting docs from PK? Goodwin updated\r\n> us a few minutes ago that they haven't yet received.\r\n>\r\n> Best\r\n> Alex\r\n>\r\n>\r\n> On Tue, Jun 30, 2026 at 7:38 PM Brian Mauck <brian.mauck@tryjeeves.com>\r\n> wrote:\r\n>\r\n> Yes that's correct.\r\n>\r\n> Brian Mauck\r\n> [image: phone-icon] 1 480 710 1344\r\n> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>\r\n> On Tue, Jun 30, 2026, 16:33 Alex Hughes <ahughes@vistacreditpartners.com>\r\n> wrote:\r\n>\r\n> Great - thank you. Assume it's over SOFR?\r\n>\r\n> *ALEXANDER HUGHES*\r\n>\r\n> M *+1 929.213.0195*\r\n> ------------------------------\r\n> *From:* Brian Mauck <brian.mauck@tryjeeves.com>\r\n> *Sent:* Tuesday, 30 June 2026 19:28:35\r\n> *To:* Alex Hughes <ahughes@vistacreditpartners.com>\r\n> *Cc:* Alexander Melikian <alexander@tryjeeves.com>\r\n> *Subject:* Re: Timing update\r\n>\r\n> Yeah it's L7s over, up to 95% adv on insured assets. Meaningful\r\n> improvement.\r\n>\r\n>\r\n>\r\n> Brian Mauck\r\n> [image: phone-icon] 1 480 710 1344\r\n> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>\r\n> On Tue, Jun 30, 2026, 16:10 Alex Hughes <ahughes@vistacreditpartners.com>\r\n> wrote:\r\n>\r\n> Can you guys share the new pricing on the NB ABL? The PwC report as you’ll\r\n> see reflects the old ABL.\r\n>\r\n> *ALEXANDER HUGHES*\r\n>\r\n> M *+1 929.213.0195*\r\n> ------------------------------\r\n> *From:* Alex Hughes\r\n> *Sent:* Tuesday, 30 June 2026 17:23:16\r\n> *To:* Brian Mauck <brian.mauck@tryjeeves.com>\r\n> *Cc:* Alexander Melikian <alexander@tryjeeves.com>\r\n> *Subject:* RE: Timing update\r\n>\r\n>\r\n> Great, thank you.\r\n>\r\n>\r\n>\r\n> Attached is the PwC report. PW is Orlando2026!\r\n>\r\n>\r\n>\r\n> *ALEXANDER HUGHES*\r\n>\r\n> M +1 929.213.0195\r\n>\r\n>\r\n>\r\n> *From:* Brian Mauck <brian.mauck@tryjeeves.com>\r\n> *Sent:* Tuesday, June 30, 2026 4:41 PM\r\n> *To:* Alex Hughes <ahughes@vistacreditpartners.com>\r\n> *Cc:* Alexander Melikian <alexander@tryjeeves.com>\r\n> *Subject:* RE: Timing update\r\n>\r\n>\r\n>\r\n> Hi Alex -\r\n>\r\n> Attached is the executed PwC access letter (NRL), signed by Alex. Please\r\n> let us know if PwC needs anything further on our end.\r\n>\r\n>\r\n>\r\n> Thanks,\r\n> Brian\r\n>\r\n> This message contains information that is confidential and/or may be\r\n> privileged. If you are not the intended recipient, you are hereby notified\r\n> that any use, dissemination, distribution, or copy of this message or its\r\n> attachments is strictly prohibited. In addition, emails sent from and to\r\n> this vistacreditpartners.com domain are monitored, archived, and subject\r\n> to disclosure, including in connection with regulatory or other legal\r\n> processes. If you have received this message in error, please advise the\r\n> sender immediately by reply email and delete this message.\r\n>\r\n>\r\n> This message contains information that is confidential and/or may be\r\n> privileged. If you are not the intended recipient, you are hereby notified\r\n> that any use, dissemination, distribution, or copy of this message or its\r\n> attachments is strictly prohibited. In addition, emails sent from and to\r\n> this vistacreditpartners.com domain are monitored, archived, and subject\r\n> to disclosure, including in connection with regulatory or other legal\r\n> processes. If"
+      }
+    },
+    {
+      "case_id": "prop-19f816f083633975",
+      "source": "proposal",
+      "gmail_msg_id": "19f816f083633975",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-20T21:29:41.286957+00:00",
+      "historical_proposed_action": "Confirm to Goodwin (Nathalie Rodriguez Mueses) and Akin Gump that the three documents can be shared as-is, and ask Goodwin to send them to Akin Gump.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (55 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Brandon McGathy <brandon@tryjeeves.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, \"Chute, Eliza\" <EChute@goodwinlaw.com>, \"Terwey, Aaron\" <ATerwey@goodwinlaw.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Shalom Hassan <shalom@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "Hi team -\r\n\r\nBrian and I synced offline, and we can share this document. Thanks Brandon\r\nfor flagging\r\n\r\nOn Mon, Jul 20, 2026 at 5:10 PM Brian Mauck <brian.mauck@tryjeeves.com>\r\nwrote:\r\n\r\n> Hi all-\r\n>\r\n> This is going to be crucial for determining which collateral is still\r\n> available to NB in Mexico. Short of manually restating or redacting the\r\n> names on each certificate I don't see a good path forward here.\r\n>\r\n> Worth noting that they already have seen customer names as it relates to\r\n> the audit.\r\n>\r\n> @Alexander Melikian <alexander@tryjeeves.com> given the above, can we\r\n> share as is?\r\n>\r\n>\r\n>\r\n> Brian Mauck\r\n> [image: phone-icon] 1 480 710 1344\r\n> [image: phone-icon] brian.mauck@tryjeeves.com\r\n>\r\n> On Mon, Jul 20, 2026, 14:02 Alexander Melikian <alexander@tryjeeves.com>\r\n> wrote:\r\n>\r\n>> @Brandon McGathy <brandon@tryjeeves.com> thanks for calling this out - I\r\n>> would prefer not to share customer names. Can we hold off on this one doc\r\n>> until Brian can touch base with NB\r\n>>\r\n>> On Mon, Jul 20, 2026 at 4:19 PM Brandon McGathy <brandon@tryjeeves.com>\r\n>> wrote:\r\n>>\r\n>>> @Alexander Melikian <alexander@tryjeeves.com> these include SOFOM\r\n>>> customers names for those that were migrated.  Okay to share with NB/Akin\r\n>>> per their request?\r\n>>>\r\n>>>\r\n>>>\r\n>>> On Mon, Jul 20, 2026 at 1:14 PM Rodriguez Mueses, Nathalie <\r\n>>> nrodriguezmueses@goodwinlaw.com> wrote:\r\n>>>\r\n>>>> Hi Brandon,\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Attached please find the below documents received from W&C. Could you\r\n>>>> please confirm we are able to share with Akin?\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>>    1. Beneficiary Rights Certificate\r\n>>>>    2. Adhesion Agreement\r\n>>>>    3. Periodic List\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Thank you,\r\n>>>>\r\n>>>> Nathalie\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *Nathalie Rodriguez Mueses*\r\n>>>>\r\n>>>> <https://www.goodwinlaw.com/>\r\n>>>> Goodwin Procter LLP\r\n>>>> 520 Broadway, Suite 500\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0A+Santa+Monica,+CA+90401?entry=gmail&source=g>\r\n>>>>\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0A+Santa+Monica,+CA+90401?entry=gmail&source=g>Santa\r\n>>>> Monica, CA 90401\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0A+Santa+Monica,+CA+90401?entry=gmail&source=g>\r\n>>>> o  +1 424 252 6373\r\n>>>> f   +1 424 252 6401\r\n>>>> nrodriguezmueses@goodwinlaw.com\r\n>>>>\r\n>>>>\r\n>>>> <https://www.linkedin.com/company/goodwin-law>\r\n>>>> <https://www.facebook.com/JoinGoodwin/>\r\n>>>> <https://www.instagram.com/join_goodwin/>\r\n>>>> <https://twitter.com/goodwinlaw>\r\n>>>> <https://www.goodwinlaw.com/news/2020/07/07_02-follow-goodwin-on-wechat>\r\n>>>>   <https://www.youtube.com/@join_goodwin>\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *From:* Rodriguez Mueses, Nathalie\r\n>>>> *Sent:* Monday, July 20, 2026 9:35 AM\r\n>>>> *To:* Brandon McGathy <brandon@tryjeeves.com>\r\n>>>> *Cc:* Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Alexander\r\n>>>> Melikian <alexander@tryjeeves.com>; Chute, Eliza <EChute@goodwinlaw.com>;\r\n>>>> Terwey, Aaron <ATerwey@goodwinlaw.com>; Thiago de Souza Lepre <\r\n>>>> thiago@tryjeeves.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; Brian\r\n>>>> Mauck <brian.mauck@tryjeeves.com>; Bedecarre, Ella Marie <\r\n>>>> EBedecarre@goodwinlaw.com>; Shalom Hassan <shalom@tryjeeves.com>;\r\n>>>> Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>;\r\n>>>> DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>\r\n>>>> *Subject:* RE: Jeeves - Outstanding Legal Diligence Items for VCP/NB\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Hi Brandon,\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Will do. We will revert with the documents once received from W&C.\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Best,\r\n>>>>\r\n>>>> Nathalie\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *Nathalie Rodriguez Mueses*\r\n>>>>\r\n>>>> <https://www.goodwinlaw.com/>\r\n>>>> Goodwin Procter LLP\r\n>>>> 520 Broadway, Suite 500\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0ASanta+Monica,+CA+90401?entry=gmail&source=g>\r\n>>>> Santa Monica, CA 90401\r\n>>>> <https://www.google.com/maps/search/52"
+      }
+    },
+    {
+      "case_id": "prop-19f764c7436c19ba",
+      "source": "proposal",
+      "gmail_msg_id": "19f764c7436c19ba",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-18T17:36:14.243042+00:00",
+      "historical_proposed_action": "Confirm the full primary Citi US account number to Avia Cohen at Goodwin and give the green light to share the diligence responses.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (55 msgs).",
+      "inputs": {
+        "sender": "Brandon McGathy <brandon@tryjeeves.com>",
+        "to": "\"Cohen, Avia\" <AviaCohen@goodwinlaw.com>",
+        "cc": "Thiago de Souza Lepre <thiago@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Shalom Hassan <shalom@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, Alexander Melikian <alexander@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "Avia,\r\n\r\nOkay from my perspective.\r\n\r\nThanks,\r\nBrandon\r\n\r\n\r\n\r\n*Brandon S. McGathy*\r\n*General Counsel | *tryjeeves.com\r\n*(407) 463-8598*\r\n\r\n[image: Logo alt text]\r\n\r\n\r\nOn Sat, Jul 18, 2026 at 10:07 AM Cohen, Avia <AviaCohen@goodwinlaw.com>\r\nwrote:\r\n\r\n> Jeeves Team – Vista is chasing for responses to the Brazilian and\r\n> Colombian Diligence Questions. Can you please confirm we have the green\r\n> light to share the responses below? Separately, we understand the Jeeves\r\n> primary Citi US account will be the go-forward bank account where the\r\n> closing funds will be deposited. @Brian Mauck <brian.mauck@tryjeeves.com>\r\n> – can you please confirm the full account number?\r\n>\r\n>\r\n>\r\n> *Brazilian Diligence*\r\n>\r\n> 1.     *Paymentology / Companion Cards Structure. *With respect to the\r\n> agreement entered into between Jeeves and Paymentology, please provide\r\n> additional details regarding the card issuance structure.\r\n>\r\n>    1. Please clarify what the “Companion Cards” referred to in the\r\n>       Paymentology documentation are (is it a post-paid instrument?);\r\n>\r\n> The 'Companion Cards' referenced in the Paymentology documentation are\r\n> post-paid card instruments issued as supplementary cards linked to a\r\n> primary corporate card account. They are issued under the same\r\n> credit/payment limit as the primary card, allowing multiple authorized\r\n> users of a corporate customer to transact against the same Jeeves credit\r\n> facility.\r\n>\r\n> 2.              Please identify the legal entity acting as issuer of all\r\n> the cards made available to customers in Brazil through the Paymentology\r\n> structure;\r\n>\r\n> Jeeves Brasil Instituição de Pagamento Ltda.\r\n>\r\n> 3.              Please confirm whether any cards made available to\r\n> customers in Brazil are issued by entities incorporated outside Brazil and,\r\n> if so, identify the relevant issuing entity and describe the applicable\r\n> contractual and operational structure.\r\n>\r\n> No credit card issuance is made into Brazil from an international company.\r\n>\r\n> 2.              *Jeeves Pay Credit / Nota Comercial Structure. *With\r\n> respect to the Jeeves Pay Credit product and the *Nota Comercial*\r\n> structure described in previous responses:\r\n>\r\n>    1. Please identify the entity acting as the holder of the *Notas\r\n>       Comerciais* issued by customers. In particular, please clarify\r\n>       whether such holder is Jeeves Brasil Instituição de Pagamento Ltda., the\r\n>       Brazilian entity currently applying for authorization to operate as a *Sociedade\r\n>       de Crédito Direto* (SCD), another Jeeves group entity or a third\r\n>       party;\r\n>\r\n> Jeeves Brasil Instituição de Pagamento Ltda. is the subscriber of the\r\n> notas comerciais emitted.\r\n>\r\n> 2.              Please confirm whether the *Nota Comercial* structure is\r\n> the standard structure used in connection with the Jeeves Pay Credit\r\n> product and whether such product is actively and regularly offered to\r\n> customers;\r\n>\r\n> Confirmed. The Nota Comercial structure is the standard structure used for\r\n> the Jeeves Pay Credit product in Brazil and is actively and regularly\r\n> offered to eligible Brazilian corporate customers.\r\n>\r\n> 3.              Please describe how Jeeves is remunerated in connection\r\n> with transactions structured through *Notas Comerciais*, including\r\n> whether any fees, spreads, interest, charges or other amounts are charged\r\n> to customers;\r\n>\r\n> Jeeves is remunerated through the interest/spread built into the NC terms\r\n> — the customer pays an effective interest rate on the outstanding NC\r\n> balance. This spread represents Jeeves's net interest margin on the\r\n> Brazilian credit product. The exact rate is disclosed in the customer's NC\r\n> terms and in the Jeeves Pay Credit pricing documentation.\r\n>\r\n> 4.              Please confirm whether the amount payable by the customer\r\n> under the *Nota Comercial* structure may exceed the amount originally\r\n> made available to the customer and, if so, please describe the applicable\r\n> re"
+      }
+    },
+    {
+      "case_id": "prop-19f85af906398c1f",
+      "source": "proposal",
+      "gmail_msg_id": "19f85af906398c1f",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "bu.com.co",
+      "posted_at": "2026-07-21T17:20:29.347697+00:00",
+      "historical_proposed_action": "Forward the redlined Trust Agreement to Goodwin (Jeeves counsel) and Akin Gump (NB counsel) with a note that Brigard Urrutia has submitted their version, and request a review and comparison against prior drafts by end of week.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (28 msgs).",
+      "inputs": {
+        "sender": "\"Jorge Alberto Padilla Sánchez\" <jpadillas@bu.com.co>",
+        "to": "\"Juan Sebastián Mejía González\" <smejiag@bu.com.co>, Sebastian Lora Burman <slora@bu.com.co>, \"Rumann, Aja\" <ARumann@akingump.com>, \"Musa, Corinne\" <cmusa@akingump.com>, \"Im, Jaisohn\" <jim@akingump.com>, \"Fernandez, Melquiades\" <fernandezm@akingump.com>, \"Gilligan, Megan\" <mgilligan@akingump.com>, \"Hawkins, Zoe\" <ZHawkins@akingump.com>",
+        "cc": "Brian Mauck <brian.mauck@tryjeeves.com>, Brandon McGathy <brandon@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Alexander Melikian <alexander@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, \"Garaffa, Tyler\" <TGaraffa@goodwinlaw.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, \"Carlos Fradique-Méndez\" <cfradique@bu.com.co>, \"Diana Carolina Quintero Díaz\" <dquintero@bu.com.co>, Alejandro Cardozo Coral <acardozoc@bu.com.co>",
+        "subject": "RE: NB - Jeeves Financing - Trust Agreement",
+        "body": "Hi Juanse and Team,\r\n\r\nWe hope this email finds you well.\r\n\r\nIn the interest of time, please find attached a new version of the Trust Agreement, along with a redline against the version we received from you.\r\n\r\nPlease bear in mind that this version of the Trust Agreement is subject to further comments and review by Jeeves and its counsel.\r\n\r\nFeel free to contact us should you have any questions or comments.\r\n\r\nKind regards,\r\n\r\n\r\nJorge Alberto Padilla\r\nAsociado Senior | Senior Associate\r\n[cid:image001.png@01DD1908.DE32B200]<http://bu.com.co/>\r\njpadillas@bu.com.co<mailto:jpadillas@bu.com.co> · www.bu.com.co<http://bu.com.co/>\r\n+57-60-1-3462011 Ext.8551\r\n+57-60-1-7442211 Ext.8551\r\nCalle 70 Bis No. 4 - 41\r\nBogotá, Colombia\r\nNIT: 800.134.536-3\r\n[cid:image002.png@01DD1908.DE32B200]<https://www.linkedin.com/company/brigard-urrutia>[cid:image003.png@01DD1908.DE32B200]<https://twitter.com/Brigard_Urrutia>[cid:image004.png@01DD1908.DE32B200]<https://www.facebook.com/BrigardUrrutia>\r\n\r\n________________________________\r\nInformación confidencial protegida por la reserva profesional del abogado. Si usted no es el destinatario del correo, por favor comuníqueselo de inmediato al remitente y proceda a destruirlo. En este evento, estará prohibida la retención, utilización, copia o divulgación por cualquier medio de la información que se encuentre en el mensaje y en sus archivos adjuntos. Se deberá cumplir con lo dispuesto en la Ley 1581 de 2012 y demás normas que la complementen, sustituyan o modifiquen, en caso de ser aplicable.\r\n\r\nConfidential information protected by attorney-client privilege. If you are not the intended recipient of this e-mail, please notify the sender immediately and proceed to delete it. In such an event, the retention, use, copy or distribution of the information contained herein or in any attachments, by any means is strictly prohibited. Law 1581 of 2012 should be adhered to as well as any other complementary, substitute or modifications to the norms, in the case that they are applicable.\r\n\r\n\r\nDe: Juan Sebastián Mejía González <smejiag@bu.com.co>\r\nEnviado el: martes, 7 de julio de 2026 10:48 a. m.\r\nPara: Brian Mauck <brian.mauck@tryjeeves.com>; Brandon McGathy <brandon@tryjeeves.com>; Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Garaffa, Tyler <TGaraffa@goodwinlaw.com>; Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; Carlos Fradique-Méndez <cfradique@bu.com.co>; Jorge Alberto Padilla Sánchez <jpadillas@bu.com.co>; Diana Carolina Quintero Díaz <dquintero@bu.com.co>\r\nCC: Sebastian Lora Burman <slora@bu.com.co>; Juan Diego Angulo Triana <jangulo@bu.com.co>; Rumann, Aja <ARumann@akingump.com>; Musa, Corinne <cmusa@akingump.com>; Im, Jaisohn <jim@AKINGUMP.com>; Fernandez, Melquiades <fernandezm@akingump.com>; Gilligan, Megan <mgilligan@akingump.com>; Hawkins, Zoe <ZHawkins@akingump.com>\r\nAsunto: NB - Jeeves Financing - Trust Agreement\r\n\r\nAll -\r\n\r\nPlease find attached the initial draft of the Trust Agreement for your review and comment.\r\n\r\n\r\nKindly note that we are sharing the attached in the interest of time, and as such, it remains subject to ongoing review and comments in all respects.\r\n\r\n\r\n\r\nLet us know if you have any questions or would like to discuss.\r\n\r\n\r\n\r\nBest,\r\n\r\n\r\nJuan Sebastián Mejía González\r\nAsociado | Associate\r\n[cid:image001.png@01DD1908.DE32B200]<http://bu.com.co/>\r\nsmejiag@bu.com.co<mailto:smejiag@bu.com.co> · www.bu.com.co<http://bu.com.co/>\r\n+57-60-1-3462011 Ext.8261\r\n+57-60-1-7442211 Ext.8261\r\nCalle 70 Bis No. 4 - 41\r\nBogotá, Colombia\r\nNIT: 800.134.536-3\r\n[cid:image002.png@01DD1908.DE32B200]<https://www.linkedin.com/company/brigard-urrutia>[cid:image003.png@01DD1908.DE32B200]<https://twitter.com/Brigard_Urrutia>[cid:image004.png@01DD1908.DE32B200]<https://www.facebook.com/BrigardUrrutia>\r\n\r\n________________________________\r\nInformación confidencial protegida por la reserva profesional del abogado. Si usted no es el destinatario del correo, "
+      }
+    },
+    {
+      "case_id": "obs-19dad0392ccf02e6",
+      "source": "observation",
+      "gmail_msg_id": "19dad0392ccf02e6",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-04-20T22:29:33+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>, Pradeep Manoharan <pradeepan@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Isabel Diaz Miranda <isabel@tryjeeves.com>",
+        "cc": "Pablo Cortina <pabloc@tryjeeves.com>",
+        "subject": "2026.04.20 Upcoming Week",
+        "body": "Hi team\n\nHope everyone is having a great Monday so far. Thank you for all of the\nweekend work. The next few weeks will be very, very busy and appreciate\neveryone rolling up their sleeves as we work to help enable growth for\nJeeves\n\nYour agenda docs have not (yet!) been updated, but wanted to share a few\ngroup workstreams that we need to be very coordinated on\n\n   - BoD Deck Prep (see prior email)\n   - BBVA Spark Due Diligence\n      - We HAVE to submit responses by *EOD **today*, in order to maintain\n      our April 28 committee meeting. If we miss today, committee will\nbe pushed\n      1 week at minimum.  We will need to share 3 year model with b/s\ntonight @Pradeep\n      Manoharan <pradeepan@tryjeeves.com>\n   - Neuberger Berman Due Diligence\n      - This is kicking off this week with close to 3 hours of DD calls. @Brian\n      Mauck <brian.mauck@tryjeeves.com> will be in touch with this gr"
+      }
+    },
+    {
+      "case_id": "prop-19f816f42d545669",
+      "source": "proposal",
+      "gmail_msg_id": "19f816f42d545669",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-20T21:30:02.633098+00:00",
+      "historical_proposed_action": "Coordinate with Shalom Hassan to confirm which of the outstanding Goodwin diligence items (Mexican OpCo docs, JVS COL employee list, 2024–2025 audited financials) Jeeves will provide vs. confirm already uploaded to Wilkie VDR, then pull and forward those items to Goodwin with a target completion date.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (55 msgs).",
+      "inputs": {
+        "sender": "Shalom Hassan <shalom@tryjeeves.com>",
+        "to": "\"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>",
+        "cc": "Brandon McGathy <brandon@tryjeeves.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, Alexander Melikian <alexander@tryjeeves.com>, \"Chute, Eliza\" <EChute@goodwinlaw.com>, \"Terwey, Aaron\" <ATerwey@goodwinlaw.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "Hi Nathalie,\r\n\r\nFor the item below, please use our BofA account; see the attachment for\r\ndetails.\r\n\r\n*Vista/PSK*\r\n\r\nKYC Requests\r\n\r\n   1. *Issuer Administrative Details Form*. Please provide bank account\r\n   information where the closing funds will be deposited\r\n\r\n\r\nOn Mon, Jul 20, 2026 at 2:32 AM Rodriguez Mueses, Nathalie <\r\nnrodriguezmueses@goodwinlaw.com> wrote:\r\n\r\n>\r\n>\r\n> Hi Brandon,\r\n>\r\n>\r\n>\r\n> Confirming that CF diligence responses have been shared with Wilkie.\r\n> Please see below for a list of diligence items that remain open:\r\n>\r\n>\r\n>\r\n> *CF/Wilkie Disclosure Schedules*\r\n>\r\n> *Mexican OpCos*\r\n>\r\n>    1. Please provide the most recent *Cédula de Determinación de Cuotas*\r\n>    issued by the Mexican Social Security Institute (*Instituto Mexicano\r\n>    del Seguro Social*, “*IMSS*”) for each of the Mexican OpCos. *Jeeves\r\n>    to provide.*\r\n>    2. Please provide evidence of compliance with statutory profit sharing\r\n>    (*Participación de los Trabajadores en las Utilidades*, “PTU”)\r\n>    obligations for the last fiscal year, including evidence of PTU payments\r\n>    and the corresponding PTU calculation. *Jeeves to confirm this has\r\n>    been uploaded to the Wilkie VDR.*\r\n>\r\n> *JVS COL*\r\n>\r\n>    1. Please send a list of all of JVS COL's employees, including name,\r\n>    nationality, salary and indicate if they have a consulting agreement (or\r\n>    other non-employment contracts) under which fees are paid.  *Jeeves to\r\n>    provide in separate folder *\r\n>    2. Please provide a copy of the audited financial statements for the\r\n>    end of the fiscal years 2024 and 2025, including the corresponding notes to\r\n>    the financial statements, as well as the statutory auditor reports. *Jeeves\r\n>    to provide/confirm whether they will be providing*\r\n>    3. Please provide a description of each personal database held by JVS\r\n>    COL, including for each: (i) the types of personal data collected and\r\n>    processed; (ii) the categories of data subjects; (iii) the purposes for\r\n>    which the data is used; and (iv) whether the data is transferred or\r\n>    transmitted to third parties in Colombia or abroad. *Jeeves to\r\n>    provide.*\r\n>\r\n>\r\n>\r\n> *Akin/NB*\r\n>\r\n> *Mexican Local Counsel Requests. *Please provide:\r\n>\r\n>    1. The Adhesion Agreement (Convenio de Adhesión de Fideicomisario), by\r\n>    and among JVS México Soluciones, as settlor (fideicomitente), servicer\r\n>    (administrador) and beneficiary (fideicomisario) of the Master Trust; the\r\n>    master trustee, and the existing borrower, as adhering beneficiary\r\n>    (fideicomisario adherente) of the Master Trust. *Jeeves to provide*\r\n>    2. Any beneficiary rights certificates (constancias de derechos\r\n>    fideicomisarios) issued under the Master Trust. *Jeeves to provide*\r\n>\r\n> *Diligence Requests*\r\n>\r\n>    1. *Recent Financials*. Please provide the most recently prepared\r\n>    April or May 2026 financials for the Company. *Jeeves to provide*\r\n>    2. *Quality of Earnings Report.* Please provide as soon as available. *Jeeves\r\n>    to provide*\r\n>    3. *BBVA Stand by Letter of Credit and Guarantee.* Please provide as\r\n>    soon as available. *Jeeves to provide*\r\n>    4. *Pledges in Brazil, Colombia, and Mexico.* Please provide as soon\r\n>    as available. *Jeeves to provide*\r\n>    5. *Loan/Receivable Files*. NB has requested 25 randomly selected\r\n>    electronic loan or receivables files relating to outstanding loans. The\r\n>    current Akin Box Folder 6. Customer Contracts only contains 9 contracts.\r\n>    Could you please provide 16 more randomly selected contracts? *Jeeves\r\n>    to provide*\r\n>\r\n>\r\n>\r\n> *Vista/PSK*\r\n>\r\n> KYC Requests\r\n>\r\n>    1. *Issuer Administrative Details Form*. Please provide bank account\r\n>    information where the closing funds will be deposited. *Jeeves to\r\n>    provide US Citibank account information.*\r\n>\r\n>\r\n>\r\n> Please let us know of any questions on the above.\r\n>\r\n>\r\n>\r\n> Best,\r\n>\r\n> Nathalie\r\n>\r\n>\r\n>\r\n> *Nathalie Rodriguez Mueses*\r\n>\r\n> <https://www.g"
+      }
+    },
+    {
+      "case_id": "obs-19e41a3e747a0f78",
+      "source": "observation",
+      "gmail_msg_id": "19e41a3e747a0f78",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-05-19T19:08:29+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Pedro Inzunza <pedro@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, \"Ana María Franco Mora\" <ana.franco@tryjeeves.com>, \"Angela Viviana Rodríguez Alfonso\" <angela.rodriguez@tryjeeves.com>, \"Angélica Medina Barrios\" <angelica@tryjeeves.com>, Angelo Piscitelli Filho <angelof@tryjeeves.com>, Anish Bhatt <anish@tryjeeves.com>, Antonio Lattanzio Galat <antonio.lattanzio@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, c_599ffc755b1fbe98b7d6a7f6781485c9eedc2a81c46f72a015b0cc7b91d68522@group.calendar.google.com, \"Camila Terán\" <camilat@tryjeeves.com>, \"Camilo Nieto Bohórquez\" <camilob@tryjeeves.com>, Carla Carmona <carla@tryjeeves.com>, Chin Tan <chin@tryjeeves.com>, Eduardo Daniel Galicia Toledano <daniel.galicia@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Elizabeth Zamudio <elizabeth@tryjeeves.com>, Fabian Moreno Guerrero <fabian@tryjeeves.com>, Fer Cruz Salvador <fer@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Gustavo Monsanto <gustavo@tryjeeves.com>, Haizea Garmendia <haizea@tryjeeves.com>, Jason Dhabliwala <jdhabliwala@tryjeeves.com>, \"Jesús Juárez Sánchez\" <jesus@tryjeeves.com>, Jordan Bulkoski <jordan@tryjeeves.com>, Jose Jimenez <josej@tryjeeves.com>, Juan Abusaid <juana@tryjeeves.com>, Juliana Ramos <juliana.ramos@tryjeeves.com>, Juliana Santana <juliana.santana@tryjeeves.com>, Kash Baghaei <kash@tryjeeves.com>, Liana Alves <liana.chiromatzo@tryjeeves.com>, Lluvia Lara <lluvialara@tryjeeves.com>, Marcelo Araujo <marcelo@tryjeeves.com>, Valentina Luquetta <maria@tryjeeves.com>, Matheus Emmerich <matheuse@tryjeeves.com>, Mathias Ferraz <mathias@tryjeeves.com>, \"Maurício de Souza Peixoto\" <mauricio.peixoto@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>, Paulina Alarcon <paulina.alarcon@tryjeeves.com>, Paulina Vega <paulinav@tryjeeves.com>, Pedro Zerboni <pedroz@tryjeeves.com>, Rodrigo Roa Ramirez <rodrigor@tryjeeves.com>, Shafic Villarreal <shafic@tryjeeves.com>, Vitor Nucitelli <vitorn@tryjeeves.com>, Vytor Zeidan <vytor@tryjeeves.com>, Wadi Bisteni <wadi@tryjeeves.com>",
+        "cc": "",
+        "subject": "Global Credit Committee @ Tue, May 19, 2026 3:30pm – 4:00pm (GMT-06)",
+        "body": "Hi team,\n\nSharing our tentative agenda for today:\n\n   - Esapetrol\n      - @Antonio Lattanzio Galat <antonio.lattanzio@tryjeeves.com>\n      - Brikel\n      - @Elizabeth Zamudio <elizabeth@tryjeeves.com>\n      - Bia Energy\n      - @Paulina Vega <paulinav@tryjeeves.com>\n      - Perez y Cardona\n      - @Juan Abusaid <juana@tryjeeves.com>\n\n\n--"
+      }
+    },
+    {
+      "case_id": "obs-19e46cf4393445c2",
+      "source": "observation",
+      "gmail_msg_id": "19e46cf4393445c2",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "google.com",
+      "posted_at": "2026-05-20T19:14:08+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Gemini <gemini-notes@google.com>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "Notes: “Weekly Risk Meeting” May 20, 2026",
+        "body": "Notes from “Weekly Risk Meeting”\n\nThese notes have been sent to invited guests in your organization.\n\nOpen meeting notes\n\nThe content was auto-generated on May 20, 2026, 12:11 PM PDT and may  \ncontain errors.\n\n\nSummary\nTechnical discussions addressed agent repository architecture and financial  \nmodel refinements via population segmentation and variable optimization.\n\n\nAgent Repository and Fees\nTeams implemented terminal cloud code and established a centralized  \nknowledge base repository. Automated flagging systems were introduced to  \naddress late fee and ineligible account issues.\n\nModel Population and Variables\nParticipants selected Population B for model training due to sample size.  \nAnalysis revealed that binary categories for current ratios provided more  \nintuitive insights than continuous values.\n\nRefining Model Bad Definition\nThe team decided to refine the bad population defin"
+      }
+    },
+    {
+      "case_id": "obs-19e0341faa882325",
+      "source": "observation",
+      "gmail_msg_id": "19e0341faa882325",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-05-07T16:25:15+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Shalom Hassan <shalom@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Updated invitation: Brian / Shalom @ Thu May 7, 2026 1pm - 1:30pm (PDT) (Brian Mauck)",
+        "body": "This event has been updated\nChanged: time\n\n\nBrian / Shalom\nThursday May 7, 2026 ⋅ 1pm – 1:30pm\nPacific Time - Los Angeles\n\nJoin with Google Meet\nhttps://meet.google.com/ifq-uzmf-qry?hs=224\n\n\n\t\nJoin by phone\n(US) +1 319-449-2813\nPIN: 364260283\n\nMore phone numbers\nhttps://tel.meet/ifq-uzmf-qry?pin=5632169937274&hs=0\n\n\nOrganizer\nShalom Hassan\nshalom@tryjeeves.com\n\nGuests\nShalom Hassan - organizer\nBrian Mauck\nView all guest info  \nhttps://calendar.google.com/calendar/event?action=VIEW&eid=NmpkYXF1bHBlcmw2bG52b2lxM2g4cmZiMXAgYnJpYW4ubWF1Y2tAdHJ5amVldmVzLmNvbQ&tok=MjAjc2hhbG9tQHRyeWplZXZlcy5jb200MTRlZjZiNjQwZjJmNGZiNGY2ZWJjNThlMGRmODY4NWI5Y2JhN2Ez&ctz=America%2FLos_Angeles&hl=en&es=1\n\nReply for brian.mauck@tryjeeves.com and view more details  \nhttps://calendar.google.com/calendar/event?action=VIEW&eid=NmpkYXF1bHBlcmw2bG52b2lxM2g4cmZiMXAgYnJpYW4ubWF1Y2tAdHJ5amVldmVzLmNvbQ&tok=MjAjc2hhbG9tQHRyeW"
+      }
+    },
+    {
+      "case_id": "obs-19e992ccfa58b876",
+      "source": "observation",
+      "gmail_msg_id": "19e992ccfa58b876",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-06-05T19:05:08+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "brian.mauck@tryjeeves.com, axel@tryjeeves.com, isabel@tryjeeves.com, imendez@cxc.com.mx, gvillareal@cxc.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, fcarbajal@cxc.com.mx, hbarradas@cxc.com.mx",
+        "subject": "Tecnología en CXC - Factura",
+        "body": "<!DOCTYPE html>\n<html>\n<head>\n    <title></title>\n    <style>\n        p.MsoNormal, li.MsoNormal, div.MsoNormal {\n            font-size: 11pt;\n            font-family: 'Calibri';\n            margin-bottom: 10pt;\n            line-height: 1.15;\n        }\n\n        .MsoChpDefault {\n            font-size: 11pt;\n            font-family: 'Calibri';\n        }\n\n        .MsoPapDefault {\n            margin-bottom: 4pt;\n            line-height: 1;\n        }\n    </style>\n</head>\n<body>\n    <p class=\"MsoNormal\" style=\"margin-bottom: 4pt; margin-top: 0pt; line-height: 1; \"><span style=\"font-size: 12pt; font-family: serif; \"><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAABGCAYAAAAQJeoeAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAjYSURBVHgB7d1dbFVVGsbx1RmcwWEmdBImNTOJZTKRzlcoTNpmMglFJuNESBggUxKaiGLEBCMRFC/wQgE/Il6oBTXhggQw3okpfiTFYCItF2ohwXIBQaP0kHiBmtheoFYlup8NOymH"
+      }
+    },
+    {
+      "case_id": "prop-19f2826c925a5466",
+      "source": "proposal",
+      "gmail_msg_id": "19f2826c925a5466",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-03T13:24:40.647026+00:00",
+      "historical_proposed_action": "Schedule a call with Alex, Isabel, and yourself to align on the DACA vs. Trust trade-offs and confirm next steps for approaching NB on a potential structure change; ensure all future Colombia structure comms include Alex.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (16 msgs).",
+      "inputs": {
+        "sender": "Isabel Diaz Miranda <isabel@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>",
+        "cc": "Brian Mauck <brian.mauck@tryjeeves.com>, Brandon McGathy <brandon@tryjeeves.com>",
+        "subject": "Re: 4/1000",
+        "body": "Hi Alex,\r\n\r\nWhat I'm trying to say, is that if we do a trust, building the efficiencies will be difficult and I can't guarantee it since it is very complex and this is a new entity which has no contracts with the suppliers which would justify the 4x1000 exemption.\r\n\r\nBTG Colombia offered to set up a DACA, but we have not had a call with them specifically about this subject. I have had calls with them to set up the normal account.\r\n\r\nBrian (and I) want to know if you see it as viable with NB changing from the Trust to the DACA.\r\n\r\nOn Fri, Jul 03, 2026 at 1:16 AM, Alexander Melikian < alexander@tryjeeves.com > wrote:\r\n\r\n> \r\n> Hi Brian, Isa\r\n> \r\n> \r\n> Thank you for working on this\r\n> \r\n> \r\n> We require the 4x1000 efficiencies - let's figure out a structure that\r\n> preserves that.\r\n> \r\n> \r\n> @brian - can you please loop Isa and I into all comms on this? This is\r\n> mission critical and surprised that this is just coming up now\r\n> \r\n> \r\n> Thanks\r\n> Alex\r\n> \r\n> On Fri, Jul 3, 2026 at 2:53 AM Isabel Diaz Miranda < isabel@ tryjeeves. com\r\n> ( isabel@tryjeeves.com ) > wrote:\r\n> \r\n> \r\n>> If the DACA is done in an account under the current entity, all the 4x1000\r\n>> efficiencies I have built still apply.\r\n>> \r\n>> \r\n>> \r\n>> \r\n>> \r\n>> On Thu, Jul 02, 2026 at 5:42 PM, Brian Mauck < brian. mauck@ tryjeeves. com\r\n>> ( brian.mauck@tryjeeves.com ) > wrote:\r\n>> \r\n>>> But if customers pay into Cobre we're going to have to transfer to BTG to\r\n>>> BC (the trust) immediately, so I don't see a way where that saves us from\r\n>>> having 4/1000? I mean we can go the DACA route, but it's going to be a\r\n>>> fight with NB and we'll have to change customer payment instructions.\r\n>>> \r\n>>> \r\n>>> @ Alexander Melikian ( alexander@tryjeeves.com ) any thoughts?\r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> Brian Mauck\r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> 1 480 710 1344 brian. mauck@ tryjeeves. com ( brian.mauck@tryjeeves.com )\r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> \r\n>>> On Thu, Jul 2, 2026 at 4:39 PM Isabel Diaz Miranda < isabel@ tryjeeves. com\r\n>>> ( isabel@tryjeeves.com ) > wrote:\r\n>>> \r\n>>> \r\n>>>> Even if we do them with BC they generate 4x1000 tax because it is not a\r\n>>>> transfer between accounts on the same bank. To pay MC without 4x1000, I\r\n>>>> had to get Banco de Bogotá's approval and show them the contract (which is\r\n>>>> not under the Trust entity). For JP, Cobre except us instantly, but we\r\n>>>> need customers to pay us into Cobre (if we transfer into Cobre we have to\r\n>>>> pay the tax).\r\n>>>> \r\n>>>> \r\n>>>> \r\n>>>> \r\n>>>> On Thu, Jul 02, 2026 at 5:28 PM, Brian Mauck < brian. mauck@ tryjeeves. com\r\n>>>> ( brian.mauck@tryjeeves.com ) > wrote:\r\n>>>> \r\n>>>>> Hi Isa-\r\n>>>>> \r\n>>>>> \r\n>>>>> We would need to change all the customer's payment instructions if we did\r\n>>>>> a DACA. Can we not do our JP and MC settlement from BC instead?\r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> THanks,\r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> Brian Mauck\r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> 1 480 710 1344 brian. mauck@ tryjeeves. com ( brian.mauck@tryjeeves.com )\r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> \r\n>>>>> On Thu, Jul 2, 2026 at 4:26 PM Isabel Diaz Miranda < isabel@ tryjeeves. com\r\n>>>>> ( isabel@tryjeeves.com ) > wrote:\r\n>>>>> \r\n>>>>> \r\n>>>>>> Hi Brian,\r\n>>>>>> \r\n>>>>>> \r\n>>>>>> \r\n>>>>>> We would have to request a 4x1000 exception letter for the trust. Since\r\n>>>>>> neither the MC contract nor the customers that disburse JeevesPay would be\r\n>>>>>> the Trust's, I don't believe the bank would accept it.\r\n>>>>>> \r\n>>>>>> \r\n>>>>>> \r\n>>>>>> I think we should really analyze the DACA of the account at BTG Colombia,\r\n>>>>>> which would fit in the process we have right now.\r\n>>>>>> \r\n>>>>>> \r\n>>>>>> \r\n>>>>>> On Thu, Jul 02, 2026 at 4:28 PM, Brian Mauck < brian. mauck@ tryjeeves. com\r\n>>>>>> ( brian.mauck@tryjeeves.com ) > wrote:\r\n>>>>>> \r\n>>>>>>> Isa, Alex-\r\n>>>>>>> \r\n>>>>>>> \r\n>>>>>>> Will this work for you?\r\n>>>>>>> \r\n>>>>>>> \r\n>>>>>>> \r\n>>>>>>>> \r\n>>>>>>>> \r"
+      }
+    },
+    {
+      "case_id": "prop-19fce8572614d0d9",
+      "source": "proposal",
+      "gmail_msg_id": "19fce8572614d0d9",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "nb.com",
+      "posted_at": "2026-08-04T20:45:14.536624+00:00",
+      "historical_proposed_action": "Search Gmail/Drive for the current FX hedging policy and the latest borrowing base cert model, then draft a reply to Max addressing each of the four comments and attaching the hedging policy if found",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (14 msgs).",
+      "inputs": {
+        "sender": "\"Fernandez, Max\" <Max.Fernandez@nb.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Berger, Jay\" <Jay.Berger@nb.com>, \"Surapaneni, Varun\" <Varun.Surapaneni@nb.com>",
+        "subject": "RE: Borrowing Base Cert",
+        "body": "Hi Brian,\r\n\r\nThanks again for passing along the below. Our notes are as follows:\r\n\r\n  1.  Summary tab:\r\n     *   Confirm that cash is only for Collections Accounts and Origination Accounts which are Controlled Accounts. Please also indicate if the cash is hedged/unhedged and how you are applying the 20% haircut for unhedged\r\n     *   File should include functionality to allocate excess concentrations to either insured or uninsured receivables\r\n  2.  Have you shared the FX hedging policy yet, as it will be an exhibit to the credit agreement? We would like to review\r\n  3.  Please add additional tabs for detailed calculation of other fin covs including Liquidity, DQs and T3M cash flows\r\n\r\nLet us know of any questions.\r\n\r\nBest,\r\n\r\nMax Fernandez\r\nSpecialty Finance Group\r\nNeuberger Berman | T: +1 415 249 8049\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Monday, August 3, 2026 5:04 PM\r\nTo: Fernandez, Max <Max.Fernandez@nb.com>\r\nCc: Berger, Jay <Jay.Berger@nb.com>\r\nSubject: Re: Borrowing Base Cert\r\n\r\nHi Max-\r\n\r\nThanks for the reminder. Here you go. Let me know your thoughts.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Mon, Aug 3, 2026 at 4:25 PM Fernandez, Max <Max.Fernandez@nb.com<mailto:Max.Fernandez@nb.com>> wrote:\r\nHi Brian,\r\n\r\nI hope all is well. I just wanted to check in to see if we should still expect the draft borrowing base later today.\r\n\r\nThanks.\r\n\r\nBest,\r\n\r\nMax Fernandez\r\nSpecialty Finance Group\r\nNeuberger Berman | T: +1 415 249 8049\r\n\r\n\r\n--------\r\nIf you are not an intended recipient of this e-mail, you are not authorized to duplicate, copy, retransmit or redistribute it by any means. Please delete it and any attachments immediately and notify the sender that you have received it in error. Unless specifically indicated, this e-mail is not an offer to buy or sell or a solicitation to buy or sell any securities, investment products or other financial product or service, an official confirmation of any transaction, or an official statement of Neuberger Berman. Any views or opinions presented are solely those of the author and do not necessarily represent those of Neuberger Berman. This e-mail is subject to terms available at the following link: www.nb.com/disclaimer/usa.html<http://www.nb.com/disclaimer/usa.html>\r\n\r\nCell phone numbers, if provided, are for voice purposes only and should not be used for text or instant messages or the like. Please do not communicate via text message or other messaging service unless requested to do so by your Neuberger representative.\r\n\r\nBy messaging with Neuberger Berman you consent to the foregoing.\r\n\r\nIf you are a Canadian resident and would like to unsubscribe, click http://www.nb.com/unsubscribe-email\r\n"
+      }
+    },
+    {
+      "case_id": "obs-19f07211d81dbdd0",
+      "source": "observation",
+      "gmail_msg_id": "19f07211d81dbdd0",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-06-27T03:30:22+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Mariana Patricia Herrera Cruz <mariana.herreracruz@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Isabel Diaz Miranda <isabel@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Martha Pozas Magdaleno <martha@tryjeeves.com>, Katie Enochs <katie@tryjeeves.com>, Pradeep Manoharan <pradeepan@tryjeeves.com>, Lizz Sanchez <lizz@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Axel Orendain <axel@tryjeeves.com>, \"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>, Debbie Esquivel <debbie@tryjeeves.com>",
+        "cc": "",
+        "subject": "260626 CICO- Daily balances",
+        "body": "*Bank balances*\n\n[image: image.png]\n[image: image.png]\n[image: image.png]\n[image: image.png]\n[image: image.png]\n\n*Best, *\n*Mariana.*"
+      }
+    },
+    {
+      "case_id": "obs-19e039c3e4b24019",
+      "source": "observation",
+      "gmail_msg_id": "19e039c3e4b24019",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-05-07T18:03:48+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. ´\n´La instrucción ya fue cargada al sistema Power Trust\n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "obs-19f8566da2bce7d6",
+      "source": "observation",
+      "gmail_msg_id": "19f8566da2bce7d6",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "whitecase.com",
+      "posted_at": "2026-07-21T15:58:53+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "\"Olivares Fuentes, Jorge\" <jorge.olivares@whitecase.com>",
+        "to": "\"Ángel Pérez Cano\" <aperez@notariashlom.mx>",
+        "cc": "\"'Kathia Albarrán Fernández'\" <kalbarran@notariashlom.mx>, Brandon McGathy <brandon@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"'Jorge Luis De La Cabada Hurrle'\" <jorge.hurrle@tryjeeves.com>, \"Micha Kurc, Simon\" <simon.micha@whitecase.com>, \"Gomez Peon, Santiago\" <santiago.gomez@whitecase.com>",
+        "subject": "RE:  RE: Cotización - Protocolización RUAs JVS (S.A.)",
+        "body": "Hola Ángel,\n\nJVS (copiando al resto del equipo) estuvo de acuerdo con la cotización. Favor de proceder con la preparación del proyecto. Se están gestionando las firmas de los proxies para que Jorge Luis pueda firmar.\n\nSaludos,\nJorge\n\nJorge Olivares Fuentes  |  Associate\nT +​5​2​ ​5​5​ ​5​5​4​0​ ​9​6​7​2 <tel:+525555409672>     E  jorge.olivares@whitecase.com<mailto:jorge.olivares@whitecase.com>\nWhite & Case S.C.  |  Torre del Bosque – PH | Blvd. Manuel Ávila Camacho #24\nCol. Lomas de Chapultepec | 11000 Ciudad de México\n\nFrom: Olivares Fuentes, Jorge\nSent: lunes, 20 de julio de 2026 06:02 p. m.\nTo: 'Ángel Pérez Cano' <aperez@notariashlom.mx>\nCc: 'Kathia Albarrán Fernández' <kalbarran@notariashlom.mx>; 'Jorge Luis De La Cabada Hurrle' <jorge.hurrle@tryjeeves.com>; Micha Kurc, Simon <simon.micha@whitecase.com>; Gomez Peon, Santiago <santiago.gomez@whitecase.com>\nSubject: RE: [EXT] RE: Coti"
+      }
+    },
+    {
+      "case_id": "prop-19f420ed69e798a2",
+      "source": "proposal",
+      "gmail_msg_id": "19f420ed69e798a2",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "cim-llc.com",
+      "posted_at": "2026-07-08T14:08:38.703247+00:00",
+      "historical_proposed_action": "Coordinate with Alex Melikian to draft a response outlining the current wind-down plan status, outstanding items, and justification for the extension request, then send to Alejandra Granados by end of business Thursday.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (9 msgs).",
+      "inputs": {
+        "sender": "Alejandra Granados <agranados@cim-llc.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>, Alexander Melikian <alexander@tryjeeves.com>",
+        "cc": "Jeeves <jeeves@cim-llc.com>, Dryden Liddle <dliddle@cim-llc.com>",
+        "subject": "Jeeves Wind-down plan status",
+        "body": "Hi Jeeves Team,\r\n\r\nWe have been asked to provide an additional 4-week extension for you to\r\nsubmit the wind-down plan.\r\n\r\nCould you please share an update on the current status of the plan, outline\r\nwhat is still outstanding, and provide the reasoning for this further\r\nextension request?\r\n\r\nThanks,\r\n-- \r\n\r\nALEJANDRA GRANADOS\r\nManager\r\n*+1 305 204 0080* | agranados@cim-llc.com\r\nSan Francisco <https://bit.ly/3lsiBCq> | New York <https://cim-llc.com/> |\r\nBogota <https://cim-llc.com/>\r\n"
+      }
+    },
+    {
+      "case_id": "prop-1a025ebfd79a7e1a",
+      "source": "proposal",
+      "gmail_msg_id": "1a025ebfd79a7e1a",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "goodwinlaw.com",
+      "posted_at": "2026-08-21T20:04:07.835023+00:00",
+      "historical_proposed_action": "Check Brian's calendar for Sept 28 and 29 and draft a reply to Tyler confirming the workable dinner date",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (4 msgs).",
+      "inputs": {
+        "sender": "\"Garaffa, Tyler\" <TGaraffa@goodwinlaw.com>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>",
+        "subject": "SF Visit / Dinner",
+        "body": "Hi Brandon, Brian,\r\n\r\nMelissa and I are planning a trip out to SF and wanted to see if you'd be free for dinner on either of September 28th or 29th? If I remember correctly, Alex is based in New York, but if he's in town we'd love for him to join as well.\r\n\r\nTyler\r\n\r\nTyler Garaffa\r\n\r\n[cid:image001.png@01DD3093.8DE454A0]<https://www.goodwinlaw.com/>\r\nGoodwin Procter LLP\r\nThe New York Times Building\r\n620 Eighth Avenue\r\nNew York, NY 10018\r\no  +1 212 813 8997\r\nf   +1 212 355 3333\r\nTGaraffa@goodwinlaw.com<mailto:TGaraffa@goodwinlaw.com>\r\n\r\n\r\n*******************************************************************\r\nThis message was sent from Goodwin Procter LLP and is intended only \r\nfor the designated recipient(s).  It may contain confidential or \r\nproprietary information and may be subject to the attorney-client \r\nprivilege or other confidentiality protections.  If you are not a \r\ndesignated recipient, you may not review, copy or distribute this \r\nmessage.  If you receive this in error, please notify the sender by \r\nreply e-mail and delete this message.  Thank you.\r\n*******************************************************************\r\n"
+      }
+    },
+    {
+      "case_id": "obs-19dbb29891299b05",
+      "source": "observation",
+      "gmail_msg_id": "19dbb29891299b05",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-04-23T16:25:50+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. ´\n´La instrucción ya fue cargada al sistema Power Trust\n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "prop-19f70a6467324798",
+      "source": "proposal",
+      "gmail_msg_id": "19f70a6467324798",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "btgpactual.com",
+      "posted_at": "2026-07-17T15:21:06.279918+00:00",
+      "historical_proposed_action": "Coordinate with Pedro Isaza to confirm availability for a technical call with BTG Pactual today; once BTG sends time options, confirm the meeting slot and add to calendar.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (17 msgs).",
+      "inputs": {
+        "sender": "\"Bradford, Daniel\" <Daniel.Bradford@btgpactual.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Brandon McGathy <brandon@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, Pedro Isaza <pedroi@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, \"Montoya, Ana-Cristina\" <Anacristina.Montoya@btgpactual.com>, Axel Orendain <axel@tryjeeves.com>, \"Ruiz, Daniela\" <Daniela.Ruiz@btgpactual.com>, \"Guerra, Laura\" <laura.guerra@btgpactual.com>, \"Tellez, Martin\" <martin.tellez@btgpactual.com>, \"Hoyos, Tomas\" <Tomas.Hoyos@btgpactual.com>, \"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>, \"Romero, Daniela\" <Daniela.Romero@btgpactual.com>, Haizea Garmendia <haizea@tryjeeves.com>",
+        "subject": "RE: Jeeves - BTG Pactual DACA",
+        "body": "Good morning Alex & Brian, thank you for your prompt replay.\r\n\r\nRegarding the PA (patrimonio autónomo), the best suited trust figure is a fiducia de administración y garantías. Through this figure you can emulate the mechanics of the \"springing\" triggers and control notices that best suits for your lender. However, we need the inputs to give you a better assessment on the matter. Regard the API integration. We are currently looking for a space to have this call today, please give us a few minutes and we will get back to you with some options.\r\n\r\n\r\nDaniel Bradford\r\nWealth Management\r\nPhone: + 57(1) 3078090 Ext 7235\r\nCel: 3112630517\r\ndaniel.bradford@btgpactual.com<mailto:daniel.bradford@btgpactual.com>\r\nbtgpactual.com.co\r\n\r\n\r\n[2731BF88]\r\n\r\n\r\n\r\n\r\n\r\nInternal Use Only\r\nDe: Alexander Melikian <alexander@tryjeeves.com>\r\nEnviado el: viernes, 17 de julio de 2026 8:43 a. m.\r\nPara: Brian Mauck <brian.mauck@tryjeeves.com>\r\nCC: Bradford, Daniel <Daniel.Bradford@btgpactual.com>; Brandon McGathy <brandon@tryjeeves.com>; Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>; Pedro Isaza <pedroi@tryjeeves.com>; Shalom Hassan <shalom@tryjeeves.com>; Montoya, Ana-Cristina <Anacristina.Montoya@btgpactual.com>; Axel Orendain <axel@tryjeeves.com>; Ruiz, Daniela <Daniela.Ruiz@btgpactual.com>; Guerra, Laura <laura.guerra@btgpactual.com>; Tellez, Martin <martin.tellez@btgpactual.com>; Hoyos, Tomas <Tomas.Hoyos@btgpactual.com>; William S. Brum Vilar Filho <william.filho@tryjeeves.com>; Romero, Daniela <Daniela.Romero@btgpactual.com>; Haizea Garmendia <haizea@tryjeeves.com>\r\nAsunto: Re: Jeeves - BTG Pactual DACA\r\n\r\n\r\nCAUTION: External email.\r\nHi Daniel -\r\n\r\nGood morning. Can you please coordinate and technical call today ASAP with @Pedro Isaza<mailto:pedroi@tryjeeves.com> on our side so Jeeves fully understands the API capabilities, as that will be a primary decision point for us.\r\n\r\nBest,\r\nAlex\r\n\r\nOn Thu, Jul 16, 2026 at 9:08 PM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nHi Daniel-\r\n\r\nLet's assume that this will be a patrimonio autonomo and that the funds would sleep for a night at Jeeves before being sent out of BTG. So we would require trustee services from BTG as well as the accounts required for this setup. Can you advise on a proposal for trustee services? +Brandon McGathy<mailto:brandon@tryjeeves.com> +Jorge Luis De La Cabada Hurrle<mailto:jorge.hurrle@tryjeeves.com> who can assist in coordinating with our Colombian counsel and providing the trust documents as well.\r\n\r\nAdditionally we would need to evaluate the complexity of integrating with your API. +Pedro Isaza<mailto:pedroi@tryjeeves.com> +William S. Brum Vilar Filho<mailto:william.filho@tryjeeves.com> +Axel Orendain<mailto:axel@tryjeeves.com> can help assist in this process.\r\n\r\nPlease let me know if you need anything else from us, but these two parallel conversations are what we need to keep moving this forward on our side.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Thu, Jul 16, 2026 at 10:23 AM Bradford, Daniel <Daniel.Bradford@btgpactual.com<mailto:Daniel.Bradford@btgpactual.com>> wrote:\r\nHi Alex & Shalom,\r\n\r\nWe are currently pending on your specific requirements and the final details of the agreement you are closing with the lender. Once we have those specific parameters in hand, our evaluation and establish a clear implementation timeline.\r\n\r\nI want to inform as well that we can structure a springing DACA account through our US bank license (via BTG Pactual Bank, N.A.). This would be ideal, as it will allow us to maintain day-to-day operational control over our accounts while still satisfying the lender’s security requirements.\r\n\r\nIf you are interested in evaluating this US account alternative with us, we will share it with our team to ensure that the mechanics of the \"springing\" triggers and control notices align perfectly with our BTG's US cap"
+      }
+    },
+    {
+      "case_id": "prop-19f1b3358c5dae81",
+      "source": "proposal",
+      "gmail_msg_id": "19f1b3358c5dae81",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "vistacreditpartners.com",
+      "posted_at": "2026-07-01T01:03:18.350927+00:00",
+      "historical_proposed_action": "Follow up with Alex Hughes within 1 hour to confirm PK has sent docs to Goodwin, and if not, escalate to get them sent immediately. Copy Alex Melikian on status.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (53 msgs).",
+      "inputs": {
+        "sender": "Alex Hughes <ahughes@vistacreditpartners.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Re: Timing update",
+        "body": "Was told “very soon”\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n________________________________\r\nFrom: Alex Hughes <ahughes@vistacreditpartners.com>\r\nSent: Tuesday, 30 June 2026 20:44:14\r\nTo: Alexander Melikian <alexander@tryjeeves.com>; Brian Mauck <brian.mauck@tryjeeves.com>\r\nSubject: Re: Timing update\r\n\r\nWill hit PK now\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n________________________________\r\nFrom: Alexander Melikian <alexander@tryjeeves.com>\r\nSent: Tuesday, 30 June 2026 20:40:32\r\nTo: Brian Mauck <brian.mauck@tryjeeves.com>\r\nCc: Alex Hughes <ahughes@vistacreditpartners.com>\r\nSubject: Re: Timing update\r\n\r\nHi Alex\r\n\r\nThanks for all of the work here\r\n\r\nDo you know when Goodwin should be expecting docs from PK? Goodwin updated us a few minutes ago that they haven't yet received.\r\n\r\nBest\r\nAlex\r\n\r\n\r\nOn Tue, Jun 30, 2026 at 7:38 PM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nYes that's correct.\r\n\r\nBrian Mauck\r\n[phone-icon]    1 480 710 1344\r\n[phone-icon]    brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Tue, Jun 30, 2026, 16:33 Alex Hughes <ahughes@vistacreditpartners.com<mailto:ahughes@vistacreditpartners.com>> wrote:\r\nGreat - thank you. Assume it's over SOFR?\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n________________________________\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Tuesday, 30 June 2026 19:28:35\r\nTo: Alex Hughes <ahughes@vistacreditpartners.com<mailto:ahughes@vistacreditpartners.com>>\r\nCc: Alexander Melikian <alexander@tryjeeves.com<mailto:alexander@tryjeeves.com>>\r\nSubject: Re: Timing update\r\n\r\nYeah it's L7s over, up to 95% adv on insured assets. Meaningful improvement.\r\n\r\n\r\n\r\nBrian Mauck\r\n[phone-icon]    1 480 710 1344\r\n[phone-icon]    brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Tue, Jun 30, 2026, 16:10 Alex Hughes <ahughes@vistacreditpartners.com<mailto:ahughes@vistacreditpartners.com>> wrote:\r\nCan you guys share the new pricing on the NB ABL? The PwC report as you’ll see reflects the old ABL.\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n________________________________\r\nFrom: Alex Hughes\r\nSent: Tuesday, 30 June 2026 17:23:16\r\nTo: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nCc: Alexander Melikian <alexander@tryjeeves.com<mailto:alexander@tryjeeves.com>>\r\nSubject: RE: Timing update\r\n\r\n\r\nGreat, thank you.\r\n\r\n\r\n\r\nAttached is the PwC report. PW is Orlando2026!\r\n\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Tuesday, June 30, 2026 4:41 PM\r\nTo: Alex Hughes <ahughes@vistacreditpartners.com<mailto:ahughes@vistacreditpartners.com>>\r\nCc: Alexander Melikian <alexander@tryjeeves.com<mailto:alexander@tryjeeves.com>>\r\nSubject: RE: Timing update\r\n\r\n\r\n\r\nHi Alex -\r\n\r\nAttached is the executed PwC access letter (NRL), signed by Alex. Please let us know if PwC needs anything further on our end.\r\n\r\n\r\n\r\nThanks,\r\nBrian\r\n\r\nThis message contains information that is confidential and/or may be privileged. If you are not the intended recipient, you are hereby notified that any use, dissemination, distribution, or copy of this message or its attachments is strictly prohibited. In addition, emails sent from and to this vistacreditpartners.com<http://vistacreditpartners.com/> domain are monitored, archived, and subject to disclosure, including in connection with regulatory or other legal processes. If you have received this message in error, please advise the sender immediately by reply email and delete this message.\r\n\r\nThis message contains information that is confidential and/or may be privileged. If you are not the intended recipient, you are hereby notified that any use, dissemination, distribution, or copy of this message or its attachments is strictly prohibited. In addition, emails sent from and to this vistacreditpartners.com<http://vistacreditpartners.com/> domain are monitored, ar"
+      }
+    },
+    {
+      "case_id": "prop-1a026dc8dc837839",
+      "source": "proposal",
+      "gmail_msg_id": "1a026dc8dc837839",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "citi.com",
+      "posted_at": "2026-08-22T00:27:02.508172+00:00",
+      "historical_proposed_action": "Search Gmail/Drive/Slack for the Citi account list and DACA requirement (likely tied to the NB facility) and draft a reply to Katie listing the specific accounts and the purpose of the control agreements",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (8 msgs).",
+      "inputs": {
+        "sender": "\"Meguerian, Katie \" <katie.meguerian@citi.com>",
+        "to": "\"Gallitelli, Gianna \" <gianna.gallitelli@citi.com>, \"[tryjeeves.com] Brian Mauck\" <brian.mauck@tryjeeves.com>, \"Kesselring, Juliana \" <juliana.kesselring@citi.com>, \"Kuhn, Howard \" <howard.kuhn@citi.com>",
+        "cc": "Axel Orendain <axel@tryjeeves.com>, \"Kapur, Ranjeet \" <ranjeet.kapur@citi.com>, \"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Brandon McGathy <brandon@tryjeeves.com>",
+        "subject": "RE: Jeeves team introduction & DACA structure (Citi)",
+        "body": "Hi Brian – thank you for your message.\r\n\r\nCould you please share more information on which accounts you are looking to have DACAs put in place for? It would also be helpful to understand the purpose of the requested arrangement so we can route this to the appropriate teams.\r\n\r\nBest,\r\nKatie\r\nFrom: Gallitelli, Gianna [SVCS]\r\nSent: Friday, August 21, 2026 2:36 PM\r\nTo: [tryjeeves.com] Brian Mauck; Kesselring, Juliana [BKG-CB]; Kuhn, Howard [SVCS]; Meguerian, Katie [SVCS]\r\nCc: Axel Orendain; Kapur, Ranjeet [BKG-CCB]; William S. Brum Vilar Filho; Shalom Hassan; Brandon McGathy\r\nSubject: RE: Jeeves team introduction & DACA structure (Citi)\r\n\r\n+ @Kesselring, Juliana [BKG-CB]<mailto:jf96384@citi.com> + @Kuhn, Howard [SVCS]<mailto:hk41187@citi.com> + @Meguerian, Katie [SVCS]<mailto:km46719@citi.com>\r\n\r\nRanjeet, Juliana,\r\n\r\nCan I ask your help here given the urgency?\r\n\r\nBest,\r\nGia Gallitelli\r\nFinTech Sales & Relationship Management\r\ngianna.gallitelli@citi.com<mailto:gianna.gallitelli@citi.com> | ☏: +1 (212) 816-6742\r\n\r\nFrom: [tryjeeves.com] Brian Mauck\r\nSent: Friday, August 21, 2026 1:14 PM\r\nTo: Gallitelli, Gianna [SVCS]\r\nCc: Axel Orendain; Kapur, Ranjeet [BKG-CCB]; William S. Brum Vilar Filho; Shalom Hassan; Brandon McGathy\r\nSubject: Re: Jeeves team introduction & DACA structure (Citi)\r\n\r\nHi team- We're on a tight schedule to get these DACAs in place, can you help us out here? Thanks, Brian Mauck 1 480 710 1344 brian. mauck@ tryjeeves. com On Wed, Aug 19, 2026 at 8: 11 PM Brian Mauck <brian. mauck@ tryjeeves. com> wrote: Thanks\r\n\r\nHi team-\r\n\r\nWe're on a tight schedule to get these DACAs in place, can you help us out here?\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[Image removed by sender. phone-icon]\r\n1 480 710 1344\r\n[Image removed by sender. phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\nOn Wed, Aug 19, 2026 at 8:11 PM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nThanks Gianna.\r\n\r\nRanjeet, please let us know what times work.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[Image removed by sender. phone-icon]\r\n1 480 710 1344\r\n[Image removed by sender. phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Wed, Aug 19, 2026, 06:58 Gallitelli, Gianna <gianna.gallitelli@citi.com<mailto:gianna.gallitelli@citi.com>> wrote:\r\nHi Axel,\r\n\r\nThanks for your note. Looping in Ranjeet to assist here.\r\n\r\nBest,\r\nGia Gallitelli\r\nFinTech Sales & Relationship Management\r\ngianna.gallitelli@citi.com<mailto:gianna.gallitelli@citi.com> | ☏: +1 (212) 816-6742\r\n\r\nFrom: [tryjeeves.com<https://urldefense.com/v3/__http:/tryjeeves.com__;!!Jkho33Y!gzThsE_3-ovn2g8--R19-FxjxI8CqN4GtnRxlD99v-OhHVZzL6f8XSGpMbH9aw98ALWcbVrX846IkiCz8zIwpHFKx-HY$>] Axel Orendain\r\nSent: Tuesday, August 18, 2026 5:56 PM\r\nTo: Gallitelli, Gianna [SVCS]\r\nCc: William S. Brum Vilar Filho; Brian Mauck; Shalom Hassan; Brandon McGathy\r\nSubject: Jeeves team introduction & DACA structure (Citi)\r\n\r\nHi Gianna, I hope you’re doing well. We’ve recently closed a series of corporate transactions and are now implementing a few structural updates to perfect our lender’s collateral. To get things moving, I’d like to introduce you to Brian Mauck,\r\nHi Gianna, I hope you’re doing well.\r\n\r\nWe’ve recently closed a series of corporate transactions and are now implementing a few structural updates to perfect our lender’s collateral.\r\n\r\nTo get things moving, I’d like to introduce you to Brian Mauck, who leads Capital Markets at Jeeves (cc'd here). Could you please let us know a few times that work for a quick intro call before the end of the week?\r\n\r\nThank you in advance for all your support.\r\n\r\nBest regards,\r\n\r\n[Image removed by sender.]\r\nAxel Orendain del Río\r\nFinance Operations\r\n\r\n[Image removed by sender.]\r\n\r\nwww.tryjeeves.com <https://urldefense.com/v3/__https:/na01.safelinks.protection.outlook.com/?url=http*3A*2F*2Fwww.tryjeeves.com*2F&data=05*7C02*7C*7C7d3fa15a759f475beb4908de42524a64*7C84df9e7fe9f640afb435aaaaaaaaaaaa*7C1*7C0*7C639021118386231865"
+      }
+    },
+    {
+      "case_id": "obs-19e361d5cc90ced2",
+      "source": "observation",
+      "gmail_msg_id": "19e361d5cc90ced2",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-05-17T13:25:42+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Brandon McGathy <brandon@tryjeeves.com>",
+        "subject": "NB Timing / Limited Overall Capacity",
+        "body": "Hi Brian -\n\nHope you are having a great weekend\n\nAs a follow-up to our chat with Melissa on Friday - given our overall\nremaining capacity at the bridge, it's absolutely critical that we get this\nNB facility done as quickly as possible in a way that doesn't hurt us\ncommercially.\n\nI would still like us to keep the pressure on NB and set aggressive\ntimelines to close so that they mobilize very quickly - the original goal\n(and what has still been communciated to them by me is May 31). Should\nthere be very important points that we don't want to move on, we're going\nto be okay negotiating and waiting a few days here and there.\n\nPlease let me know if you would like to discuss later today in advance of\nyour chat with Jay.\n\nBest,\nAlex"
+      }
+    },
+    {
+      "case_id": "prop-19f859403163230d",
+      "source": "proposal",
+      "gmail_msg_id": "19f859403163230d",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "bu.com.co",
+      "posted_at": "2026-07-21T16:48:41.761292+00:00",
+      "historical_proposed_action": "Forward this email to Alex Melikian and Goodwin counsel with a note asking them to compile NB's four required KYC documents and confirm whether Jeeves or NB is responsible for submitting directly to the fiduciary.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (100 msgs).",
+      "inputs": {
+        "sender": "Alejandro Cardozo Coral <acardozoc@bu.com.co>",
+        "to": "\"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, Brandon McGathy <brandon@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, DG-JeevesDebt <DG-JeevesDebt@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Jorge Alberto Padilla Sánchez\" <jpadillas@bu.com.co>, \"Diana Carolina Quintero Díaz\" <dquintero@bu.com.co>",
+        "subject": "RE: Jeeves I Fiduciaria Bancolombia Proposal for Services",
+        "body": "Hi Nathalie,\r\n\r\nI hope this message finds you well.\r\n\r\nFollowing up on our recent correspondence, I am writing to relay a request we received a few minutes ago from the fiduciary agent regarding the KYC process. They have confirmed that the KYC review applies to both the Agent and Neuberger Berman (NB), and have specified that the following documentation is required for both Neuberger Berman (NB) and Wilmington Trust:\r\n\r\n  1.  Certificate of incorporation, certificate of good standing (or equivalent corporate registration document).\r\n  2.  Form W-9 or the applicable tax identification document.\r\n  3.  Ownership structure (shareholding composition), including beneficial ownership information, where applicable.\r\n  4.  A copy of the current, valid passport of the legal representative.\r\n\r\nWe would be grateful if you could arrange for this documentation to be compiled and shared with us at your earliest convenience, so that we may forward it to the fiduciary and keep the process moving forward without delay.\r\n\r\nPlease let us know if you have any questions regarding the above or require any further clarification on the fiduciary's request.\r\n\r\nThank you very much for your continued cooperation.\r\n\r\nBest regards,\r\n\r\n\r\nAlejandro Cardozo Coral\r\nAsociado | Associate\r\n[cid:image001.png@01DD1905.FB1FF790]<http://bu.com.co/>\r\nacardozoc@bu.com.co<mailto:acardozoc@bu.com.co> · www.bu.com.co<http://bu.com.co/>\r\n+57-60-1-3462011 Ext.8527\r\n+57-60-1-7442211 Ext.8527\r\nCalle 70 Bis No. 4 - 41\r\nBogotá, Colombia\r\nNIT: 800.134.536-3\r\n[cid:image002.png@01DD1905.FB1FF790]<https://www.linkedin.com/company/brigard-urrutia>[cid:image003.png@01DD1905.FB1FF790]<https://twitter.com/Brigard_Urrutia>[cid:image004.png@01DD1905.FB1FF790]<https://www.facebook.com/BrigardUrrutia>\r\n\r\n________________________________\r\nInformación confidencial protegida por la reserva profesional del abogado. Si usted no es el destinatario del correo, por favor comuníqueselo de inmediato al remitente y proceda a destruirlo. En este evento, estará prohibida la retención, utilización, copia o divulgación por cualquier medio de la información que se encuentre en el mensaje y en sus archivos adjuntos. Se deberá cumplir con lo dispuesto en la Ley 1581 de 2012 y demás normas que la complementen, sustituyan o modifiquen, en caso de ser aplicable.\r\n\r\nConfidential information protected by attorney-client privilege. If you are not the intended recipient of this e-mail, please notify the sender immediately and proceed to delete it. In such an event, the retention, use, copy or distribution of the information contained herein or in any attachments, by any means is strictly prohibited. Law 1581 of 2012 should be adhered to as well as any other complementary, substitute or modifications to the norms, in the case that they are applicable.\r\n\r\n\r\n\r\nDe: Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>\r\nEnviado el: lunes, 20 de julio de 2026 6:07 p. m.\r\nPara: Alejandro Cardozo Coral <acardozoc@bu.com.co>; Brandon McGathy <brandon@tryjeeves.com>; Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>; Thiago de Souza Lepre <thiago@tryjeeves.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; DG-JeevesDebt <DG-JeevesDebt@goodwinlaw.com>; Brian Mauck <brian.mauck@tryjeeves.com>\r\nCC: Jorge Alberto Padilla Sánchez <jpadillas@bu.com.co>; Diana Carolina Quintero Díaz <dquintero@bu.com.co>\r\nAsunto: RE: Jeeves I Fiduciaria Bancolombia Proposal for Services\r\n\r\n⚠\r\nRemitente externo:\r\nSea precavido al dar click sobre enlaces, descargar o abrir archivos adjuntos, a menos que confíe en el remitente y el contenido. Para validación de seguridad reporte este correo a: seguridadti@bu.com.co<mailto:%20seguridadti@bu.com.co>\r\nHi Alejandro,\r\n\r\nKindly following up on the appropriate entity for the lender KYC items. Could you please let us know if there are any updates?\r\n\r\nAdditionally, please see below for outstanding items to Form F-1429.\r\n\r\n  1.  Sherwin Ghandi:\r\n     *   Date of Birth and Country: 08/13/1982, Pen"
+      }
+    },
+    {
+      "case_id": "prop-19f7c0941f131aaf",
+      "source": "proposal",
+      "gmail_msg_id": "19f7c0941f131aaf",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-19T20:20:25.698414+00:00",
+      "historical_proposed_action": "Confirm with Goodwin (Avia Cohen) whether the reg DD update was sent to both PK and Machado at Vista, and if it went only to PK, request that Goodwin send it to Machado immediately.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (55 msgs).",
+      "inputs": {
+        "sender": "Alexander Melikian <alexander@tryjeeves.com>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>",
+        "cc": "Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Shalom Hassan <shalom@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "Hi Avia, Goodwin team -\r\n\r\nI shared with Vista that we circulated these DD answers yesterday afternoon\r\n- can you please confirm?\r\n\r\nAlso, just received this from Vista \"Just heard from Machado who said they\r\nhaven’t received the reg DD update\". Did Goodwin send only to PK? Or did\r\nGoodwin send to Machado as well?\r\n\r\nOn Sat, Jul 18, 2026 at 3:11 PM Brandon McGathy <brandon@tryjeeves.com>\r\nwrote:\r\n\r\n> Avia,\r\n>\r\n> We can say:\r\n>\r\n> *Jeeves Colombia emits the cards alongside Paymentology*\r\n>\r\n>\r\n> Let’s get these out.\r\n>\r\n> Brandon\r\n>\r\n>\r\n> *Brandon S. McGathy*\r\n> *General Counsel | *tryjeeves.com\r\n> *(407) 463-8598*\r\n>\r\n> [image: Logo alt text]\r\n>\r\n>\r\n> On Sat, Jul 18, 2026 at 11:11 AM Brandon McGathy <brandon@tryjeeves.com>\r\n> wrote:\r\n>\r\n>>\r\n>> But Jeeves Colombia also has an arrangement with Paymentology right?  So\r\n>> can we just say Jeeves Colombia for this?\r\n>>\r\n>>\r\n>>\r\n>> *Brandon S. McGathy*\r\n>> *General Counsel | *tryjeeves.com\r\n>> *(407) 463-8598*\r\n>>\r\n>> [image: Logo alt text]\r\n>>\r\n>>\r\n>> On Sat, Jul 18, 2026 at 11:09 AM Thiago de Souza Lepre <\r\n>> thiago@tryjeeves.com> wrote:\r\n>>\r\n>>> Hi Alex and team\r\n>>>\r\n>>> I wrote the response below based around the intercompany agreement\r\n>>> signed recently between Mexico and Colombia. Card emission is one of the\r\n>>> objects of the contract.\r\n>>>\r\n>>> Let me know if it should say otherwise.\r\n>>>\r\n>>> Best,\r\n>>>\r\n>>> Thiago Lepre\r\n>>> Senior Legal Counsel - LATAM\r\n>>> Jeeves\r\n>>>\r\n>>> Em sáb., 18 de jul. de 2026, 15:03, Cohen, Avia <\r\n>>> AviaCohen@goodwinlaw.com> escreveu:\r\n>>>\r\n>>>> Once someone confirms the below, we can send all the responses to Vista\r\n>>>> and the only outstanding diligence item will be the account info.\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *Avia Cohen*\r\n>>>> Associate\r\n>>>>\r\n>>>> [image: image] <https://www.goodwinlaw.com/>\r\n>>>> Goodwin Procter LLP\r\n>>>> 520 Broadway, Suite 500\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0ASanta+Monica,+CA+90401?entry=gmail&source=g>\r\n>>>> Santa Monica, CA 90401\r\n>>>> <https://www.google.com/maps/search/520+Broadway,+Suite+500+%0D%0ASanta+Monica,+CA+90401?entry=gmail&source=g>\r\n>>>> o  +1 424 252 6323\r\n>>>> f   +1 424 252 6401\r\n>>>> AviaCohen@goodwinlaw.com\r\n>>>>\r\n>>>>\r\n>>>> [image: image] <https://www.linkedin.com/company/goodwin-law> [image:\r\n>>>> image] <https://www.facebook.com/JoinGoodwin/> [image: image]\r\n>>>> <https://www.instagram.com/join_goodwin/> [image: image]\r\n>>>> <https://twitter.com/goodwinlaw> [image: image]\r\n>>>> <https://www.goodwinlaw.com/news/2020/07/07_02-follow-goodwin-on-wechat>\r\n>>>> | Client Value <https://t.xink.io/Tracking/Index/g0kCANCUAQD_QFAB0>\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *From:* Alexander Melikian <alexander@tryjeeves.com>\r\n>>>> *Sent:* Saturday, July 18, 2026 10:58 AM\r\n>>>> *To:* Cohen, Avia <AviaCohen@goodwinlaw.com>\r\n>>>> *Cc:* Brandon McGathy <brandon@tryjeeves.com>; Thiago de Souza Lepre <\r\n>>>> thiago@tryjeeves.com>; Brian Mauck <brian.mauck@tryjeeves.com>;\r\n>>>> Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>;\r\n>>>> Bedecarre, Ella Marie <EBedecarre@goodwinlaw.com>; Shalom Hassan <\r\n>>>> shalom@tryjeeves.com>; Jorge Luis De La Cabada Hurrle <\r\n>>>> jorge.hurrle@tryjeeves.com>; DG-JeevesGoodwin <\r\n>>>> DG-JeevesGoodwin@goodwinlaw.com>\r\n>>>> *Subject:* Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> ***EXTERNAL***\r\n>>>>\r\n>>>> Hi team -\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Thank you for working through this. These all look good with exception\r\n>>>> of Colombia DD question #4 (pasted below). Is this meant to say Jeeves\r\n>>>> Mexico or Jeeves Colombia? Please clarify my understanding.\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> *4.*              *Does Jeeves issue cards directly, or does it\r\n>>>> operate through a partnership/BaaS arrangement with a Colombian-licensed\r\n>>>> entity (bank, compañía de financiamiento, or entidad de pago)?*\r\n>>>>\r\n>>>> *Jeeves Mexico emits the cards alongside Paymentology*\r\n>>>>\r\n>>>>\r\n>>>>\r\n>>>> Additionally, to confirm, these are the"
+      }
+    },
+    {
+      "case_id": "obs-19d44178619c798d",
+      "source": "observation",
+      "gmail_msg_id": "19d44178619c798d",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "gramercy.com",
+      "posted_at": "2026-03-31T13:31:17+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Tomas Serantes <tserantes@gramercy.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Meeting next week in SP",
+        "body": "Hi Alex, Brian,\n\nAs we progress our discussions on the term sheet, I wanted to mention that Gustavo (head of our team) and I will be in Sao Paulo next week (Tuesday to Thursday). And would like to have to opportunity to meet your local team and intro to your operations in the country.\nWe are open on Monday at 1230pm or Tuesday at 2pm or 330pm. Please us know if any of these dates would work for your team.\n\nThanks\n\nTomas\n\nTomas\nSerantes\n |\nPartner, Capital Solutions\n​​​​\n20 Dayton Avenue\n |\nGreenwich,\nCT\n06830\nOffice: (203) 552-1989<tel:(203)%20552-1989>\n |\nMobile: +54 9 11 3317-6556<tel:+54%209%2011%203317-6556>\ntserantes@gramercy.com<mailto:tserantes@gramercy.com>\n |\nwww.gramercy.com<https://us.content.exclaimer.net?url=https%3A%2F%2Fwww.gramercy.com%2F&tenantid=MyUM1ERIEe-Gw2BFvdVZ2w&templateid=6ffa9b82ce50ef11991a6045bdd97a78&excomponentid=n11bIJtHSyIJ7QF1ipQ-xcvEVkoUumtlm8IGme8At20&e"
+      }
+    },
+    {
+      "case_id": "prop-19fc7e61128b6c36",
+      "source": "proposal",
+      "gmail_msg_id": "19fc7e61128b6c36",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "nb.com",
+      "posted_at": "2026-08-03T13:54:57.605784+00:00",
+      "historical_proposed_action": "Check Brian's calendar for today's 10:30am ET and 12–2pm ET windows and draft a reply to Jay confirming a specific time",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (20 msgs).",
+      "inputs": {
+        "sender": "\"Berger, Jay\" <Jay.Berger@nb.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Fernandez, Max\" <Max.Fernandez@nb.com>",
+        "subject": "FW: Jeeves - Credit Agreement (Akin/NB/Goodwin/Jeeves)",
+        "body": "Brian, do you have a few minutes to discuss today at 1030am ET or between 12m and 2pm ET? Thanks\r\n\r\n\r\n\r\nJay Berger\r\nSenior Vice President\r\nSpecialty Finance\r\nP: +1 212 476 5744\r\nE: jay.berger@nb.com<mailto:jay.berger@nb.com>\r\nneuberger.com<https://www.nb.com/>\r\n\r\n[Neuberger]\r\n\r\n\r\n\r\n\r\nFrom: Garaffa, Tyler <TGaraffa@goodwinlaw.com>\r\nSent: Monday, August 3, 2026 9:23 AM\r\nTo: Hawkins, Zoe <ZHawkins@akingump.com>; Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Neutel, Avia <AviaNeutel@goodwinlaw.com>; Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>\r\nCc: Im, Jaisohn <jim@AKINGUMP.com>; Gallagher, Victoria <vgallagher@akingump.com>; Fernandez, Melquiades <fernandezm@akingump.com>; Gilligan, Megan <mgilligan@akingump.com>; Berger, Jay <Jay.Berger@nb.com>; Lu, Zhengyuan <Zhengyuan.Lu@nb.com>; Surapaneni, Varun <Varun.Surapaneni@nb.com>; Fernandez, Max <Max.Fernandez@nb.com>\r\nSubject: RE: Jeeves - Credit Agreement (Akin/NB/Goodwin/Jeeves)\r\n\r\nYou don't often get email from tgaraffa@goodwinlaw.com<mailto:tgaraffa@goodwinlaw.com>. Learn why this is important<https://aka.ms/LearnAboutSenderIdentification>\r\n\r\nAkin team, attached are comments to the loan agreement, clean and marked against your draft below, which remain subject to Jeeves' ongoing review in all respects. Please let us know if you have any questions.\r\n\r\nBest,\r\nTyler\r\n\r\nTyler Garaffa\r\n\r\n[cid:image001.png@01DD2329.9386A8D0]<https://www.goodwinlaw.com/>\r\nGoodwin Procter LLP\r\nThe New York Times Building\r\n620 Eighth Avenue\r\nNew York, NY 10018\r\no  +1 212 813 8997\r\nf   +1 212 355 3333\r\nTGaraffa@goodwinlaw.com<mailto:TGaraffa@goodwinlaw.com>\r\n\r\n\r\n\r\n\r\nFrom: Hawkins, Zoe <ZHawkins@akingump.com<mailto:ZHawkins@akingump.com>>\r\nSent: Tuesday, July 28, 2026 10:06 PM\r\nTo: Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com<mailto:MSchwabWright@goodwinlaw.com>>; Cohen, Avia <AviaCohen@goodwinlaw.com<mailto:AviaCohen@goodwinlaw.com>>; Garaffa, Tyler <TGaraffa@goodwinlaw.com<mailto:TGaraffa@goodwinlaw.com>>; Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com<mailto:nrodriguezmueses@goodwinlaw.com>>\r\nCc: Im, Jaisohn <jim@AKINGUMP.com<mailto:jim@AKINGUMP.com>>; Gallagher, Victoria <vgallagher@akingump.com<mailto:vgallagher@akingump.com>>; Fernandez, Melquiades <fernandezm@akingump.com<mailto:fernandezm@akingump.com>>; Gilligan, Megan <mgilligan@akingump.com<mailto:mgilligan@akingump.com>>; Berger, Jay <jay.berger@nb.com<mailto:jay.berger@nb.com>>; Lu, Zhengyuan <zhengyuan.lu@nb.com<mailto:zhengyuan.lu@nb.com>>; Surapaneni, Varun <varun.surapaneni@nb.com<mailto:varun.surapaneni@nb.com>>; Fernandez, Max <max.fernandez@nb.com<mailto:max.fernandez@nb.com>>\r\nSubject: Jeeves - Credit Agreement (Akin/NB/Goodwin/Jeeves)\r\n\r\n***EXTERNAL***\r\nGoodwin team,\r\n\r\nSee attached our revised draft of the Credit Agreement, clean and redlined against your previous 7/25 draft, which is shared subject to ongoing review. Please let us know if you have any questions or comments.\r\n\r\nCould you please include the Jeeves business team on this thread for visibility on the Credit Agreement?\r\n\r\nThank you,\r\nZoe\r\n\r\nZoe Hawkins | Law Clerk\r\nAkin\r\nOne Bryant Park | New York, NY 10036-6745 | USA | Direct: +1 212.872.8006<tel:+12128728006>\r\nzhawkins@akingump.com<mailto:zhawkins@akingump.com> | akingump.com<http://www.akingump.com/>\r\nPronouns: she/her/hers (What's this?<https://assets2.hrc.org/files/assets/resources/TalkingAboutPronouns_onesheet_FINAL.pdf>)\r\n\r\nThis email message was sent from Akin Gump Strauss Hauer & Feld LLP. The information contained in this e-mail message is intended only for the personal and confidential use of the recipient(s) named above. If you have received this communication in error, please notify us immediately by e-mail, and delete the original message\r\n\r\n\r\n*******************************************************************\r\nThis message was sent from Goodwin Procter LLP and is intended only for the designated recipient(s). It may contain confidential or proprietary informatio"
+      }
+    },
+    {
+      "case_id": "prop-19f812e918039433",
+      "source": "proposal",
+      "gmail_msg_id": "19f812e918039433",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-20T20:19:23.546134+00:00",
+      "historical_proposed_action": "Await Alex Melikian's decision on whether to approve sharing the SOFOM customer names and documents with Akin Gump, then confirm the decision back to Goodwin so they can proceed.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (55 msgs).",
+      "inputs": {
+        "sender": "Brandon McGathy <brandon@tryjeeves.com>",
+        "to": "\"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>",
+        "cc": "\"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, Alexander Melikian <alexander@tryjeeves.com>, \"Chute, Eliza\" <EChute@goodwinlaw.com>, \"Terwey, Aaron\" <ATerwey@goodwinlaw.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Shalom Hassan <shalom@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB",
+        "body": "@Alexander Melikian <alexander@tryjeeves.com> these include SOFOM customers\r\nnames for those that were migrated.  Okay to share with NB/Akin per their\r\nrequest?\r\n\r\n\r\n\r\nOn Mon, Jul 20, 2026 at 1:14 PM Rodriguez Mueses, Nathalie <\r\nnrodriguezmueses@goodwinlaw.com> wrote:\r\n\r\n> Hi Brandon,\r\n>\r\n>\r\n>\r\n> Attached please find the below documents received from W&C. Could you\r\n> please confirm we are able to share with Akin?\r\n>\r\n>\r\n>\r\n>    1. Beneficiary Rights Certificate\r\n>    2. Adhesion Agreement\r\n>    3. Periodic List\r\n>\r\n>\r\n>\r\n> Thank you,\r\n>\r\n> Nathalie\r\n>\r\n>\r\n>\r\n> *Nathalie Rodriguez Mueses*\r\n>\r\n> <https://www.goodwinlaw.com/>\r\n> Goodwin Procter LLP\r\n> 520 Broadway, Suite 500\r\n> Santa Monica, CA 90401\r\n> o  +1 424 252 6373\r\n> f   +1 424 252 6401\r\n> nrodriguezmueses@goodwinlaw.com\r\n>\r\n>\r\n> <https://www.linkedin.com/company/goodwin-law>\r\n> <https://www.facebook.com/JoinGoodwin/>\r\n> <https://www.instagram.com/join_goodwin/>\r\n> <https://twitter.com/goodwinlaw>\r\n> <https://www.goodwinlaw.com/news/2020/07/07_02-follow-goodwin-on-wechat>\r\n> <https://www.youtube.com/@join_goodwin>\r\n>\r\n>\r\n>\r\n> *From:* Rodriguez Mueses, Nathalie\r\n> *Sent:* Monday, July 20, 2026 9:35 AM\r\n> *To:* Brandon McGathy <brandon@tryjeeves.com>\r\n> *Cc:* Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Alexander\r\n> Melikian <alexander@tryjeeves.com>; Chute, Eliza <EChute@goodwinlaw.com>;\r\n> Terwey, Aaron <ATerwey@goodwinlaw.com>; Thiago de Souza Lepre <\r\n> thiago@tryjeeves.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; Brian\r\n> Mauck <brian.mauck@tryjeeves.com>; Bedecarre, Ella Marie <\r\n> EBedecarre@goodwinlaw.com>; Shalom Hassan <shalom@tryjeeves.com>; Jorge\r\n> Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>; DG-JeevesGoodwin <\r\n> DG-JeevesGoodwin@goodwinlaw.com>\r\n> *Subject:* RE: Jeeves - Outstanding Legal Diligence Items for VCP/NB\r\n>\r\n>\r\n>\r\n> Hi Brandon,\r\n>\r\n>\r\n>\r\n> Will do. We will revert with the documents once received from W&C.\r\n>\r\n>\r\n>\r\n> Best,\r\n>\r\n> Nathalie\r\n>\r\n>\r\n>\r\n> *Nathalie Rodriguez Mueses*\r\n>\r\n> <https://www.goodwinlaw.com/>\r\n> Goodwin Procter LLP\r\n> 520 Broadway, Suite 500\r\n> Santa Monica, CA 90401\r\n> o  +1 424 252 6373\r\n> f   +1 424 252 6401\r\n> nrodriguezmueses@goodwinlaw.com\r\n>\r\n>\r\n> <https://www.linkedin.com/company/goodwin-law>\r\n> <https://www.facebook.com/JoinGoodwin/>\r\n> <https://www.instagram.com/join_goodwin/>\r\n> <https://twitter.com/goodwinlaw>\r\n> <https://www.goodwinlaw.com/news/2020/07/07_02-follow-goodwin-on-wechat>\r\n> <https://www.youtube.com/@join_goodwin>\r\n>\r\n>\r\n>\r\n> *From:* Brandon McGathy <brandon@tryjeeves.com>\r\n> *Sent:* Monday, July 20, 2026 9:30 AM\r\n> *To:* Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>\r\n> *Cc:* Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Alexander\r\n> Melikian <alexander@tryjeeves.com>; Chute, Eliza <EChute@goodwinlaw.com>;\r\n> Terwey, Aaron <ATerwey@goodwinlaw.com>; Thiago de Souza Lepre <\r\n> thiago@tryjeeves.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; Brian\r\n> Mauck <brian.mauck@tryjeeves.com>; Bedecarre, Ella Marie <\r\n> EBedecarre@goodwinlaw.com>; Shalom Hassan <shalom@tryjeeves.com>; Jorge\r\n> Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>; DG-JeevesGoodwin <\r\n> DG-JeevesGoodwin@goodwinlaw.com>\r\n> *Subject:* Re: Jeeves - Outstanding Legal Diligence Items for VCP/NB\r\n>\r\n>\r\n>\r\n> ***EXTERNAL***\r\n>\r\n> Hi Nathalie,\r\n>\r\n>\r\n>\r\n> Please obtain the below from W&C, and provide:\r\n>\r\n>\r\n>\r\n> *Mexican Local Counsel Requests. *Please provide:\r\n>\r\n> 1.      The Adhesion Agreement (Convenio de Adhesión de Fideicomisario),\r\n> by and among JVS México Soluciones, as settlor (fideicomitente), servicer\r\n> (administrador) and beneficiary (fideicomisario) of the Master Trust; the\r\n> master trustee, and the existing borrower, as adhering beneficiary\r\n> (fideicomisario adherente) of the Master Trust. *Jeeves to provide*\r\n>\r\n> 2.      Any beneficiary rights certificates (constancias de derechos\r\n> fideicomisarios) issued under the Master Trust. *Jeeves to provide*\r\n>\r\n>\r\n>\r\n> On Sun, Jul 19"
+      }
+    },
+    {
+      "case_id": "obs-19fd7dc28a607735",
+      "source": "observation",
+      "gmail_msg_id": "19fd7dc28a607735",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-08-06T16:15:55+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, jgomez@cxc.com.co, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rdominguez@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. \n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "obs-19ef1eb5e28bbc56",
+      "source": "observation",
+      "gmail_msg_id": "19ef1eb5e28bbc56",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "bu.com.co",
+      "posted_at": "2026-06-23T00:39:47+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "\"Diana Carolina Quintero Díaz\" <dquintero@bu.com.co>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Garaffa, Tyler\" <TGaraffa@goodwinlaw.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, \"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>",
+        "cc": "\"Carlos Fradique-Méndez\" <cfradique@bu.com.co>, \"Jorge Alberto Padilla Sánchez\" <jpadillas@bu.com.co>, Alejandro Cardozo Coral <acardozoc@bu.com.co>",
+        "subject": "RE: Jeeves | First Drafts: Colombian Security Documents and Promissory Note",
+        "body": "+ Adding @Brian Mauck<mailto:brian.mauck@tryjeeves.com>\n\nDiana Quintero Díaz\nAsociada | Associate\n[cid:image001.png@01DD027E.8890AAA0]<http://bu.com.co/>\ndquintero@bu.com.co<mailto:dquintero@bu.com.co> · www.bu.com.co<http://bu.com.co/>\n+57-60-1-3462011 Ext. 8558\nCalle 70 Bis No. 4 - 41\nBogotá, Colombia\nNIT: 800.134.536-3\n[cid:image002.png@01DD027E.8890AAA0]<https://www.linkedin.com/company/brigard-urrutia>[cid:image003.png@01DD027E.8890AAA0]<https://twitter.com/Brigard_Urrutia>[cid:image004.png@01DD027E.8890AAA0]<https://www.facebook.com/BrigardUrrutia>\n\n________________________________\nInformación confidencial protegida por la reserva profesional del abogado. Si usted no es el destinatario del correo, por favor comuníqueselo de inmediato al remitente y proceda a destruirlo. En este evento, estará prohibida la retención, utilización, copia o divulgación por cualquier medio de la informa"
+      }
+    },
+    {
+      "case_id": "obs-19d453bb4828ff4b",
+      "source": "observation",
+      "gmail_msg_id": "19d453bb4828ff4b",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-03-31T18:49:57+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "\"Letícia Doniak\" <leticiad@tryjeeves.com>",
+        "to": "Dileep Thazhmon <dileep@tryjeeves.com>, Anish Bhatt <anish@tryjeeves.com>, Alexander Melikian <alexander@tryjeeves.com>, Camila Fernandez <camila@tryjeeves.com>",
+        "cc": "Kash Baghaei <kash@tryjeeves.com>, Sateesh Kodati <sateesh@tryjeeves.com>, Afsheen Irani <afsheen@tryjeeves.com>, Douglas Germano <douglas@tryjeeves.com>, Pedro Inzunza <pedro@tryjeeves.com>, Shalom Hassan <shalom@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Victor Garrido Freyría\" <victor@tryjeeves.com>, Liana Alves <liana.chiromatzo@tryjeeves.com>, Vitor Nucitelli <vitorn@tryjeeves.com>, Gustavo Monsanto <gustavo@tryjeeves.com>, Juliana Santana <juliana.santana@tryjeeves.com>",
+        "subject": "Short Cycle - Moving first clients to dual org format",
+        "body": "Hi team!\n\nWe just had a meeting to explain to @Liana Alves\n<liana.chiromatzo@tryjeeves.com>  and @Vitor Nucitelli\n<vitorn@tryjeeves.com> more about the new short cycle structure in order\nfor them to explain to both clients, Aerotur and Ourtrip. The plan\ndiscussed is:\n\n   - Talk to both clients and achieve alignment by Apr 15. As soon as\n   they're able to discuss it with them they will let us know, with the goal\n   of moving them to this new structure by May 1.\n\nA issue raised by the sales team is: CL not being moved automatically\nbetween both orgs, which might cause issues down the line and failed\ntransactions.\n\nIn the meantime, a suggestion is to set up an alert notifying the team when\nit's necessary to move CL from one org to another.\n\nHowever there still might be a couple of issues, for example, if there's an\nunusual week with more spend and suddently need to move CL from one org to"
+      }
+    },
+    {
+      "case_id": "prop-19f85cdc06544765",
+      "source": "proposal",
+      "gmail_msg_id": "19f85cdc06544765",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "goodwinlaw.com",
+      "posted_at": "2026-07-21T17:51:53.873307+00:00",
+      "historical_proposed_action": "Reply to Goodwin confirming OK to share Perfection Certificate and Schedules with Akin, and coordinate with operations/finance to gather and provide the three outstanding diligence items (equity ledger, vendor agreements, JVS COL audited financials) by end of week.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (98 msgs).",
+      "inputs": {
+        "sender": "\"Rodriguez Mueses, Nathalie\" <nrodriguezmueses@goodwinlaw.com>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "Alexander Melikian <alexander@tryjeeves.com>, \"Wright, Melissa Schwab\" <MSchwabWright@goodwinlaw.com>, \"Chute, Eliza\" <EChute@goodwinlaw.com>, \"Terwey, Aaron\" <ATerwey@goodwinlaw.com>, Thiago de Souza Lepre <thiago@tryjeeves.com>, \"Cohen, Avia\" <AviaCohen@goodwinlaw.com>, \"Bedecarre, Ella Marie\" <EBedecarre@goodwinlaw.com>, Shalom Hassan <shalom@tryjeeves.com>, Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>, DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>",
+        "subject": "RE: Jeeves - Perfection Certificate/Schedules - Outstanding Diligence Items",
+        "body": "Jeeves team,\r\n\r\nKindly following up on the OK to share the Perfection Certificate and Schedules with Akin. Brian, please let us know if we should hold off, otherwise we will pass those along today.\r\n\r\nAdditionally, please see below for a few more CF/Wilkie outstanding items.\r\n\r\nECB\r\n\r\n  *   Current option ledger reflecting all outstanding equity awards.  Company noted to hold off on sending\r\nIP\r\n\r\n  *   Please provide copies of agreements with vendors whose tools are used to support AI/ML functionality in the Company’s operations, such as Ocrolus, or confirm that such vendor agreements do not permit the use of Company or customer data to be used to improve or train the vendors’ models. Please provide.\r\nJVS COL\r\n\r\n  *   Please provide a copy of the audited financial statements, for the end of the fiscal years 2024 and 2025, including the corresponding notes to the financial statements, as well as the statutory auditor's reports. Please provide financials for JVS COL\r\n\r\nPlease let us know of any questions.\r\n\r\nThank you,\r\nNathalie\r\n\r\nNathalie Rodriguez Mueses\r\n\r\n[cid:image001.png@01DD18FE.A29D98E0]<https://www.goodwinlaw.com/>\r\nGoodwin Procter LLP\r\n520 Broadway, Suite 500\r\nSanta Monica, CA 90401\r\no  +1 424 252 6373\r\nf   +1 424 252 6401\r\nnrodriguezmueses@goodwinlaw.com<mailto:nrodriguezmueses@goodwinlaw.com>\r\n\r\n\r\n[cid:image002.png@01DD18FE.A29D98E0]<https://www.linkedin.com/company/goodwin-law> [cid:image003.png@01DD18FE.A29D98E0] <https://www.facebook.com/JoinGoodwin/>  [cid:image004.png@01DD18FE.A29D98E0] <https://www.instagram.com/join_goodwin/>  [cid:image005.png@01DD18FE.A29D98E0] <https://twitter.com/goodwinlaw>  [cid:image006.png@01DD18FE.A29D98E0] <https://www.goodwinlaw.com/news/2020/07/07_02-follow-goodwin-on-wechat>  [cid:image007.png@01DD18FE.A29D98E0] <https://www.youtube.com/@join_goodwin>\r\n\r\nFrom: Brandon McGathy <brandon@tryjeeves.com>\r\nSent: Tuesday, July 21, 2026 9:41 AM\r\nTo: Brian Mauck <brian.mauck@tryjeeves.com>; Rodriguez Mueses, Nathalie <nrodriguezmueses@goodwinlaw.com>\r\nCc: Alexander Melikian <alexander@tryjeeves.com>; Wright, Melissa Schwab <MSchwabWright@goodwinlaw.com>; Chute, Eliza <EChute@goodwinlaw.com>; Terwey, Aaron <ATerwey@goodwinlaw.com>; Thiago de Souza Lepre <thiago@tryjeeves.com>; Cohen, Avia <AviaCohen@goodwinlaw.com>; Bedecarre, Ella Marie <EBedecarre@goodwinlaw.com>; Shalom Hassan <shalom@tryjeeves.com>; Jorge Luis De La Cabada Hurrle <jorge.hurrle@tryjeeves.com>; DG-JeevesGoodwin <DG-JeevesGoodwin@goodwinlaw.com>\r\nSubject: Re: Jeeves - Perfection Certificate/Schedules - Outstanding Diligence Items\r\n\r\n***EXTERNAL***\r\nTeam - the attached is all we have for Sherwin's ID - expired in 2023.  As you know, Sherwin is no longer with the Company, and we do not have an avenue to request anything from him.\r\n\r\nThanks,\r\nBrandon\r\n\r\nOn Tue, Jul 21, 2026 at 9:10 AM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nPerfect that's what I was going to do. Thanks Brandon\r\n\r\nBrian Mauck\r\n\r\n[Image removed by sender. phone-icon]\r\n1 480 710 1344\r\n[Image removed by sender. phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Tue, Jul 21, 2026, 08:56 Brandon McGathy <brandon@tryjeeves.com<mailto:brandon@tryjeeves.com>> wrote:\r\nI have now included random outstanding customer contracts in Akin's folder 6. customer contracts.  Brian, I used the files we pulled for the Kroll audit as I had them available.\r\n\r\nOn Mon, Jul 20, 2026 at 8:26 PM Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>> wrote:\r\nNB has recent financials (April) and the QoR, can we just point Akin to their client?\r\n\r\nI'll send the loan files tomorrow.\r\n\r\n\r\n\r\nThanks\r\n\r\nBrian Mauck\r\n\r\n[Image removed by sender. phone-icon]\r\n1 480 710 1344\r\n[Image removed by sender. phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Mon, Jul 20, 2026, 20:06 Brandon McGathy <brandon@tryjeeves.com<mailto:brandon@tryjeeves.com>> wrote:\r\nI am okay providing the Perfec"
+      }
+    },
+    {
+      "case_id": "obs-19f67ae567d3370d",
+      "source": "observation",
+      "gmail_msg_id": "19f67ae567d3370d",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-07-15T21:28:25+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, dmendozag@monex.com.mx, giozuniga@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, aocampo@cxc.com.co, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | REPORTE MENSUAL DE JUNIO 2026",
+        "body": "Estimados todos,\n\nAdjunto encontrarán el Reporte Mensual de la operación JEEVES F/12339 del mes de Junio 2026. \n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "prop-1a01ac4c1bd5a86e",
+      "source": "proposal",
+      "gmail_msg_id": "1a01ac4c1bd5a86e",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied_pre",
+      "sender_domain": "nb.com",
+      "posted_at": "2026-08-19T16:05:36.770269+00:00",
+      "historical_proposed_action": "Pull the DQ30 backup calculations for the weekly borrowing base and draft a reply to Max attaching a support tab showing how the C7:D9 figures were derived",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner had already replied before the proposal was posted; the proposal was moot.",
+      "inputs": {
+        "sender": "\"Fernandez, Max\" <Max.Fernandez@nb.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "\"Berger, Jay\" <Jay.Berger@nb.com>, \"Surapaneni, Varun\" <Varun.Surapaneni@nb.com>",
+        "subject": "RE: Jeeves Weekly Borrowing Base",
+        "body": "Thank you, it would be great if we could see the backup.\r\n\r\nMax Fernandez\r\nSpecialty Finance Group\r\nNeuberger Berman | T: +1 415 249 8049\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Wednesday, August 19, 2026 9:00 AM\r\nTo: Fernandez, Max <Max.Fernandez@nb.com>\r\nCc: Berger, Jay <Jay.Berger@nb.com>; Surapaneni, Varun <Varun.Surapaneni@nb.com>\r\nSubject: Re: Jeeves Weekly Borrowing Base\r\n\r\nHi Max-\r\n\r\nWe did these as backend calculations, but we can add a tab with support if helpful.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nOn Tue, Aug 18, 2026, 14:46 Fernandez, Max <Max.Fernandez@nb.com<mailto:Max.Fernandez@nb.com>> wrote:\r\nHi Brian,\r\n\r\nOne initial question from our end-would you be able to confirm how you arrived at the hardcoded numbers in C7:D9 of the dq30 tab?\r\n\r\nBest,\r\n\r\nMax Fernandez\r\nSpecialty Finance Group\r\nNeuberger Berman | T: +1 415 249 8049\r\n\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>>\r\nSent: Tuesday, August 18, 2026 1:48 PM\r\nTo: Fernandez, Max <Max.Fernandez@nb.com<mailto:Max.Fernandez@nb.com>>; Berger, Jay <Jay.Berger@nb.com<mailto:Jay.Berger@nb.com>>\r\nSubject: Jeeves Weekly Borrowing Base\r\n\r\nHi team-\r\n\r\nSee attached weekly reporting. Please advise if there's anyone else you'd like to receive this.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n\r\n[phone-icon]\r\n1 480 710 1344\r\n[phone-icon]\r\nbrian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\n\r\n--------\r\nIf you are not an intended recipient of this e-mail, you are not authorized to duplicate, copy, retransmit or redistribute it by any means. Please delete it and any attachments immediately and notify the sender that you have received it in error. Unless specifically indicated, this e-mail is not an offer to buy or sell or a solicitation to buy or sell any securities, investment products or other financial product or service, an official confirmation of any transaction, or an official statement of Neuberger Berman. Any views or opinions presented are solely those of the author and do not necessarily represent those of Neuberger Berman. This e-mail is subject to terms available at the following link: www.nb.com/disclaimer/usa.html<http://www.nb.com/disclaimer/usa.html>\r\n\r\nCell phone numbers, if provided, are for voice purposes only and should not be used for text or instant messages or the like. Please do not communicate via text message or other messaging service unless requested to do so by your Neuberger representative.\r\n\r\nBy messaging with Neuberger Berman you consent to the foregoing.\r\n\r\nIf you are a Canadian resident and would like to unsubscribe, click http://www.nb.com/unsubscribe-email\r\n"
+      }
+    },
+    {
+      "case_id": "obs-19dd22776ad318fc",
+      "source": "observation",
+      "gmail_msg_id": "19dd22776ad318fc",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "docusign.net",
+      "posted_at": "2026-04-28T03:34:52+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Alexander Melikian via Docusign <dse@docusign.net>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "Completed: Here is your signed document: Advance Request - 20260427.docx",
+        "body": "Hello ,    \n\nAll parties have completed Here is your signed document: Advance Request - 20260427.docx.\n    \n    \n\nhttps://www.docusign.net/Signing/EmailStart.aspx?a=c8206450-7b89-83f9-80c9-45ee7b88b286&etti=43&r=c07234f0-139b-8ec5-8037-ee41f25c6914\n\nIf clicking the link does not work, you can highlight and copy the entire line above and paste it into your browser to get started.\n\nThis message was sent to you by Alexander Melikian who is using the Docusign Electronic Signature Service. If you would rather not receive email from this sender you may contact the sender with your request.\n\nDo Not Share This Email\nThis email contains a secure link to Docusign. Please do not share this email, link, or access code with others.\n\nQuestions about the Document?\nIf you need to modify the document or have questions about the details in the document, please reach out to the sender by emailing them dire"
+      }
+    },
+    {
+      "case_id": "obs-19ebb98055ab2242",
+      "source": "observation",
+      "gmail_msg_id": "19ebb98055ab2242",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cim-llc.com",
+      "posted_at": "2026-06-12T11:28:44+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Dryden Liddle <dliddle@cim-llc.com>",
+        "to": "Brandon McGathy <brandon@tryjeeves.com>",
+        "cc": "Alexander Melikian <alexander@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Elena Amato <eamato@cim-llc.com>, Alejandra Granados <agranados@cim-llc.com>",
+        "subject": "Greenberg Invoice",
+        "body": "Hi Brandon,\n\nAs a follow up to my email yesterday \"Machado Invoices\", here is\nGreenberg's invoice for the 4th and 5th amendments. Could you please\nconfirm that Jeeves will pay these invoices directly to the firms? Thank\nyou.\n\nBest wishes,\nDryden\n\n-- \n\nDRYDEN LIDDLE\nGeneral Counsel and Chief Compliance Officer\n415 351 9603 | dliddle@cim-llc.com\nSan Francisco <https://bit.ly/3lsiBCq> | New York <https://cim-llc.com/> |\nBogota <https://cim-llc.com/>"
+      }
+    },
+    {
+      "case_id": "prop-19f4cef479705ae8",
+      "source": "proposal",
+      "gmail_msg_id": "19f4cef479705ae8",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-10T16:50:03.259280+00:00",
+      "historical_proposed_action": "Pull the loan tape for the F/12339 > F/12340 distribution and reply to Axel with the file attached.",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (4 msgs).",
+      "inputs": {
+        "sender": "Axel Orendain <axel@tryjeeves.com>",
+        "to": "\"Gustavo Villarreal Garcia De Le�n\" <gvillarreal@cxc.com.mx>, \"William S. Brum Vilar Filho\" <william.filho@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Re: 20260710 F/12339 > F/12340 Distribution",
+        "body": "Hi team, I hope you are doing well\r\n\r\nAdding +William S. Brum Vilar Filho <william.filho@tryjeeves.com> +Brian\r\nMauck <brian.mauck@tryjeeves.com> that I didn´t include in the first email.\r\n\r\n@Brian Mauck <brian.mauck@tryjeeves.com> could you help us with the loan\r\ntape, please?\r\n\r\nBest,\r\nAxel\r\n\r\n\r\n\r\nOn Fri, Jul 10, 2026 at 8:00 AM Axel Orendain <axel@tryjeeves.com> wrote:\r\n\r\n> Hi team, I hope you are doing well.\r\n>\r\n> I've attached the query with the collections.\r\n>\r\n> Let me know if you need anything else\r\n>\r\n> Best,\r\n> Axel\r\n>\r\n>\r\n"
+      }
+    },
+    {
+      "case_id": "obs-19d6dfd9e3e3d9f5",
+      "source": "observation",
+      "gmail_msg_id": "19d6dfd9e3e3d9f5",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "cxc.com.mx",
+      "posted_at": "2026-04-08T16:47:08+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "reportes-cxc@cxc.com.mx",
+        "to": "lcaballero@monex.com.mx, rcuem@monex.com.mx, brian.mauck@tryjeeves.com, brandon@tryjeeves.com, victor@tryjeeves.com, isabel@tryjeeves.com, dlramireza@monex.com.mx, giozuniga@monex.com.mx, dmendozag@monex.com.mx, ssuarezl@monex.com.mx",
+        "cc": "GVILLARREAL@cxc.com.mx, IMENDEZ@cxc.com.mx, amendoza@cxc.com.mx, amoro@cxc.com.mx, bgomez@cxc.com.mx, drojas@cxc.com.mx, fvarelah@cxc.com.mx, lbotero@cxc.com.co, lbustamante@cxc.com.mx, lescobar@cxc.com.mx, mandrade@cxc.com.co, rrobles@cxc.com.mx, trico@cxc.com.mx",
+        "subject": "JEEVES F/12339 | INSTRUCCIÓN DE DISTRIBUCIÓN",
+        "body": "Estimados todos,\n\nAdjunto encontrarán la Instrucción de Distribución / Reporte de Transferencias del Fideicomiso F/12339 del día de hoy. ´\n´La instrucción ya fue cargada al sistema Power Trust\n\nQuedamos a sus órdenes para cualquier duda o aclaración.\n\nSaludos,\n\nCXC"
+      }
+    },
+    {
+      "case_id": "obs-19f672107ef78a27",
+      "source": "observation",
+      "gmail_msg_id": "19f672107ef78a27",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-15T18:53:54+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Pedro Inzunza <pedro@tryjeeves.com>",
+        "to": "Alexander Melikian <alexander@tryjeeves.com>, \"Angela Viviana Rodríguez Alfonso\" <angela.rodriguez@tryjeeves.com>, \"Angélica Medina Barrios\" <angelica@tryjeeves.com>, Angelo Piscitelli Filho <angelof@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, Carla Carmona <carla@tryjeeves.com>, Carlos Andres Gomez Cuartas <carlos.gomez@tryjeeves.com>, Chin Tan <chin@tryjeeves.com>, Eduardo Daniel Galicia Toledano <daniel.galicia@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Elizabeth Zamudio <elizabeth@tryjeeves.com>, Fabian Moreno Guerrero <fabian@tryjeeves.com>, Federico Javin <federico.javin@tryjeeves.com>, Fer Cruz Salvador <fer@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Gustavo Monsanto <gustavo@tryjeeves.com>, Haizea Garmendia <haizea@tryjeeves.com>, Igor Rodrigues <igor.rodrigues@tryjeeves.com>, \"Jesús Juárez Sánchez\" <jesus@tryjeeves.com>, Jordan Bulkoski <jordan@tryjeeves.com>, Juan Abusaid <juana@tryjeeves.com>, Juliana Ramos <juliana.ramos@tryjeeves.com>, Lluvia Lara <lluvialara@tryjeeves.com>, Marcelo Araujo <marcelo@tryjeeves.com>, Valentina Luquetta <maria@tryjeeves.com>, Matheus Emmerich <matheuse@tryjeeves.com>, Mathias Ferraz <mathias@tryjeeves.com>, \"Maurício de Souza Peixoto\" <mauricio.peixoto@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>, Paulina Alarcon <paulina.alarcon@tryjeeves.com>, Paulina Vega <paulinav@tryjeeves.com>, Pedro Zerboni <pedroz@tryjeeves.com>, Rodrigo Roa Ramirez <rodrigor@tryjeeves.com>, Santiago Bayona <santiagob@tryjeeves.com>, Shafic Villarreal <shafic@tryjeeves.com>, Vinicius Gil Fernandes <vinicius.fernandes@tryjeeves.com>, Vitor Nucitelli <vitorn@tryjeeves.com>, Vytor Zeidan <vytor@tryjeeves.com>, Wadi Bisteni <wadi@tryjeeves.com>, Daniel Vargas Venegas <daniel.vargas@tryjeeves.com>",
+        "cc": "",
+        "subject": "Additional Credit committee (W) @ Wed, Jul 15, 2026 3:30pm – 4:00pm (GMT-06)",
+        "body": "Hi team,\n\nHere is our tentative agenda for today:\n\n   - Coquecol\n      - @Paulina Vega <paulinav@tryjeeves.com>\n      - Ontime\n      - @Daniel Vargas Venegas <daniel.vargas@tryjeeves.com>\n      - Rep Store\n      - @Mathias Ferraz <mathias@tryjeeves.com>\n      - Alpina & Boydorr\n      - @Carlos Andres Gomez Cuartas <carlos.gomez@tryjeeves.com>\n\n\n\n--"
+      }
+    },
+    {
+      "case_id": "prop-19fb967b00da92b0",
+      "source": "proposal",
+      "gmail_msg_id": "19fb967b00da92b0",
+      "expected_actionable": true,
+      "outcome": "handled_elsewhere",
+      "gmail_disposition": "owner_replied",
+      "sender_domain": "vistacreditpartners.com",
+      "posted_at": "2026-07-31T18:20:39.913819+00:00",
+      "historical_proposed_action": "Draft a reply to Alex Hughes confirming 3:30pm ET today and check Brian's calendar for a conflict at that slot",
+      "owner_reply": "",
+      "label_reasoning": "No replies in Slack thread. Gmail: Owner sent a message in the Gmail thread after the proposal (6 msgs).",
+      "inputs": {
+        "sender": "Alex Hughes <ahughes@vistacreditpartners.com>",
+        "to": "Brian Mauck <brian.mauck@tryjeeves.com>",
+        "cc": "",
+        "subject": "Re: NB Side Letter",
+        "body": "Happy to connect - how’s 3:30pm ET?\r\n\r\n\r\nALEXANDER HUGHES\r\n\r\nM +1 929.213.0195\r\n\r\n________________________________\r\nFrom: Brian Mauck <brian.mauck@tryjeeves.com>\r\nSent: Friday, 31 July 2026 13:31:20\r\nTo: Alex Hughes <ahughes@vistacreditpartners.com>\r\nSubject: NB Side Letter\r\n\r\nHi Alex-\r\n\r\nCongrats and thanks for all the help getting things done yesterday!\r\n\r\nAny time to chat through the side letter with NB today? I realized you hadn't seen their docs, which was probably part of the contention.\r\n\r\n\r\nThanks,\r\n\r\nBrian Mauck\r\n[phone-icon]    1 480 710 1344\r\n[phone-icon]    brian.mauck@tryjeeves.com<mailto:brian.mauck@tryjeeves.com>\r\n\r\nThis message contains information that is confidential and/or may be privileged. If you are not the intended recipient, you are hereby notified that any use, dissemination, distribution, or copy of this message or its attachments is strictly prohibited. In addition, emails sent from and to this vistacreditpartners.com domain are monitored, archived, and subject to disclosure, including in connection with regulatory or other legal processes. If you have received this message in error, please advise the sender immediately by reply email and delete this message.\r\n"
+      }
+    },
+    {
+      "case_id": "obs-19f4db9e82a1c57e",
+      "source": "observation",
+      "gmail_msg_id": "19f4db9e82a1c57e",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-07-10T20:30:45+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Pedro Inzunza <pedro@tryjeeves.com>",
+        "to": "Adelaida Ramirez <adelaida@tryjeeves.com>, Alexander Melikian <alexander@tryjeeves.com>, \"Angela Viviana Rodríguez Alfonso\" <angela.rodriguez@tryjeeves.com>, \"Angélica Medina Barrios\" <angelica@tryjeeves.com>, Angelo Piscitelli Filho <angelof@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>, \"Camila Terán\" <camilat@tryjeeves.com>, Carla Carmona <carla@tryjeeves.com>, Carlos Andres Gomez Cuartas <carlos.gomez@tryjeeves.com>, Chin Tan <chin@tryjeeves.com>, Eduardo Daniel Galicia Toledano <daniel.galicia@tryjeeves.com>, Dileep Thazhmon <dileep@tryjeeves.com>, Elizabeth Zamudio <elizabeth@tryjeeves.com>, Fabian Moreno Guerrero <fabian@tryjeeves.com>, Fer Cruz Salvador <fer@tryjeeves.com>, Gustavo Gorenstein <guga@tryjeeves.com>, Gustavo Monsanto <gustavo@tryjeeves.com>, Haizea Garmendia <haizea@tryjeeves.com>, Igor Rodrigues <igor.rodrigues@tryjeeves.com>, \"Jesús Juárez Sánchez\" <jesus@tryjeeves.com>, \"João Nascimento\" <joao@tryjeeves.com>, Jordan Bulkoski <jordan@tryjeeves.com>, Juan Abusaid <juana@tryjeeves.com>, Juliana Ramos <juliana.ramos@tryjeeves.com>, \"Libertad Anaya Castañeda\" <libertad@tryjeeves.com>, Lluvia Lara <lluvialara@tryjeeves.com>, Marcelo Araujo <marcelo@tryjeeves.com>, Valentina Luquetta <maria@tryjeeves.com>, Matheus Emmerich <matheuse@tryjeeves.com>, Mathias Ferraz <mathias@tryjeeves.com>, \"Maurício de Souza Peixoto\" <mauricio.peixoto@tryjeeves.com>, Pablo Cortina <pabloc@tryjeeves.com>, Paulina Alarcon <paulina.alarcon@tryjeeves.com>, Paulina Vega <paulinav@tryjeeves.com>, Pedro Zerboni <pedroz@tryjeeves.com>, Rodrigo Roa Ramirez <rodrigor@tryjeeves.com>, Shafic Villarreal <shafic@tryjeeves.com>, Vinicius Gil Fernandes <vinicius.fernandes@tryjeeves.com>, Vitor Nucitelli <vitorn@tryjeeves.com>, Vytor Zeidan <vytor@tryjeeves.com>, Wadi Bisteni <wadi@tryjeeves.com>",
+        "cc": "",
+        "subject": "Additional Credit Committee (F) @ Fri, Jul 10, 2026 3:30pm – 3:45pm (GMT-06)",
+        "body": "HI team,\n\nSharing our tentative agenda for today:\n\n   - Trace\n      - @Vytor Zeidan <vytor@tryjeeves.com>\n      - Update on deals that are ready but pending customer call\n\n\n--"
+      }
+    },
+    {
+      "case_id": "obs-19d312a08c40aef2",
+      "source": "observation",
+      "gmail_msg_id": "19d312a08c40aef2",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "tryjeeves.com",
+      "posted_at": "2026-03-27T21:18:47+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Isabel Diaz Miranda <isabel@tryjeeves.com>",
+        "to": "Rodolfo Flores Urquiza <rodolfo.floresurquiza@aureapartners.mx>, Lizette Neme <lizette.neme@aureapartners.mx>",
+        "cc": "Axel Orendain <axel@tryjeeves.com>, Brian Mauck <brian.mauck@tryjeeves.com>",
+        "subject": "Seguimiento de pagarés",
+        "body": "Estimados Rodolfo y Lizette, espero estén bien.\n\nSoy Isabel Díaz de Jeeves, Luis Arturo nos introdujo por correo.\n\nLa siguiente semana tenemos planeada una operación. Quería ver si podemos coordinar la recolección del pagaré en nuestras oficinas y las de Monex para ser enviados a Perez Llorca.\n\nEstoy al pendiente de sus comentarios y muchas gracias,\n\nIsabel"
+      }
+    },
+    {
+      "case_id": "obs-19fd92ff395e46ff",
+      "source": "observation",
+      "gmail_msg_id": "19fd92ff395e46ff",
+      "expected_actionable": false,
+      "outcome": "no_reply_never_proposed",
+      "gmail_disposition": "",
+      "sender_domain": "mail.cockroachlabs.com",
+      "posted_at": "2026-08-06T22:27:05+00:00",
+      "historical_proposed_action": "",
+      "owner_reply": "",
+      "label_reasoning": "Received, never replied to, never surfaced as a proposal.",
+      "inputs": {
+        "sender": "Cockroach Labs <news@mail.cockroachlabs.com>",
+        "to": "brian.mauck@tryjeeves.com",
+        "cc": "",
+        "subject": "One database to rule them all 🪳",
+        "body": "No Stale Reads\nInside: Consolidating your multi-database stack into one, confessions from our CEO, and the architecture that survived losing an entire cloud provider.\nLatest & Greatest\nOne database to rule them all\nWhen builders ship AI-powered applications, the data layer quietly becomes the hardest part of the stack. What starts as a single PostgreSQL instance grows into a composite architecture: PostgreSQL for transactions, Redis for caching and session state, and a dedicated vector database like Pinecone or Weaviate for embeddings and similarity search. Each system adds complexity with its own connection pools, backup strategies, security perimeters, failover runbooks, and on-call expertise.\nLearn why multi-database architecture is a problem for AI →  <https://friends.cockroachlabs.com/MzUwLVFJTi04MjcAAAGjeCihG54LrhA00f0WlQSJPQGr2PKW_SiPtv1YATp4WXkGakdz4rGx6ctrDN629NpBlXHD2vw=>\nWho i"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-07-002",
+  "timestamp": "2026-04-07T15:30:10.757965+00:00",
+  "skill": "gmail",
+  "situation": "Brian asked for reply-all on an email thread. The built-in `draft` command only replies to the From address. Had to write a patched gmail_tool with --reply-all flag that collects From+To+CC, deduplicates, excludes my own address, and sets To=first recipient, CC=rest. Must run with PYTHONPATH=C:/redshift-bot/deer-flow/skills/custom/_shared.",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "The default `draft` command is reply-to-sender only. For reply-all, use the patched tool at C:/redshift-bot/deer-flow/backend/.deer-flow/threads/2b2c44e3-f07d-42d0-ba3c-4d5226079bd5/user-data/workspace/gmail_tool_patched.py with --reply-all flag and PYTHONPATH=C:/redshift-bot/deer-flow/skills/custom/_shared prefix. Brian expects reply-all by default on all email drafts.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

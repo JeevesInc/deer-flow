@@ -44,7 +44,9 @@ def test_resolve_model_name_falls_back_to_default(monkeypatch, caplog):
         resolved = lead_agent_module._resolve_model_name("missing-model")
 
     assert resolved == "default-model"
-    assert "fallback to default model 'default-model'" in caplog.text
+    # Warns that the requested model was missing (wording-robust: the message
+    # was reworded to "falling back to routing rules" — assert the stable part).
+    assert "missing-model" in caplog.text and "not found in config" in caplog.text
 
 
 def test_resolve_model_name_uses_default_when_none(monkeypatch):

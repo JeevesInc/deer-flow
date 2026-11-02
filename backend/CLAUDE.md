@@ -59,7 +59,7 @@ deer-flow/
 ├── frontend/                   # Next.js frontend application
 └── skills/                     # Agent skills directory
     ├── public/                # Public skills (committed)
-    └── custom/                # Custom skills (gitignored)
+    └── custom/                # Custom skills (tracked in this repo)
 ```
 
 ## Important Development Guidelines
@@ -163,7 +163,8 @@ Middlewares execute in strict order in `packages/harness/deerflow/agents/lead_ag
 9. **MemoryMiddleware** - Queues conversations for async memory update (filters to user + final AI responses)
 10. **ViewImageMiddleware** - Injects base64 image data before LLM call (conditional on vision support)
 11. **SubagentLimitMiddleware** - Truncates excess `task` tool calls from model response to enforce `MAX_CONCURRENT_SUBAGENTS` limit (optional, if subagent_enabled)
-12. **ClarificationMiddleware** - Intercepts `ask_clarification` tool calls, interrupts via `Command(goto=END)` (must be last)
+12. **TraceMiddleware** - Writes one trace record per model call to `.deer-flow/traces/`. Sits **outside** `AnthropicRetryMiddleware` so one logical model call is one record with retry cost folded into its latency, and **inside** the context-building middlewares so it records the prompt the model actually saw
+13. **ClarificationMiddleware** - Intercepts `ask_clarification` tool calls, interrupts via `Command(goto=END)` (must be last)
 
 ### Configuration System
 
@@ -207,7 +208,7 @@ FastAPI application on port 8001 with health check at `GET /health`.
 | **Skills** (`/api/skills`) | `GET /` - list skills; `GET /{name}` - details; `PUT /{name}` - update enabled; `POST /install` - install from .skill archive (accepts standard optional frontmatter like `version`, `author`, `compatibility`) |
 | **Memory** (`/api/memory`) | `GET /` - memory data; `POST /reload` - force reload; `GET /config` - config; `GET /status` - config + data |
 | **Uploads** (`/api/threads/{id}/uploads`) | `POST /` - upload files (auto-converts PDF/PPT/Excel/Word); `GET /list` - list; `DELETE /{filename}` - delete |
-| **Threads** (`/api/threads/{id}`) | `DELETE /` - remove DeerFlow-managed local thread data after LangGraph thread deletion; unexpected failures are logged server-side and return a generic 500 detail |
+| **Threads** (`/api/threads/{id}`) | `DELETE /` - remove DeerFlow-managed local thread data after LangGraph thread deletion; unexpected failures are logged server-side and return a generic 500 detail. Also called by the `idle-thread-cleanup` cron (`scripts/idle_thread_cleanup_cron.py`) after it deletes the LangGraph-side thread |
 | **Artifacts** (`/api/threads/{id}/artifacts`) | `GET /{path}` - serve artifacts; active content types (`text/html`, `application/xhtml+xml`, `image/svg+xml`) are always forced as download attachments to reduce XSS risk; `?download=true` still forces download for other file types |
 | **Suggestions** (`/api/threads/{id}/suggestions`) | `POST /` - generate follow-up questions; rich list/block model content is normalized before JSON parsing |
 
@@ -319,6 +320,52 @@ Bridges external messaging platforms (Feishu, Slack, Telegram) to the DeerFlow a
 - `langgraph_url` - LangGraph Server URL (default: `http://localhost:2024`)
 - `gateway_url` - Gateway API URL for auxiliary commands (default: `http://localhost:8001`)
 - Per-channel configs: `feishu` (app_id, app_secret), `slack` (bot_token, app_token), `telegram` (bot_token)
+
+### Tracing & Evaluation
+
+Two layers that answer "is the agent any *good*", as distinct from the liveness
+signals everything else in `monitoring/` reports.
+
+**Run tracing** (`packages/harness/deerflow/agents/tracing/`)
+
+`TraceMiddleware` writes one JSON record per model call to
+`.deer-flow/traces/YYYY-MM-DD.jsonl`: run/thread id, step, model, latency,
+prompt shape, tool calls, token usage, and errors. Local rather than
+LangSmith/Langfuse — there is no hosted-tracing credential on this box, and the
+traces contain counterparty email content and loan-tape numbers that should not
+leave it.
+
+- Toggle with `DEERFLOW_TRACING=0`; retention via `DEERFLOW_TRACE_RETENTION_DAYS`
+  (default 30), pruned by the `retention-janitor` cron.
+- Read back with `trace_sink.read_traces(days=N)`; summary counters via `stats()`.
+- **Tracing must never fail a run.** Every entry point swallows its own errors.
+  `tests/test_trace_middleware.py` asserts this explicitly.
+
+**Evaluation** (`skills/custom/jeeves-eval/`, tests in `tests/test_eval_harness.py`)
+
+Scores the inbound-email classifier against a golden set built from real labeled
+history, and trends the result.
+
+| Piece | Role |
+|---|---|
+| `build_golden_set.py` | Builds `cases/golden_set.json` from `proposal_log` × `proposal_outcomes` + `action_observations` |
+| `run_eval.py` | Replays the **live** `classify_with_llm` over the set; writes `.deer-flow/_eval_state.json` |
+| `judge.py` | LLM-as-judge (0–2) on `proposed_action`, graded against what Brian actually did |
+| `eval_cron.py` | `classifier-eval` cron, weekly Sun 04:00; DMs only on a ≥0.05 drop |
+| `metrics.py` `_refresh_eval()` | Projects the last run onto `jeeves_eval_*` gauges → `/d/jeeves-agent-quality` |
+
+Rules that keep the numbers meaningful:
+
+- `run_eval.py` **imports** the production classifier rather than copying the
+  prompt. An eval scoring a copy drifts and then reports green through a regression.
+- Missing eval state publishes **NaN**, never 0 — "nobody ran it" must not render
+  as "accuracy 0.000". `jeeves_eval_days_since_run` reports `9999` when never run
+  so the staleness alert still fires.
+- Weak labels are dropped, not guessed: `ignored`/`unknown` outcomes and
+  `thread_progressed` dispositions are excluded from the set. See the SKILL.md
+  for why each one is untrustworthy.
+- Run it **before and after** any classifier prompt, model-id, or
+  `proposal-patterns` mem0 change.
 
 ### Memory System (`packages/harness/deerflow/agents/memory/`)
 

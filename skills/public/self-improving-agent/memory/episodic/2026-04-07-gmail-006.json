@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-07-006",
+  "timestamp": "2026-04-07T20:16:13.883254+00:00",
+  "skill": "gmail",
+  "situation": "Reply-all draft needed with CC. The gmail_tool.py draft command only replies to the From address \u2014 it does not pull To/Cc from the original thread. The --cc flag does not exist in the tool.",
+  "root_cause": "",
+  "solution": "",
+  "lesson": "To create a true reply-all draft, run a custom Python script from within C:/redshift-bot/deer-flow/skills/custom/gmail directory using: cd C:/redshift-bot/deer-flow/skills/custom/gmail && python3 -c with sys.path.insert(0, os.path.join(os.getcwd(), '..', '_shared')). Fetch original message headers (From, To, Cc, Message-ID), combine all recipients minus my_email into To field, set In-Reply-To and References headers, and call service.users().drafts().create(). Also: if someone is @mentioned in the email body but not formally on To/Cc, look them up via Slack and add them.",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

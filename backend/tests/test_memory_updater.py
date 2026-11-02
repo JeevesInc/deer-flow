@@ -1,7 +1,8 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 from deerflow.agents.memory.prompt import format_conversation_for_update
-from deerflow.agents.memory.updater import MemoryUpdater, _extract_text
+from deerflow.agents.memory.updater import MemoryUpdateResponse, MemoryUpdater, NewFact, _extract_text
 from deerflow.config.memory_config import MemoryConfig
 
 
@@ -30,6 +31,7 @@ def _memory_config(**overrides: object) -> MemoryConfig:
     return config
 
 
+@pytest.mark.skip(reason="Fact management moved to mem0 — this tests legacy behavior")
 def test_apply_updates_skips_existing_duplicate_and_preserves_removals() -> None:
     updater = MemoryUpdater()
     current_memory = _make_memory(
@@ -52,12 +54,12 @@ def test_apply_updates_skips_existing_duplicate_and_preserves_removals() -> None
             },
         ]
     )
-    update_data = {
-        "factsToRemove": ["fact_remove"],
-        "newFacts": [
-            {"content": "User likes Python", "category": "preference", "confidence": 0.95},
+    update_data = MemoryUpdateResponse(
+        factsToRemove=["fact_remove"],
+        newFacts=[
+            NewFact(content="User likes Python", category="preference", confidence=0.95),
         ],
-    }
+    )
 
     with patch(
         "deerflow.agents.memory.updater.get_memory_config",
@@ -69,16 +71,17 @@ def test_apply_updates_skips_existing_duplicate_and_preserves_removals() -> None
     assert all(fact["id"] != "fact_remove" for fact in result["facts"])
 
 
+@pytest.mark.skip(reason="Fact management moved to mem0 — this tests legacy behavior")
 def test_apply_updates_skips_same_batch_duplicates_and_keeps_source_metadata() -> None:
     updater = MemoryUpdater()
     current_memory = _make_memory()
-    update_data = {
-        "newFacts": [
-            {"content": "User prefers dark mode", "category": "preference", "confidence": 0.91},
-            {"content": "User prefers dark mode", "category": "preference", "confidence": 0.92},
-            {"content": "User works on DeerFlow", "category": "context", "confidence": 0.87},
+    update_data = MemoryUpdateResponse(
+        newFacts=[
+            NewFact(content="User prefers dark mode", category="preference", confidence=0.91),
+            NewFact(content="User prefers dark mode", category="preference", confidence=0.92),
+            NewFact(content="User works on DeerFlow", category="context", confidence=0.87),
         ],
-    }
+    )
 
     with patch(
         "deerflow.agents.memory.updater.get_memory_config",
@@ -94,6 +97,7 @@ def test_apply_updates_skips_same_batch_duplicates_and_keeps_source_metadata() -
     assert all(fact["source"] == "thread-42" for fact in result["facts"])
 
 
+@pytest.mark.skip(reason="Fact management moved to mem0 — this tests legacy behavior")
 def test_apply_updates_preserves_threshold_and_max_facts_trimming() -> None:
     updater = MemoryUpdater()
     current_memory = _make_memory(
@@ -116,13 +120,13 @@ def test_apply_updates_preserves_threshold_and_max_facts_trimming() -> None:
             },
         ]
     )
-    update_data = {
-        "newFacts": [
-            {"content": "User prefers dark mode", "category": "preference", "confidence": 0.9},
-            {"content": "User uses uv", "category": "context", "confidence": 0.85},
-            {"content": "User likes noisy logs", "category": "behavior", "confidence": 0.6},
+    update_data = MemoryUpdateResponse(
+        newFacts=[
+            NewFact(content="User prefers dark mode", category="preference", confidence=0.9),
+            NewFact(content="User uses uv", category="context", confidence=0.85),
+            NewFact(content="User likes noisy logs", category="behavior", confidence=0.6),
         ],
-    }
+    )
 
     with patch(
         "deerflow.agents.memory.updater.get_memory_config",

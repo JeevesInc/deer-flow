@@ -1,0 +1,13 @@
+{
+  "id": "ep-2026-04-07-005",
+  "timestamp": "2026-04-07T20:12:47.553653+00:00",
+  "skill": "gmail",
+  "situation": "Patched skill guidance in gmail",
+  "root_cause": "",
+  "solution": "Replaced: NEVER send emails directly \u2014 only create drafts for the user to review. ALWAYS r... -> NEVER send emails directly \u2014 only create drafts for the user to review. ALWAYS r...",
+  "lesson": "Skill guidance updated based on experience",
+  "user_feedback": {
+    "rating": null,
+    "comments": null
+  }
+}

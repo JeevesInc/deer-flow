@@ -59,6 +59,17 @@ class MemoryConfig(BaseModel):
         le=8000,
         description="Maximum tokens to use for memory injection",
     )
+    mem0_min_injection_score: float = Field(
+        default=0.22,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Minimum mem0 similarity score for per-turn memory injection. "
+            "With the all-MiniLM-L6-v2 embedder, off-topic results score "
+            "<=0.15 while genuinely related ones score >=0.25 (same basis as "
+            "STRATEGIC_CONTEXT_MIN_SCORE). 0 disables the gate."
+        ),
+    )
 
 
 # Global configuration instance

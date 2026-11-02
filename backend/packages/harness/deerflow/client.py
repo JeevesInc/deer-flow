@@ -40,6 +40,7 @@ from deerflow.config.extensions_config import ExtensionsConfig, SkillStateConfig
 from deerflow.config.paths import get_paths
 from deerflow.models import create_chat_model
 from deerflow.skills.installer import install_skill_from_archive
+from deerflow.utils.text import extract_text as _extract_text_fn
 from deerflow.uploads.manager import (
     claim_unique_filename,
     delete_file_safe,
@@ -169,12 +170,13 @@ class DeerFlowClient:
         """Write JSON to *path* atomically (temp file + replace)."""
         fd = tempfile.NamedTemporaryFile(
             mode="w",
+            encoding="utf-8",
             dir=path.parent,
             suffix=".tmp",
             delete=False,
         )
         try:
-            json.dump(data, fd, indent=2)
+            json.dump(data, fd, indent=2, ensure_ascii=False)
             fd.close()
             Path(fd.name).replace(path)
         except BaseException:
@@ -270,40 +272,8 @@ class DeerFlowClient:
 
     @staticmethod
     def _extract_text(content) -> str:
-        """Extract plain text from AIMessage content (str or list of blocks).
-
-        String chunks are concatenated without separators to avoid corrupting
-        token/character deltas or chunked JSON payloads. Dict-based text blocks
-        are treated as full text blocks and joined with newlines to preserve
-        readability.
-        """
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            if content and all(isinstance(block, str) for block in content):
-                chunk_like = len(content) > 1 and all(isinstance(block, str) and len(block) <= 20 and any(ch in block for ch in '{}[]":,') for block in content)
-                return "".join(content) if chunk_like else "\n".join(content)
-
-            pieces: list[str] = []
-            pending_str_parts: list[str] = []
-
-            def flush_pending_str_parts() -> None:
-                if pending_str_parts:
-                    pieces.append("".join(pending_str_parts))
-                    pending_str_parts.clear()
-
-            for block in content:
-                if isinstance(block, str):
-                    pending_str_parts.append(block)
-                elif isinstance(block, dict):
-                    flush_pending_str_parts()
-                    text_val = block.get("text")
-                    if isinstance(text_val, str):
-                        pieces.append(text_val)
-
-            flush_pending_str_parts()
-            return "\n".join(pieces) if pieces else ""
-        return str(content)
+        """Extract plain text from AIMessage content (str or list of blocks)."""
+        return _extract_text_fn(content)
 
     # ------------------------------------------------------------------
     # Public API — conversation

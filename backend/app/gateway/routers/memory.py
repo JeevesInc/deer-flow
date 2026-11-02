@@ -1,4 +1,9 @@
-"""Memory API router for retrieving and managing global memory data."""
+"""Memory API router for retrieving and managing memory data.
+
+Profile sections are in memory.json, long-term facts are in mem0.
+"""
+
+import logging
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -6,160 +11,105 @@ from pydantic import BaseModel, Field
 from deerflow.agents.memory.updater import get_memory_data, reload_memory_data
 from deerflow.config.memory_config import get_memory_config
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["memory"])
 
 
 class ContextSection(BaseModel):
-    """Model for context sections (user and history)."""
-
     summary: str = Field(default="", description="Summary content")
     updatedAt: str = Field(default="", description="Last update timestamp")
 
 
 class UserContext(BaseModel):
-    """Model for user context."""
-
     workContext: ContextSection = Field(default_factory=ContextSection)
     personalContext: ContextSection = Field(default_factory=ContextSection)
     topOfMind: ContextSection = Field(default_factory=ContextSection)
 
 
 class HistoryContext(BaseModel):
-    """Model for history context."""
-
     recentMonths: ContextSection = Field(default_factory=ContextSection)
     earlierContext: ContextSection = Field(default_factory=ContextSection)
     longTermBackground: ContextSection = Field(default_factory=ContextSection)
 
 
-class Fact(BaseModel):
-    """Model for a memory fact."""
-
-    id: str = Field(..., description="Unique identifier for the fact")
-    content: str = Field(..., description="Fact content")
-    category: str = Field(default="context", description="Fact category")
-    confidence: float = Field(default=0.5, description="Confidence score (0-1)")
-    createdAt: str = Field(default="", description="Creation timestamp")
-    source: str = Field(default="unknown", description="Source thread ID")
+class Mem0Memory(BaseModel):
+    id: str = Field(default="", description="Memory ID")
+    memory: str = Field(default="", description="Memory text")
+    score: float = Field(default=0.0, description="Relevance score")
 
 
 class MemoryResponse(BaseModel):
-    """Response model for memory data."""
-
-    version: str = Field(default="1.0", description="Memory schema version")
+    version: str = Field(default="2.0", description="Memory schema version")
     lastUpdated: str = Field(default="", description="Last update timestamp")
     user: UserContext = Field(default_factory=UserContext)
     history: HistoryContext = Field(default_factory=HistoryContext)
-    facts: list[Fact] = Field(default_factory=list)
+    mem0_count: int = Field(default=0, description="Number of memories in mem0")
+    # Legacy: facts may still exist during migration
+    facts: list = Field(default_factory=list)
 
 
 class MemoryConfigResponse(BaseModel):
-    """Response model for memory configuration."""
-
     enabled: bool = Field(..., description="Whether memory is enabled")
     storage_path: str = Field(..., description="Path to memory storage file")
     debounce_seconds: int = Field(..., description="Debounce time for memory updates")
-    max_facts: int = Field(..., description="Maximum number of facts to store")
-    fact_confidence_threshold: float = Field(..., description="Minimum confidence threshold for facts")
+    max_facts: int = Field(..., description="Maximum number of facts (legacy)")
+    fact_confidence_threshold: float = Field(..., description="Minimum confidence threshold (legacy)")
     injection_enabled: bool = Field(..., description="Whether memory injection is enabled")
-    max_injection_tokens: int = Field(..., description="Maximum tokens for memory injection")
+    max_injection_tokens: int = Field(..., description="Maximum tokens for profile injection")
+    mem0_enabled: bool = Field(default=True, description="Whether mem0 long-term memory is active")
 
 
 class MemoryStatusResponse(BaseModel):
-    """Response model for memory status."""
-
     config: MemoryConfigResponse
     data: MemoryResponse
 
 
-@router.get(
-    "/memory",
-    response_model=MemoryResponse,
-    summary="Get Memory Data",
-    description="Retrieve the current global memory data including user context, history, and facts.",
-)
-async def get_memory() -> MemoryResponse:
-    """Get the current global memory data.
+def _get_mem0_count() -> int:
+    """True number of stored memories.
 
-    Returns:
-        The current memory data with user context, history, and facts.
-
-    Example Response:
-        ```json
-        {
-            "version": "1.0",
-            "lastUpdated": "2024-01-15T10:30:00Z",
-            "user": {
-                "workContext": {"summary": "Working on DeerFlow project", "updatedAt": "..."},
-                "personalContext": {"summary": "Prefers concise responses", "updatedAt": "..."},
-                "topOfMind": {"summary": "Building memory API", "updatedAt": "..."}
-            },
-            "history": {
-                "recentMonths": {"summary": "Recent development activities", "updatedAt": "..."},
-                "earlierContext": {"summary": "", "updatedAt": ""},
-                "longTermBackground": {"summary": "", "updatedAt": ""}
-            },
-            "facts": [
-                {
-                    "id": "fact_abc123",
-                    "content": "User prefers TypeScript over JavaScript",
-                    "category": "preference",
-                    "confidence": 0.9,
-                    "createdAt": "2024-01-15T10:30:00Z",
-                    "source": "thread_xyz"
-                }
-            ]
-        }
-        ```
+    Uses count_memories() (a Qdrant scroll) rather than len(get_all_memories()):
+    mem0's get_all() reads its internal index, which the 2026-07-01 bulk
+    migration bypassed, so it reports only the ~20 facts written since then
+    instead of the ~4,400 actually stored. count_memories() hits Qdrant directly
+    (the source of truth) and is far cheaper than fetching every memory.
     """
+    try:
+        from deerflow.agents.memory.mem0_store import count_memories
+        return count_memories()
+    except Exception as e:
+        logger.warning("Failed to get mem0 count: %s", e)
+        return -1
+
+
+@router.get("/memory", response_model=MemoryResponse, summary="Get Memory Data")
+def get_memory() -> MemoryResponse:  # sync: does blocking mem0 I/O → threadpool
     memory_data = get_memory_data()
-    return MemoryResponse(**memory_data)
+    return MemoryResponse(
+        version=memory_data.get("version", "2.0"),
+        lastUpdated=memory_data.get("lastUpdated", ""),
+        user=UserContext(**memory_data.get("user", {})),
+        history=HistoryContext(**memory_data.get("history", {})),
+        mem0_count=_get_mem0_count(),
+        facts=memory_data.get("facts", []),
+    )
 
 
-@router.post(
-    "/memory/reload",
-    response_model=MemoryResponse,
-    summary="Reload Memory Data",
-    description="Reload memory data from the storage file, refreshing the in-memory cache.",
-)
-async def reload_memory() -> MemoryResponse:
-    """Reload memory data from file.
-
-    This forces a reload of the memory data from the storage file,
-    useful when the file has been modified externally.
-
-    Returns:
-        The reloaded memory data.
-    """
+@router.post("/memory/reload", response_model=MemoryResponse, summary="Reload Memory Data")
+def reload_memory() -> MemoryResponse:  # sync: blocking mem0 I/O → threadpool
     memory_data = reload_memory_data()
-    return MemoryResponse(**memory_data)
+    return MemoryResponse(
+        version=memory_data.get("version", "2.0"),
+        lastUpdated=memory_data.get("lastUpdated", ""),
+        user=UserContext(**memory_data.get("user", {})),
+        history=HistoryContext(**memory_data.get("history", {})),
+        mem0_count=_get_mem0_count(),
+        facts=memory_data.get("facts", []),
+    )
 
 
-@router.get(
-    "/memory/config",
-    response_model=MemoryConfigResponse,
-    summary="Get Memory Configuration",
-    description="Retrieve the current memory system configuration.",
-)
+@router.get("/memory/config", response_model=MemoryConfigResponse, summary="Get Memory Configuration")
 async def get_memory_config_endpoint() -> MemoryConfigResponse:
-    """Get the memory system configuration.
-
-    Returns:
-        The current memory configuration settings.
-
-    Example Response:
-        ```json
-        {
-            "enabled": true,
-            "storage_path": ".deer-flow/memory.json",
-            "debounce_seconds": 30,
-            "max_facts": 100,
-            "fact_confidence_threshold": 0.7,
-            "injection_enabled": true,
-            "max_injection_tokens": 2000
-        }
-        ```
-    """
     config = get_memory_config()
     return MemoryConfigResponse(
         enabled=config.enabled,
@@ -169,21 +119,12 @@ async def get_memory_config_endpoint() -> MemoryConfigResponse:
         fact_confidence_threshold=config.fact_confidence_threshold,
         injection_enabled=config.injection_enabled,
         max_injection_tokens=config.max_injection_tokens,
+        mem0_enabled=True,
     )
 
 
-@router.get(
-    "/memory/status",
-    response_model=MemoryStatusResponse,
-    summary="Get Memory Status",
-    description="Retrieve both memory configuration and current data in a single request.",
-)
-async def get_memory_status() -> MemoryStatusResponse:
-    """Get the memory system status including configuration and data.
-
-    Returns:
-        Combined memory configuration and current data.
-    """
+@router.get("/memory/status", response_model=MemoryStatusResponse, summary="Get Memory Status")
+def get_memory_status() -> MemoryStatusResponse:  # sync: blocking mem0 I/O → threadpool
     config = get_memory_config()
     memory_data = get_memory_data()
 
@@ -196,6 +137,38 @@ async def get_memory_status() -> MemoryStatusResponse:
             fact_confidence_threshold=config.fact_confidence_threshold,
             injection_enabled=config.injection_enabled,
             max_injection_tokens=config.max_injection_tokens,
+            mem0_enabled=True,
         ),
-        data=MemoryResponse(**memory_data),
+        data=MemoryResponse(
+            version=memory_data.get("version", "2.0"),
+            lastUpdated=memory_data.get("lastUpdated", ""),
+            user=UserContext(**memory_data.get("user", {})),
+            history=HistoryContext(**memory_data.get("history", {})),
+            mem0_count=_get_mem0_count(),
+            facts=memory_data.get("facts", []),
+        ),
     )
+
+
+@router.get("/memory/mem0", summary="Search mem0 memories")
+def search_mem0(q: str = "", limit: int = 20, user_id: str = ""):  # sync: blocking mem0 I/O → threadpool
+    """Search or list mem0 memories. If q is empty, returns all.
+
+    ``user_id`` selects a mem0 namespace (default: the main memory namespace).
+    Out-of-process consumers (e.g. webhook_receiver's proposal-pattern lookup)
+    must go through this endpoint — embedded Qdrant allows exactly one process,
+    and the Gateway holds that lock.
+    """
+    try:
+        if q:
+            from deerflow.agents.memory.mem0_store import search_memories
+            kwargs = {"user_id": user_id} if user_id else {}
+            results = search_memories(q, top_k=limit, **kwargs)
+        else:
+            from deerflow.agents.memory.mem0_store import get_all_memories
+            kwargs = {"user_id": user_id} if user_id else {}
+            results = get_all_memories(**kwargs)
+        return {"results": results, "count": len(results)}
+    except Exception as e:
+        logger.error("mem0 search failed: %s", e)
+        return {"results": [], "count": 0, "error": str(e)}

@@ -8,7 +8,7 @@ from deerflow.reflection import resolve_class
 logger = logging.getLogger(__name__)
 
 
-def create_chat_model(name: str | None = None, thinking_enabled: bool = False, **kwargs) -> BaseChatModel:
+def create_chat_model(name: str | None = None, thinking_enabled: bool = False, _attach_fallbacks: bool = True, **kwargs) -> BaseChatModel:
     """Create a chat model instance from the config.
 
     Args:
@@ -29,6 +29,7 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
         exclude={
             "use",
             "name",
+            "fallback",
             "display_name",
             "description",
             "supports_thinking",
@@ -55,6 +56,11 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             # OpenAI-compatible gateway: thinking is nested under extra_body
             kwargs.update({"extra_body": {"thinking": {"type": "disabled"}}})
             kwargs.update({"reasoning_effort": "minimal"})
+        elif effective_wte.get("thinking", {}).get("type") == "adaptive":
+            # Adaptive-only models (e.g. Fable 5) reject an explicit
+            # {"type": "disabled"} with a 400 — omitting the param entirely is
+            # the supported way to run without thinking.
+            kwargs.pop("thinking", None)
         elif effective_wte.get("thinking", {}).get("type"):
             # Native langchain_anthropic: thinking is a direct constructor parameter
             kwargs.update({"thinking": {"type": "disabled"}})
@@ -92,4 +98,37 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             logger.debug(f"LangSmith tracing attached to model '{name}' (project='{tracing_config.project}')")
         except Exception as e:
             logger.warning(f"Failed to attach LangSmith tracing to model '{name}': {e}")
+
+    # Wrap with a step-down fallback chain if configured. Fallback models are
+    # built WITHOUT their own fallbacks (_attach_fallbacks=False) to keep the
+    # chain flat and prevent infinite recursion when models reference each other.
+    if _attach_fallbacks and model_config.fallback:
+        fallback_names = (
+            [model_config.fallback]
+            if isinstance(model_config.fallback, str)
+            else list(model_config.fallback)
+        )
+        fallback_models = []
+        for fb_name in fallback_names:
+            if fb_name == name:
+                continue
+            try:
+                fallback_models.append(
+                    create_chat_model(
+                        name=fb_name,
+                        thinking_enabled=thinking_enabled,
+                        _attach_fallbacks=False,
+                        **kwargs,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Could not build fallback model '{fb_name}' for '{name}': {e}")
+        if fallback_models:
+            from deerflow.models.fallback import FallbackChatModel
+
+            logger.info(
+                f"Model '{name}' configured with fallback chain: "
+                f"{[name] + fallback_names}"
+            )
+            return FallbackChatModel(primary=model_instance, fallbacks=fallback_models)
     return model_instance

@@ -154,6 +154,14 @@ def main():
     finally:
         con.close()
 
+    # 2026-11-02: loc_tape for the end date had not landed; the master built anyway with
+    # the latest day silently empty (balance shown was the prior day's). Refuse instead.
+    if len(dfs[-1]) == 0:
+        print(f"ERROR: DATA-NOT-READY: capital_markets_dm.loc_tape has no SOFOM rows for "
+              f"end-date {end_date} -- refusing to build a master missing the latest day.",
+              file=sys.stderr)
+        sys.exit(3)
+
     print("\n  Combining results...")
     df_combined = pd.concat(dfs, ignore_index=True)
     print(f"  Total rows: {len(df_combined)}")

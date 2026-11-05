@@ -105,6 +105,8 @@ sending that, don't ever draft an email like that."*
 
 ## ⚠️ HARD RULES — scheduler edits and completion truth (added 2026-08-10)
 
+**R-MEB (added 2026-11-05, NB month-end BB 10/31):** before posting ANY Section 7.01(a) result, month-end BB or shortfall to Slack or a file, tie the build's Liquidity to the CICO *NB Liquidity* block total for the same date. A mismatch is a build bug until proven otherwise: post nothing numeric, fix the build first. If wrong figures were already posted, sweep every copy (Slack, Drive, logs, state JSON, memory) in one pass — Brian: *"get rid of anything anywhere that includes what you got wrong."* Never quote the wrong figures in skills, lessons or memory.
+
 0. **New or changed SQL born in this skill belongs in cfo-org-kb, and you CANNOT write it there with `write_file`/`str_replace` or with `skill_manage.py patch`.** Both fail: the clone is permission-denied to the write tools, and `skill_manage.py` edits the local clone with no git push, silently breaking the "GitHub is the only store, commit every query" rule. **Pattern:** write a python script to `WORKSPACE_PATH` that does plain `open().write()` into the clone, then `subprocess` the git add / commit / push with `cwd` set to the clone dir, and run it with `uv run python`. This is already a documented HARD RULE in cfo-org-kb/SKILL.md that recurred a 6th time on 2026-08-19 (Permission denied writing the new `nb_dq30_monthend_detail.sql`) because the work started HERE, in the borrowing-base skill, and cfo-org-kb/SKILL.md was never loaded. Read that rule before touching any .sql under cfo-org-kb.
 
 1. **Editing `report_scheduler_cron.py` does NOT take effect until the gateway restarts.** The cron is
@@ -586,7 +588,5 @@ borrowing base, when it's built, I want the test as of the end of the previous m
   immediately before/after the draw on the latest data — not covered by the month-end test.
 
 
-## CICO daily balances email (LIVE 2026-10-08, approved by Brian)
-- Trigger: a Slack DM to the bot containing "CICO"/"balance"/"saldo" from Axel (U075NLRHYBX), William Filho (U0A5AT863BL) or Mariana (U09AGT85RSN). Hook: `backend/app/channels/slack.py` `_handle_cico_trigger` -> spawns `cico_daily_email.py --send --trigger-user <id>` (no agent turn; they are deliberately NOT on the DM allowlist). "CICO resend" adds `--force`. Same three IDs are in `slack_dm_monitor_cron.py` IGNORED_USERS (no holding note). slack.py edits need a GATEWAY restart.
-- Script pulls the newest `YYMMDD Jeeves - CICO.xlsx` from Axel's OneDrive (FinOps V3/CICO, top level) via Edge+Okta; from session 0 it hops to the desktop session (`zscaler-reauth/session_launcher.py`). Render logic is byte-identical to the approved 10/7 test (table verified identical). Date = latest Bank-balances column with >30 filled rows; subject `{yymmdd} CICO - Daily balances`.
-- Sends from Brian's Gmail to Mariana's 10/7 distribution list (12). One send per balance date (`_cico_email_state.json`); a repeat trigger for the same date tells the sender the latest date is unchanged. Confirmation (date, total cash, $1M+ moves) goes to the trigger user and Brian; failures too. Manual test: `cico_daily_email.py --send --no-fetch --to brian.mauck@tryjeeves.com`.
+## CICO daily balances email -> see `jeeves-cico` skill
+The daily CICO email is treasury reporting, not a borrowing base; its runbook lives in `custom/jeeves-cico/SKILL.md`. Scripts `cico_daily_email.py` / `cico_fetch_balances.py` stay in this folder only because build_nb.py imports the fetcher and the slack.py hook points here.

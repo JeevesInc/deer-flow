@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 301,
+      "applications": 310,
       "created": "2026-04-07",
-      "last_applied": "2026-10-27T09:09:27.118361+00:00",
+      "last_applied": "2026-11-05T10:05:46.879733+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -5774,6 +5774,646 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-362": {
+      "id": "pat-2026-10-29-362",
+      "name": "Never read CICO by fixed row number: find rows by label (Ban",
+      "source": "ep-2026-10-29-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T17:19:33.202330+00:00",
+      "category": "general",
+      "pattern": "Never read CICO by fixed row number: find rows by label (Bank balances like cico_daily_email.build; other tabs via cico_layout.py alignment to a reference layout), surface added and redefined lines instead of failing. Answer what-next from my own prior thread messages, not repo docs.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-363": {
+      "id": "pat-2026-10-29-363",
+      "name": "Before adding any Liquidity deduction, check Brian's stated ",
+      "source": "ep-2026-10-29-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T19:27:03.698456+00:00",
+      "category": "general",
+      "pattern": "Before adding any Liquidity deduction, check Brian's stated trust rule: exclude MX trust only; never copy CICO NB-test deductions for Colombia.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-29-364": {
+      "id": "pat-2026-10-29-364",
+      "name": "One Plan: never build a feature as a separate side screen (e",
+      "source": "ep-2026-10-29-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T20:13:13.959406+00:00",
+      "category": "general",
+      "pattern": "One Plan: never build a feature as a separate side screen (e.g. Plan lines tab). Inputs, added lines and overrides belong inside the statement grid itself, FP&A-style: editable line items, add-row under the parent, collapsible sections/rows.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-10-29-365": {
+      "id": "pat-2026-10-29-365",
+      "name": "One Plan daily cash was built as a plan flow table and never",
+      "source": "ep-2026-10-29-010",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T20:15:25.217869+00:00",
+      "category": "general",
+      "pattern": "One Plan daily cash was built as a plan flow table and never diffed against the CICO Daily cash flow tab. What matters there is the block under Ending balance (r195-209: MX trusts, cash without the SPV, debt vs borrowing base, DACA by country) and the month-end test. Before showing a view that replaces a CICO tab, enumerate that tab rows and diff.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-29-366": {
+      "id": "pat-2026-10-29-366",
+      "name": "After adding an editable decision row, test that typing over",
+      "source": "ep-2026-10-29-011",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T20:17:53.573886+00:00",
+      "category": "general",
+      "pattern": "After adding an editable decision row, test that typing over the engine default (incl. 0 and values below a forced amount) changes the output before shipping",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-29-367": {
+      "id": "pat-2026-10-29-367",
+      "name": "Use the repo QA path: tests/e2e/make_qa_db.py (read-only sna",
+      "source": "ep-2026-10-29-012",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-29",
+      "last_applied": "2026-10-29T22:32:32.092243+00:00",
+      "category": "general",
+      "pattern": "Use the repo QA path: tests/e2e/make_qa_db.py (read-only snapshot), qa_server.py on 8130 (runner off), copy headless.py into workspace with timeout handling (first cold forecast >120s), then API flows with x-view-as header. Never touch 8120/tunnel. Preview shock op is the symbol x (U+00D7), not mul.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-10-30-368": {
+      "id": "pat-2026-10-30-368",
+      "name": "In One Plan, never hardwire a single lender constraint as th",
+      "source": "ep-2026-10-30-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T00:13:33.022889+00:00",
+      "category": "general",
+      "pattern": "In One Plan, never hardwire a single lender constraint as the plan objective; objectives are user-set inputs with no defaults, covenants are checked beside them.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-369": {
+      "id": "pat-2026-10-30-369",
+      "name": "Aggregate = combine the team's files exactly as delivered (P",
+      "source": "ep-2026-10-30-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T01:06:14.839474+00:00",
+      "category": "general",
+      "pattern": "Aggregate = combine the team's files exactly as delivered (Pradeep/Kacper), in Jeeves format; never recompute (e.g. monthly to LTM) or rebuild in the counterparty template. Raise definitional gaps as questions in the email instead. Reply to an internal thread = reply-all, To the named person.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-10-30-370": {
+      "id": "pat-2026-10-30-370",
+      "name": "Before saying merge done / live, list all open PRs (gh pr li",
+      "source": "ep-2026-10-30-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T02:00:19.331092+00:00",
+      "category": "general",
+      "pattern": "Before saying merge done / live, list all open PRs (gh pr list) and merge or name each. One shared list helper for any two UIs that show the same set.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-371": {
+      "id": "pat-2026-10-30-371",
+      "name": "Reproduce against live server (127.0.0.1:8120) with real que",
+      "source": "ep-2026-10-30-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T02:52:45.415129+00:00",
+      "category": "general",
+      "pattern": "Reproduce against live server (127.0.0.1:8120) with real questions before fixing; verify the branch on a sqlite backup copy of data/one_plan.db on another port (tests overwrite clone data/). Assistant must never write to answer a question.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-372": {
+      "id": "pat-2026-10-30-372",
+      "name": "Never fix a bad assistant write by making it read-only; fix ",
+      "source": "ep-2026-10-30-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T03:57:53.966488+00:00",
+      "category": "general",
+      "pattern": "Never fix a bad assistant write by making it read-only; fix where and how it writes (own Draft or in-place owned inputs, read back the result). Persist every chat with full tool context so follow-ups work and quality can be reviewed.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-373": {
+      "id": "pat-2026-10-30-373",
+      "name": "One Plan replaces V9/CICO; it does not automate them. The wo",
+      "source": "ep-2026-10-30-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T17:25:54.575026+00:00",
+      "category": "general",
+      "pattern": "One Plan replaces V9/CICO; it does not automate them. The workbooks are never the spec or the oracle. Model each area from how the business actually works, using the data and executed terms already in the app. Do not port formulas, tie out to the workbooks or propose driving the plan off them. Do not treat this as a to-do list or ask permission to model natively; that is the job.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-374": {
+      "id": "pat-2026-10-30-374",
+      "name": "Refinement: native does not mean no human input. Rule: where",
+      "source": "ep-2026-10-30-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T17:27:15.790921+00:00",
+      "category": "general",
+      "pattern": "Refinement: native does not mean no human input. Rule: wherever the app has the information natively (loan tape, transactions SSOT, terms register, position runs, CIM BB), use it, because that reduces human error. Where no system source exists, take human input from its owner, labelled as such: bank and cash balances (FinOps via CICO until a bank API exists), plans, decisions, Mastercard notices. Never replace a native source with a typed number, and never invent a native source for something that is only human-known.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-375": {
+      "id": "pat-2026-10-30-375",
+      "name": "Human inputs are entered THROUGH ONE PLAN, not imported from",
+      "source": "ep-2026-10-30-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T17:31:39.867211+00:00",
+      "category": "general",
+      "pattern": "Human inputs are entered THROUGH ONE PLAN, not imported from CICO/V9 workbooks. Every number in the platform is editable, and the platform is the input mechanism for anything not in the DB (bank balances until a bank API, interest earned, Mastercard notice terms, plans, decisions). A workbook value may seed a field once, labelled as such, but the owner edits it in One Plan from then on.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-376": {
+      "id": "pat-2026-10-30-376",
+      "name": "Everything in One Plan must be editable AND modular: each bu",
+      "source": "ep-2026-10-30-009",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T17:34:23.786312+00:00",
+      "category": "general",
+      "pattern": "Everything in One Plan must be editable AND modular: each business area (Mastercard collateral, pre-funding, overdraft/SBLC, SPVs, opex...) is its own module with declared inputs (DB, terms register or platform-entered) and declared outputs that downstream modules read. A module can be replaced or extended, and countries, facilities and lines can be added, without touching other modules. No logic buried in another module (e.g. the V9 treasury monolith).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "one-plan"
+      ]
+    },
+    "pat-2026-10-30-377": {
+      "id": "pat-2026-10-30-377",
+      "name": "When CICO rows look missing in One Plan, run the cico_import",
+      "source": "ep-2026-10-30-010",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-30",
+      "last_applied": "2026-10-30T19:44:14.805055+00:00",
+      "category": "general",
+      "pattern": "When CICO rows look missing in One Plan, run the cico_import tie-out on the latest file first. FinOps layout inserts (261029 MC collateral split) get matched by position and silently mislabel/drop rows; added rows must be found by label (Book.row_of). Replica sections must sit in CICO order, under the same anchor row, with CICO labels.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-10-31-378": {
+      "id": "pat-2026-10-31-378",
+      "name": "NARROWED REPLY warning means redo as reply-all immediately; ",
+      "source": "ep-2026-10-31-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-10-31",
+      "last_applied": "2026-10-31T00:25:29.661899+00:00",
+      "category": "general",
+      "pattern": "NARROWED REPLY warning means redo as reply-all immediately; never keep a narrowed draft because the latest message had fewer recipients. If the default reply-all fails with Invalid To header (accented display names, e.g. GARCIA), pass every thread participant as plain addresses via --to/--cc.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-11-01-379": {
+      "id": "pat-2026-11-01-379",
+      "name": "agent-desktop works only via session_launcher.run_in_user_se",
+      "source": "ep-2026-11-01-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-01",
+      "last_applied": "2026-11-01T02:11:56.990078+00:00",
+      "category": "general",
+      "pattern": "agent-desktop works only via session_launcher.run_in_user_session (service is SYSTEM session 0). Binary at redshift-bot tools agent-desktop agent-desktop.exe. ZSATray has no window in list-apps; Zscaler icon sits in hidden tray. Taskbar snapshot finds Show Hidden Icons and click succeeds, but system-tray-overflow surface is not detected on this Win11 build (WINDOW_NOT_FOUND / TIMEOUT). Next route: snapshot --surface desktop after chevron click, or relaunch ZSATray.exe to raise its window.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "zscaler-reauth"
+      ]
+    },
+    "pat-2026-11-02-380": {
+      "id": "pat-2026-11-02-380",
+      "name": "2026-11-01 CICO: Brian ordered reply-all to Alex (orig To: B",
+      "source": "ep-2026-11-02-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T01:34:55.465012+00:00",
+      "category": "general",
+      "pattern": "2026-11-01 CICO: Brian ordered reply-all to Alex (orig To: Brian, Axel, Will, Shalom, Isabel); sent reply went to Alex only. Second narrowed reply in 3 days (10/30 Spark David). After any reply send, read the sent message To/Cc and compare to the inbound To+Cc before reporting reply-all done.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-11-02-381": {
+      "id": "pat-2026-11-02-381",
+      "name": "No tape rows = upstream late, not a code bug: check loc_tape",
+      "source": "ep-2026-11-02-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T16:36:11.867086+00:00",
+      "category": "general",
+      "pattern": "No tape rows = upstream late, not a code bug: check loc_tape max(dt) first; check the MX master built the same morning for the same empty day",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-11-02-382": {
+      "id": "pat-2026-11-02-382",
+      "name": "Never promise once-X-then-Y without wiring the trigger into ",
+      "source": "ep-2026-11-02-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T16:46:55.339250+00:00",
+      "category": "general",
+      "pattern": "Never promise once-X-then-Y without wiring the trigger into the registered cron in the same turn",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-portfolio-report"
+      ]
+    },
+    "pat-2026-11-02-383": {
+      "id": "pat-2026-11-02-383",
+      "name": "slack_tool.py search --count >100 is rejected by Slack and s",
+      "source": "ep-2026-11-02-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T16:49:10.392618+00:00",
+      "category": "general",
+      "pattern": "slack_tool.py search --count >100 is rejected by Slack and silently shows only 20; to:@brian.mauck is ~75% bot DMs - add -from:@deerflow_analyst and page search_messages(page=N, count=100) in a workspace script, grouping inbound+from:@brian.mauck by channel id for the reply check. Gmail day-split still caps at 10 on busy days: further split by from:tryjeeves.com / goodwinlaw / nb.com / other and exclude calendar, github, gemini, CICO noise.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-11-02-384": {
+      "id": "pat-2026-11-02-384",
+      "name": "Tape/data-load status questions: check Slack #rms-rerun-requ",
+      "source": "ep-2026-11-02-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T18:22:33.339267+00:00",
+      "category": "general",
+      "pattern": "Tape/data-load status questions: check Slack #rms-rerun-request (data team rerun channel, Rick handles reruns) BEFORE reporting status or drafting an escalation. On 2026-11-02 keyword search for balance_usd/loc_tape missed it; Brian had already escalated there and rerun was in flight.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-redshift"
+      ]
+    },
+    "pat-2026-11-02-385": {
+      "id": "pat-2026-11-02-385",
+      "name": "The bash tool collapses double backslashes inside heredocs, ",
+      "source": "ep-2026-11-02-010",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T19:15:17.192914+00:00",
+      "category": "general",
+      "pattern": "The bash tool collapses double backslashes inside heredocs, so code with escaped newlines or quotes written via cat-heredoc gets corrupted (unterminated string literals). Write any code containing backslash escapes with write_file, never a bash heredoc, and py_compile every patched file before testing.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-11-02-386": {
+      "id": "pat-2026-11-02-386",
+      "name": "Cash bridge sources: GL MTD cash flow statements (Kacper NB ",
+      "source": "ep-2026-11-02-012",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T19:31:29.852443+00:00",
+      "category": "general",
+      "pattern": "Cash bridge sources: GL MTD cash flow statements (Kacper NB financials, monthly) for closed months; CICO workbook treasury/CICO/<yymmdd> Jeeves - CICO.xlsx sheet Monthly cash flow (capital investment, debt draws, collateral) and Bank balances (restricted deposits block, NB controlled accounts block) for open months; load CICO with fonts.Font.family.max=255. LTV/CAC quarterly lives in BoD Finance Slides (Pradeep), slide CAC LTV Trends - pull via Slides thumbnail.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-11-02-387": {
+      "id": "pat-2026-11-02-387",
+      "name": "Lender-facing bridges use ONLY numbers already delivered to ",
+      "source": "ep-2026-11-02-013",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T19:36:49.386362+00:00",
+      "category": "general",
+      "pattern": "Lender-facing bridges use ONLY numbers already delivered to that lender (6.01(c) monthly FS in Sent), one column per delivered month, lender line items only, closing ties to delivered FS with a 0 difference row. No treasury/CICO data, no prelim months, no plugs, no basis adjustments.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-11-02-388": {
+      "id": "pat-2026-11-02-388",
+      "name": "Lender tie-outs are built from the delivered BBC workbook it",
+      "source": "ep-2026-11-02-014",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T19:39:07.814738+00:00",
+      "category": "general",
+      "pattern": "Lender tie-outs are built from the delivered BBC workbook itself (bank_accts S x T, liquidity tab), one date, assert the reported Liquidity to the cent; no CICO balances, no internal flags on the lender-facing tab.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-11-02-389": {
+      "id": "pat-2026-11-02-389",
+      "name": "Do exactly the literal instruction in the same pass; never l",
+      "source": "ep-2026-11-02-015",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T20:22:26.680662+00:00",
+      "category": "general",
+      "pattern": "Do exactly the literal instruction in the same pass; never leave text in a cell inside a SUM range (use an estimate labeled in a note); evaluate every total programmatically before re-uploading; when told high level, one column, <=6 sublines, no detail tabs.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-11-02-390": {
+      "id": "pat-2026-11-02-390",
+      "name": "Cash bridge for lenders = pure bank cash. Cash P&L line must",
+      "source": "ep-2026-11-02-016",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T20:27:48.753937+00:00",
+      "category": "general",
+      "pattern": "Cash bridge for lenders = pure bank cash. Cash P&L line must come from CICO Monthly cash flow (Revenue + corp interest - Costs incl. debt interest), never GAAP net loss + non-cash addbacks + capitalized software. Hardcoded bridge numbers must cite a source row.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-capital-markets"
+      ]
+    },
+    "pat-2026-11-02-391": {
+      "id": "pat-2026-11-02-391",
+      "name": "One Plan = CICO and FP&A main screens unchanged, both fed by",
+      "source": "ep-2026-11-02-017",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T21:23:07.632501+00:00",
+      "category": "general",
+      "pattern": "One Plan = CICO and FP&A main screens unchanged, both fed by ONE shared build-up (usage, revenue, receivables, collateral, funding, opex) from automated sources. Do not port each workbook's build-up separately to tie to the cent; that reproduces the 14 CICO-vs-v9 conflicts. Do not invent new main screens.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-11-02-392": {
+      "id": "pat-2026-11-02-392",
+      "name": "Run One Plan feeds or scripts that write to its DB with the ",
+      "source": "ep-2026-11-02-018",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T22:57:08.758339+00:00",
+      "category": "general",
+      "pattern": "Run One Plan feeds or scripts that write to its DB with the one-plan .venv python, never PYTHON_PATH: different xgboost and pandas versions moved the usage forecast about 8 pct on identical data (2026-11-02)",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-cico"
+      ]
+    },
+    "pat-2026-11-02-393": {
+      "id": "pat-2026-11-02-393",
+      "name": "One Plan receivables book regular_payments already include f",
+      "source": "ep-2026-11-02-019",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-02",
+      "last_applied": "2026-11-02T23:39:03.391932+00:00",
+      "category": "general",
+      "pattern": "One Plan receivables book regular_payments already include fees billed into the portfolio; when feeding book collections into the CICO credit_collections leaf do NOT add CICO in-statement revenue on top (double counts about 7M a month). Also: Brian expects visible screen changes, not engine-only progress; ship the screen with the engine step.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-cico"
+      ]
+    },
+    "pat-2026-11-03-394": {
+      "id": "pat-2026-11-03-394",
+      "name": "Before every in-place files().update, re-download the CURREN",
+      "source": "ep-2026-11-03-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-03",
+      "last_applied": "2026-11-03T01:21:08.023218+00:00",
+      "category": "general",
+      "pattern": "Before every in-place files().update, re-download the CURRENT revision as the base (never a copy from an earlier turn) and assert modifiedTime matches what you downloaded right before uploading.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "google-drive"
+      ]
+    },
+    "pat-2026-11-03-395": {
+      "id": "pat-2026-11-03-395",
+      "name": "Before calling a forecast miss, compare month-AVERAGE as wel",
+      "source": "ep-2026-11-03-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-03",
+      "last_applied": "2026-11-03T09:08:22.390066+00:00",
+      "category": "general",
+      "pattern": "Before calling a forecast miss, compare month-AVERAGE as well as month-END: Oct-26 avg balance grew +9.3% and was forecast within 1.4%; only the EOM print (Saturday, heavy late collections) missed. Also: receivable_forecast_oof.csv actuals cover only the 7 material series (no OTHER/CA), so never compare them to scorecard totals - that made me falsely claim restated actuals.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-11-03-396": {
+      "id": "pat-2026-11-03-396",
+      "name": "Never tell Brian a machine/service behavior will work after ",
+      "source": "ep-2026-11-03-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-03",
+      "last_applied": "2026-11-03T10:06:15.681590+00:00",
+      "category": "general",
+      "pattern": "Never tell Brian a machine/service behavior will work after reboot/update/login-screen (persistence, autostart, pre-login access) until the exact scenario was exercised end-to-end and observed in logs. Say: configured, untested, here is the test. 2026-11-02 claim that RustDesk works at the sign-in screen after restart failed after a Windows update -> you lied; only the later 20-min sign-in-screen test proved it.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "general"
+      ]
+    },
+    "pat-2026-11-03-397": {
+      "id": "pat-2026-11-03-397",
+      "name": "Churn/dormancy labels at Jeeves: Jeeves-initiated exits are ",
+      "source": "ep-2026-11-03-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-03",
+      "last_applied": "2026-11-03T18:47:07.370592+00:00",
+      "category": "general",
+      "pattern": "Churn/dormancy labels at Jeeves: Jeeves-initiated exits are NOT churn. Back out delinquency (loc_tape daily DPD>=30, charge-off, repayment plan) AND credit limit cut to 0 (cut at/before last txn). Keep non-credit customers in the population. Dormant tag = 90-123d no txn, so condition on txn in t and label t+4..t+6.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-11-03-398": {
+      "id": "pat-2026-11-03-398",
+      "name": "Before editing a One Plan worktree, run git log -3 / git sta",
+      "source": "ep-2026-11-03-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-03",
+      "last_applied": "2026-11-03T21:55:18.639105+00:00",
+      "category": "general",
+      "pattern": "Before editing a One Plan worktree, run git log -3 / git status and ticket_list: a watchdog re-dispatch of the same ticket can be committing in the same worktree (2026-11-03: PR #50 landed mid-turn while I was building the same change). If HEAD moved or another run owns the ticket, branch from origin/main and only add what is not already there.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-11-04-399": {
+      "id": "pat-2026-11-04-399",
+      "name": "On any model build, run the standard checklist BEFORE report",
+      "source": "ep-2026-11-04-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-04",
+      "last_applied": "2026-11-04T10:08:12.832434+00:00",
+      "category": "general",
+      "pattern": "On any model build, run the standard checklist BEFORE reporting results or claiming a ceiling: leakage audit (features available at prediction time), out-of-time holdout, segment split (credit vs non-credit), feature selection (RFE/permutation), and 2+ model families. Never answer an improve-it ask with options or a data-limit claim; try the levers, report what moved. Do not rerun an identical 4-min job expecting different output.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-11-04-400": {
+      "id": "pat-2026-11-04-400",
+      "name": "Every CICO email selector must regex-match the original subj",
+      "source": "ep-2026-11-04-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-04",
+      "last_applied": "2026-11-04T17:34:33.874990+00:00",
+      "category": "general",
+      "pattern": "Every CICO email selector must regex-match the original subject; OOO and Re/Fwd replies share the subject string",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-11-04-401": {
+      "id": "pat-2026-11-04-401",
+      "name": "Before reporting any 7.01(a) result, tie Liquidity to the CI",
+      "source": "ep-2026-11-04-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-04",
+      "last_applied": "2026-11-04T19:45:09.465357+00:00",
+      "category": "general",
+      "pattern": "Before reporting any 7.01(a) result, tie Liquidity to the CICO NB Liquidity block total; a mismatch is a build bug until proven otherwise",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

@@ -500,10 +500,21 @@ def find_month_end_cico(me):
     """Mariana's '<YYMMDD> CICO- Daily balances' for the last business day of
     the month. Returns a Gmail message id or None (never falls back to the
     latest file -- a month-end certificate must carry month-end balances)."""
+    # 2026-11-04: ids[0] was Debbie's 'Out of Office Re: 261030 CICO - Daily balances'
+    # auto-reply (no table) and the Oct month-end build died. Only an ORIGINAL
+    # '<YYMMDD> CICO - Daily balances' send counts -- same rule as build_nb.py.
+    import re
     bd = last_business_day_on_or_before(me)
     stamp = bd.strftime('%y%m%d')
-    ids = _gmail_ids('subject:"' + stamp + ' CICO" newer_than:180d', 5)
-    return (ids[0] if ids else None), bd
+    orig = re.compile(r'^\s*' + stamp + r'\s*CICO\s*-?\s*Daily balances\s*$', re.I)
+    svc = _gmail()
+    for mid in _gmail_ids('subject:"' + stamp + ' CICO" newer_than:180d', 30):
+        md = svc.users().messages().get(userId='me', id=mid, format='metadata',
+                                        metadataHeaders=['Subject']).execute()
+        subj = {h['name'].title(): h['value'] for h in md['payload'].get('headers', [])}.get('Subject', '')
+        if orig.match(subj):
+            return mid, bd
+    return None, bd
 
 
 def _pstate(state, me):

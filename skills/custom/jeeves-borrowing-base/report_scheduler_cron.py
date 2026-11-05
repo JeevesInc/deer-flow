@@ -579,9 +579,11 @@ def run_sofom_distribution(message_id: str, subject: str):
         # SOFOM_AUTO_SEND=0 reverts to draft-only.
         _per_day = [len(x) for x in dfs]
         _complete = len(_per_day) == 3 and all(n > 0 for n in _per_day)
-        # 2026-11-02 Brian supersedes the 09-30 auto-send: every external message needs his
-        # per-message approval, so the SOFOM tape is a reply-all DRAFT he sends. Do not re-enable.
-        _auto = False
+        # 2026-11-02 outbound lockdown made this draft-only; 2026-11-04 Brian granted the
+        # SOFOM tape a standing exemption ("You need to override"). The exemption is
+        # outbound_policy.EXEMPTIONS['sofom_tape']: every recipient must be Jeeves or CXC,
+        # and the draft must sit on this distribution thread, or it stays a draft.
+        _auto = os.environ.get('SOFOM_AUTO_SEND', '1') != '0'
         _draft_id = None
         for _ln in result.stdout.splitlines():
             if 'Draft ID:' in _ln:
@@ -595,7 +597,23 @@ def run_sofom_distribution(message_id: str, subject: str):
                 if _gdir not in _sys.path:
                     _sys.path.insert(0, _gdir)
                 import gmail_tool as _gt
-                raise RuntimeError('auto-send removed 2026-11-02 (outbound policy)')
+                from outbound_policy import assert_exempt_emails
+                _svc = _gt._get_service()
+                _src = _svc.users().messages().get(
+                    userId='me', id=message_id, format='minimal').execute()
+                _dmsg = _svc.users().drafts().get(
+                    userId='me', id=_draft_id, format='metadata').execute()['message']
+                _dh = {h['name'].lower(): h['value']
+                       for h in _dmsg.get('payload', {}).get('headers', [])}
+                if _dmsg.get('threadId') != _src.get('threadId'):
+                    raise RuntimeError(f"draft is not on the distribution thread "
+                                       f"({_dmsg.get('threadId')} != {_src.get('threadId')})")
+                if not SOFOM_SUBJECT_RE.search(_dh.get('subject', '')):
+                    raise RuntimeError(f"draft subject is not a SOFOM distribution: {_dh.get('subject')!r}")
+                assert_exempt_emails([_dh.get('to'), _dh.get('cc'), _dh.get('bcc')],
+                                     'sofom_tape', context=f'SOFOM tape {fname}')
+                _sent = _svc.users().drafts().send(
+                    userId='me', body={'id': _draft_id}).execute()
                 log.info(f"SOFOM reply SENT: message {_sent.get('id')} (draft {_draft_id})")
                 _post_slack(_hdr + 'Sent reply-all on the distribution thread.')
             except Exception as _se:
@@ -603,7 +621,7 @@ def run_sofom_distribution(message_id: str, subject: str):
                 _post_slack(_hdr + f':warning: Auto-send failed (`{str(_se)[:150]}`) '
                             '-- draft left in Gmail. Review and send.')
         else:
-            _why = ('external sends need your approval' if not _auto else
+            _why = ('SOFOM_AUTO_SEND=0' if not _auto else
                     'a day returned 0 rows' if not _complete else
                     'draft id not found in gmail_tool output')
             log.warning(f'SOFOM auto-send skipped: {_why}')
@@ -648,6 +666,8 @@ def run_portfolio_report():
             f"Run it manually."
         )
         log.error("Portfolio report failed.")
+        # 2026-11-02: interrupted agent run returned None but state was stamped completed.
+        raise RuntimeError("Portfolio report agent run failed or was interrupted")
 
 
 def run_mx_bb():

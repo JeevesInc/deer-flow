@@ -113,3 +113,7 @@ skills/public/self-improving-agent/memory/code-backups/
 
 # Timestamped .bak copies left by patch/self-edit tooling
 *.bak-*
+
+# Windows reserved device name: shell redirects like `2>NUL` under bash create a
+# literal file that git cannot index ("invalid path 'NUL'"), breaking selfedit-commit.
+[Nn][Uu][Ll]

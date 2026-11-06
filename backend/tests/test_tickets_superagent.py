@@ -260,3 +260,34 @@ def test_tickets_router(tmp_path, monkeypatch):
     assert c.get("/api/tickets").json()["count"] == 1
     page = c.get("/tickets").text
     assert t["id"] in page and "&lt;CIM&gt;" in page
+
+
+# -- regressions: re-dispatch payload + judge parsing -------------------------
+
+
+def test_run_body_sets_context_not_configurable():
+    """LangGraph 0.6+ 400s a run that sets both configurable and context."""
+    from deerflow.tickets import runner as R
+
+    body = R.run_body("th1", "resume")
+    assert "configurable" not in body["config"]
+    assert body["context"]["thread_id"] == "th1" and body["context"]["thinking_enabled"] is True
+    assert body["config"]["recursion_limit"] == 500
+
+
+def _msg(*blocks, stop_reason="end_turn"):
+    return SimpleNamespace(content=list(blocks), stop_reason=stop_reason)
+
+
+def test_parse_verdict_skips_thinking_blocks():
+    W = _load_watchdog()
+    thinking = SimpleNamespace(type="thinking", thinking="")
+    text = SimpleNamespace(type="text", text='{"verdict": "looping", "reason": "same query thrice"}')
+    assert W.parse_verdict(_msg(thinking, text))["verdict"] == "looping"
+
+
+def test_parse_verdict_thinking_only_names_stop_reason():
+    """The old failure: thinking ate max_tokens, no text, opaque JSONDecodeError."""
+    W = _load_watchdog()
+    with pytest.raises(ValueError, match="stop_reason=max_tokens"):
+        W.parse_verdict(_msg(SimpleNamespace(type="thinking", thinking=""), stop_reason="max_tokens"))

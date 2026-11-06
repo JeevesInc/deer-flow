@@ -179,13 +179,22 @@ def judge(mandate: str, actions: str) -> dict:
     import anthropic
 
     client = anthropic.Anthropic()
+    # Opus 5.5 always thinks; a 200-token cap was spent entirely on thinking,
+    # returned no text block, and every verdict failed to parse.
     msg = client.messages.create(
         model=JUDGE_MODEL,
-        max_tokens=200,
+        max_tokens=4000,
+        output_config={"effort": "low"},
         messages=[{"role": "user", "content": JUDGE_PROMPT.format(mandate=mandate[:3000], actions=actions)}],
     )
-    text = "".join(getattr(b, "text", "") for b in msg.content).strip()
+    return parse_verdict(msg)
+
+
+def parse_verdict(msg) -> dict:
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
     start, end = text.find("{"), text.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError(f"no JSON in judge reply (stop_reason={getattr(msg, 'stop_reason', None)}): {text[:200]!r}")
     out = json.loads(text[start : end + 1])
     if out.get("verdict") not in ("on_track", "drifting", "looping"):
         raise ValueError(f"bad verdict: {text[:200]}")

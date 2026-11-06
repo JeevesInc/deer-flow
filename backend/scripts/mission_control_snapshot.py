@@ -753,7 +753,10 @@ def refresh_forecast(conn, run_model=False, weeks=26):
     run_model=True re-runs the model to a 26-week horizon (about 16 min; daily since 2026-10-26)."""
     import glob, subprocess
     import pandas as pd
-    outdir = os.environ.get('OUTPUTS_PATH') or os.path.join(DEER, 'backend', '.deer-flow', '_mission_control')
+    # 2026-11-05 (Brian): "that 930a run should drive all the downstream use cases" - read the daily 9:30 run's
+    # published forecast (26 weeks), never re-run the model here
+    run_model = False
+    outdir = os.path.join(DEER, 'backend', '.deer-flow', 'forecasts', 'latest')
     os.makedirs(outdir, exist_ok=True)
     if run_model:
         through = (dt.date.today() + dt.timedelta(weeks=weeks)).isoformat()
@@ -762,18 +765,29 @@ def refresh_forecast(conn, run_model=False, weeks=26):
         r = subprocess.run([sys.executable, script, '--through', through, '--no-upload', '--no-slack', '--no-ledger', '--no-collections'],
                            capture_output=True, text=True, timeout=3600, env=env)
         log('forecast run rc', r.returncode, r.stdout[-200:])
-    files = sorted(glob.glob(os.path.join(outdir, 'Model - Receivable Balance Forecast - *.xlsx')), key=os.path.getmtime)
+    files = [p for p in [os.path.join(outdir, 'receivables_workbook.xlsx')] if os.path.exists(p)]
     if not files:
         log('no forecast workbook in', outdir); return
     f = files[-1]
     w = pd.read_excel(f, sheet_name='Forecast daily')
+    lp = os.path.join(outdir, 'receivables_long_workbook.xlsx')
+    if os.path.exists(lp):   # 26-week tail from the same 9:30 run; the main fit owns every day it covers, tail levelled to it
+        wl = pd.read_excel(lp, sheet_name='Forecast daily')
+        d0 = w['Date'].max(); ref = wl[wl['Date'] == d0]
+        tail = wl[wl['Date'] > d0].copy()
+        if len(ref):
+            for c in [c for c in w.columns if c != 'Date' and c in tail.columns]:
+                r0 = float(ref[c].iloc[0])
+                if r0:
+                    tail[c] = tail[c] * float(w.loc[w['Date'] == d0, c].iloc[0]) / r0
+        w = pd.concat([w, tail[[c for c in w.columns if c in tail.columns]]], ignore_index=True)
     if w['Date'].max() < pd.Timestamp(dt.date.today() + dt.timedelta(weeks=12)):
         log('latest forecast workbook is short-horizon - forward view keeps the prior path'); return
     hm = pd.read_excel(f, sheet_name='Hold-out metrics')
     tot = hm[hm['series'].astype(str).str.upper().str.startswith('TOTAL')]
     wape = float(tot['wape_model'].iloc[0]) if len(tot) else None
     nb_cols = [c for c in w.columns if str(c).split(' | ')[0] in ('US', 'CO', 'BR')]
-    run_as_of = re.search(r'(\d{8})', os.path.basename(f)).group(1)
+    run_as_of = __import__('json').load(open(os.path.join(outdir, 'manifest.json')))['run_as_of'].replace('-', '')
     rows = [(dt.datetime.strptime(run_as_of, '%Y%m%d').date(), r.Date.date(), float(r[nb_cols].sum()),
              float(r['MX | Card'] + r['MX | Jeeves Pay']), float(r['TOTAL']), float(r['TOTAL P10']), float(r['TOTAL P90']), wape)
             for _, r in w.iterrows()]

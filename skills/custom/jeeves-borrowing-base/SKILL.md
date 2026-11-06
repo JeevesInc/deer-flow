@@ -97,6 +97,7 @@ sending that, don't ever draft an email like that."*
   2026-09-23: *"Use the closest date and just fill from that"*; Privy from 9/11 data). Do not stop
   to ask, and do not leave explanatory comments on the lender-facing certificate itself — Brian had
   to say *"Remove errant comments."* Notes go in the Slack delivery, never in the artifact.
+- **EXCEL IS INSTALLED (Office16 EXCEL.EXE, win32com works as SYSTEM — verified 2026-11-05; Brian: "it's my laptop, I know it has Excel").** Never claim "no Excel". Recalc / screenshot a workbook via COM: DispatchEx('Excel.Application'), Workbooks.Open(copy, UpdateLinks=0), CalculateFull(), Range.CopyPicture(1,2) -> ChartObjects.Add -> Chart.Paste -> Chart.Export(png). Pattern: workspace excel_shot.py. A Summary screenshot = this Excel render, never an HTML mock or Sheets export.
 - **There is no LibreOffice/soffice on this box** — do not write recalc/convert scripts that shell
   out to it (two failed attempts 2026-09-23, `recalc.py` and `rc.py`). Recompute in Python; for PDF
   page images use a Python PDF library.

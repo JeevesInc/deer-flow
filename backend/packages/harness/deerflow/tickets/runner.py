@@ -71,6 +71,21 @@ def thread_status(http, thread_id: str) -> str | None:
         return None
 
 
+def run_body(thread_id: str, prompt: str) -> dict:
+    """Run payload for LangGraph 0.6+: run params go in ``context`` only.
+
+    The server copies ``context`` into ``configurable`` itself and rejects a
+    body that sets both with a 400, which silently killed every re-dispatch.
+    """
+    return {
+        "assistant_id": "lead_agent",
+        "input": {"messages": [{"role": "human", "content": prompt}]},
+        "config": {"recursion_limit": 500},
+        "context": {"thinking_enabled": True, "is_plan_mode": False, "subagent_enabled": False, "thread_id": thread_id},
+        "multitask_strategy": "reject",
+    }
+
+
 def run_on_ticket(ticket: dict, prompt: str, *, on_start=None, post=slack_send) -> str:
     """Blocking. Raises ThreadBusy if the Ticket's thread already has a run."""
     import httpx
@@ -87,16 +102,7 @@ def run_on_ticket(ticket: dict, prompt: str, *, on_start=None, post=slack_send) 
             thread_id = r.json()["thread_id"]
         if on_start:
             on_start()
-        body = {
-            "assistant_id": "lead_agent",
-            "input": {"messages": [{"role": "human", "content": prompt}]},
-            "config": {
-                "recursion_limit": 500,
-                "configurable": {"thinking_enabled": True, "is_plan_mode": False, "subagent_enabled": False, "thread_id": thread_id},
-            },
-            "context": {"thread_id": thread_id},
-            "multitask_strategy": "reject",
-        }
+        body = run_body(thread_id, prompt)
         r = http.post(f"{LANGGRAPH_URL}/threads/{thread_id}/runs/wait", json=body)
         r.raise_for_status()
         text = extract_text(r.json())

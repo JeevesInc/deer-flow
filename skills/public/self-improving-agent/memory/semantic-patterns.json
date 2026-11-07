@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 311,
+      "applications": 313,
       "created": "2026-04-07",
-      "last_applied": "2026-11-05T17:43:02.044137+00:00",
+      "last_applied": "2026-11-07T10:04:47.438032+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6478,6 +6478,22 @@
       "solution": "",
       "target_skills": [
         "cfo-org-kb"
+      ]
+    },
+    "pat-2026-11-06-406": {
+      "id": "pat-2026-11-06-406",
+      "name": "In shared channels on the MX BB: open my own latest master f",
+      "source": "ep-2026-11-06-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-06",
+      "last_applied": "2026-11-06T17:05:41.347051+00:00",
+      "category": "general",
+      "pattern": "In shared channels on the MX BB: open my own latest master first, read Exhibit A inputs against the executed CIM agreement before calling any input wrong, give one walk in one currency, never speculate about bugs or customer postings in front of the team - send uncertainties to Brian privately",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
       ]
     }
   }

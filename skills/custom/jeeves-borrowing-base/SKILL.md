@@ -187,6 +187,13 @@ answer this question from the skill's prose alone.
 
 ## MX Borrowing Base (SOFOM)
 
+### HARD RULES - MX BB (Brian, 2026-11-06)
+- **FX = that day's tape, always.** Brian: *"use the daily tape FX moving forward."* `merge_template.py` writes Exhibit A L6 (USD/MXN; feeds Exhibit B) = median tape MXN rate for the build date and fails closed if the tape has none. The template's old hardcoded 16.95 (unchanged since at least 9/25) hid the deficit: 11/5 was -$3.07M at 16.95 vs -$8.36M at tape 18.7723. Never quote a BB built at a carried/fixed rate.
+- **Asked about the MX BB in a shared channel -> open YOUR latest master first.** The scheduler builds and uploads `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx` to `CIM/{YYYYMM}/MX/` (~08:46). Never say "I don't have today's copy" - Brian: *"you finished the borrowing base at 8:46, don't make excuses, you have everything you need."* If a restricted session can't read state files, search the Drive folder.
+- **No speculation in front of the team.** Check Exhibit A inputs against the executed CIM agreement before calling any input a "bug"; give ONE walk in ONE currency (label MXN/USD); never ask the team which cell they read; never say "that's Brian's decision" in channel. Doubts go to Brian privately. Brian: *"super embarrassing. You don't sound like you know what you're talking about"* -> *"Can you just answer the original fucking question."*
+- **One number everywhere.** DM and channel got two different 11/5 deficits (-$8.7M vs -$8.36M) within minutes. The rebuilt master (Excel recalc) is the figure of record; reuse it, never recompute ad hoc.
+- **Inputs still carried, not refreshed [Needs Confirmation vs agreement]:** collection-account cash (MXN 25.5M every day since Sept), swap MTM, payment rate. Don't call them wrong in channel; confirm the source with Brian.
+
 ### 1. Generate data
 
 ```bash

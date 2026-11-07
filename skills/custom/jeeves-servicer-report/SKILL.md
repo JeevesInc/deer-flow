@@ -109,7 +109,9 @@ print (June report 17.47 vs tape 17.4972), so always state which source was used
 Exhibit A L12 plus L13:L22 minus L25 does NOT tie to zero and never has (June 220.9M, July 69.7M gap).
 It is a display block, not a check - do not try to fix it or report it as a build error. `repayment`
 (Modified Receivables) came back identical to the cent two months running (37,299,580.41) - it is a
-stock, not a flow; flag it rather than assuming a query bug.
+stock, not a flow; flag it rather than assuming a query bug. **Recurred Oct-26: Sept and Oct both 39,881,625** - the query returns a running total. Resolve with Brian BEFORE the Marisol draft goes out; never end a turn with "probably wrong, haven't fixed it yet".
+
+**Describe validation precisely (Brian 2026-11-06: *"Why would this month match last month to the cent?"*).** Write "I rebuilt the SEPTEMBER period with the new code and it reproduces the September report you sent, to the cent" - never "matched last month" or "same figure she confirmed last month". Any line identical to the prior month is a suspected stock/cumulative field to call out, not a pass.
 
 Brian's standing fills (2026-08-10): bank balances = 0, no draws in a month with no new draw rows,
 hedge MTM and collection-account available amount are his; he wants the FX spot filled by the agent.

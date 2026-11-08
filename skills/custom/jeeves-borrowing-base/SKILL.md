@@ -230,6 +230,8 @@ An NB draw / Borrowing Request draft to the agent (WTNA) attaches **the borrowin
 3. **Post-signature fixes: never ask the signer to re-sign.** Regenerate the corrected pages and collate the existing signed signature pages into the updated PDF. Brian: *"we are not having him sign it again... just collate his signature page with the updated PDF."*
 4. **Before rewriting any `.deer-flow/*.json` state file, grep its consumers** (`cfo-org-kb/scripts`, `skills/custom`) and keep existing keys. 10/16: rewriting `nb_liquidity_reported.json` to a per-date schema broke `mission_control_snapshot.py` (`KeyError: 'liquidity'`) and dashboard 11645 showed the prior day until Brian said "so fix it?".
 
+5. **The draw AMOUNT comes from Brian's latest outbound statement, never an assumption.** Before filling a Borrowing Request, pro forma liquidity or pro forma Loans, search `in:sent newer_than:7d` to Goodwin, Akin, NB, WTNA and Alex for the amount, and cite the message in the reply. 2026-11-07: the First Amendment package for Melissa (draft `1a1b9c7ebd9dca4a`) was built at $50M ($79.2M pro forma liquidity, $150M pro forma Loans) and Brian was asked to confirm it. Twelve hours earlier he had already written to Tyler Garaffa: *"fully drawn and plan on 5M additional DDTL at closing"*. Only if no outbound amount exists, ask, and leave the amount blank in the docs instead of filling in a guess.
+
 ## NB borrowing base certificate — facility-specific rules (2026-07-28, Brian)
 
 1. **Collateral is NOT netted out of eligible receivables.** Credit support (AIG

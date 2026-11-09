@@ -106,10 +106,7 @@ DQ SUMIFS). FX source that keeps the workbook internally consistent: reciprocal 
 `loc_tape.spot_rate` at EOP (7-31-26 gives 17.3476); prior months used a slightly different market
 print (June report 17.47 vs tape 17.4972), so always state which source was used.
 
-Exhibit A L12 plus L13:L22 minus L25 does NOT tie to zero and never has (June 220.9M, July 69.7M gap).
-It is a display block, not a check - do not try to fix it or report it as a build error. `repayment`
-(Modified Receivables) came back identical to the cent two months running (37,299,580.41) - it is a
-stock, not a flow; flag it rather than assuming a query bug. **Recurred Oct-26: Sept and Oct both 39,881,625** - the query returns a running total. Resolve with Brian BEFORE the Marisol draft goes out; never end a turn with "probably wrong, haven't fixed it yet".
+Exhibit A L12 plus L13:L22 minus L25 MUST tie (L12 + monthly flows - L25 = 0). A non-zero gap or any line identical to the prior month is a BUILD ERROR to trace and fix before the draft goes to Marisol - never 'display only', never 'flag, don't fix' (that framing hid this bug Jun-Oct 2026). Fix the WHOLE block L13:L22 (and the query), not just the line Brian named; never end with 'should I fix the rest?'. **ROOT CAUSE (found 2026-11-08): loc_acct_rollforward_sofom.sql never uses start_date - every flow CTE windows on assignment_dt+1..end_date, so L13:L22 are INCEPTION-TO-DATE, not monthly; that is also why the L12+L13..L22-L25 gap never ties.** Monthly flow = this month's rf minus prior month's rf (Oct disbursements diff 262,709,293 = tape daily sum exactly). Modified Receivables for the month = balance of companies whose repayment_dt (min is_in_repayment dt - 1) falls in [start_date, end_date-1]; Oct-26 = 0 (last entry 8482 on 2026-08-13). Brian 2026-11-08: *"You fix the modified receivables line, why are you delegating work to me"* - fix it yourself, never hand a known-bad line back to him.
 
 **Describe validation precisely (Brian 2026-11-06: *"Why would this month match last month to the cent?"*).** Write "I rebuilt the SEPTEMBER period with the new code and it reproduces the September report you sent, to the cent" - never "matched last month" or "same figure she confirmed last month". Any line identical to the prior month is a suspected stock/cumulative field to call out, not a pass.
 

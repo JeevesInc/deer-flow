@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 318,
+      "applications": 320,
       "created": "2026-04-07",
-      "last_applied": "2026-11-09T10:08:49.972365+00:00",
+      "last_applied": "2026-11-09T20:17:24.243083+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6494,6 +6494,22 @@
       "solution": "",
       "target_skills": [
         "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-11-10-407": {
+      "id": "pat-2026-11-10-407",
+      "name": "Before saying a CICO item is missing from Cash Planner, sear",
+      "source": "ep-2026-11-10-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-10",
+      "last_applied": "2026-11-10T10:10:50.673443+00:00",
+      "category": "general",
+      "pattern": "Before saying a CICO item is missing from Cash Planner, search BOTH the cash-planner app and cfo-org-kb (9:30 run scripts) and name both searches",
+      "problem": "2026-11-09 CICO-notes review: told Brian a CICO item was not in Cash Planner after searching only the cash-planner app",
+      "solution": "",
+      "target_skills": [
+        "jeeves-cico"
       ]
     }
   }

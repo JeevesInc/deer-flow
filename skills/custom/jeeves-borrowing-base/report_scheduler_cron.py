@@ -1447,6 +1447,63 @@ def run_mission_control():
     log.info(f"run_mission_control: published\n{(r.stdout or '')[-300:]}")
 
 
+def _run_aig_dcl_claims(txt_path, yyyymmdd, outputs_dir, skills_dir, env, now_local):
+    """AIG DCL claims report on the TEX file AIG just received (added 2026-11-09, Brian:
+    "work it into the pipeline every time we upload to Tex"). Logic = Pablo Cortina's
+    'AIG DCL Claims Report: Replication Guide'; see aig_dcl_claims.py. Files the report and
+    the TEX file to Drive (Brian's AIG > TEX Weekly Uploads) and DMs Brian the key figures."""
+    import importlib.util, subprocess
+    import pandas as pd
+    runner = os.path.join(skills_dir, '..', 'jeeves-redshift', 'sql_runner.py')
+    fx_sql = os.path.join(skills_dir, '..', 'cfo-org-kb', 'sql', 'aig_dcl_fx_daily.sql')
+    fx_csv = os.path.join(outputs_dir, 'aig_dcl_fx_' + yyyymmdd + '.csv')
+    r = subprocess.run([sys.executable, runner, '--file', fx_sql, '--output', fx_csv,
+                        '--statement-timeout', '900'], capture_output=True, text=True, timeout=1800,
+                       encoding='utf-8', errors='replace', env=env)
+    if r.returncode != 0 or not os.path.exists(fx_csv):
+        raise RuntimeError('FX query failed (rc=' + str(r.returncode) + '): '
+                           + ((r.stdout or '') + (r.stderr or ''))[-600:])
+    spec = importlib.util.spec_from_file_location('aig_dcl_claims', os.path.join(skills_dir, 'aig_dcl_claims.py'))
+    dcl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dcl)
+    tex = pd.read_csv(txt_path, sep='|', dtype=str, keep_default_na=False)
+    fx = pd.read_csv(fx_csv)
+    fx = fx[fx['currency'].astype(str).str.strip().isin(set(tex['currency'].str.strip()) - {'USD'})]
+    rep, s, diag = dcl.build(tex, fx, as_of=now_local.date())
+    xlsx = os.path.join(outputs_dir, 'AIG DCL Claims Report - ' + yyyymmdd + '.xlsx')
+    dcl.write_xlsx(rep, s, xlsx, os.path.basename(txt_path), diag)
+
+    folder = os.environ.get('AIG_TEX_DRIVE_FOLDER', '1yl0YDU-7H6Jx9KIEFvGYrHEM-IPDg_Dq')
+    up = os.path.join(skills_dir, '..', 'google-drive', 'upload_to_drive.py')
+    links = {}
+    for f in (xlsx, txt_path):
+        u = subprocess.run([sys.executable, up, f, '--folder', folder, '--new'], capture_output=True,
+                           text=True, timeout=600, encoding='utf-8', errors='replace', env=env)
+        m = re.search(r'Link: (\S+)', u.stdout or '')
+        if u.returncode != 0 or not m:
+            raise RuntimeError('Drive upload failed for ' + os.path.basename(f) + ': '
+                               + ((u.stdout or '') + (u.stderr or ''))[-400:])
+        links[f] = m.group(1)
+
+    usd = lambda v: '$' + format(v / 1e6, ',.1f') + 'M'
+    _post_slack(
+        ':shield: *AIG DCL claims report -- ' + now_local.strftime('%a %d %b %Y') + '* (on `'
+        + os.path.basename(txt_path) + '`)' + chr(10)
+        + '- ' + format(s['eligible'], ',') + ' eligible invoices / ' + format(s['customers'], ',')
+        + ' customers (' + format(s['past_due'], ',') + ' past due, ' + format(s['not_yet_due'], ',') + ' not yet due)' + chr(10)
+        + '- Unpaid ' + usd(s['total_unpaid']) + ' | claimable under limits ' + usd(s['total_claimable'])
+        + ' | fileable now (180+ DPD) ' + usd(s['claimable_fileable_now']) + ' on '
+        + str(s['invoices_fileable_now']) + ' invoices' + chr(10)
+        + '- Suspended (60-DPD) ' + str(s['suspended']) + ' | capped ' + str(s['capped'])
+        + ' | named-limit ' + str(s['named_invoices']) + '/' + str(s['named_customers'])
+        + ' | RPP ' + str(s['rpp_invoices']) + ' invoices / ' + str(s['rpp_customers'])
+        + ' customers, ' + usd(s['rpp_claimable']) + ' claimable' + chr(10)
+        + 'Report: ' + links[xlsx] + chr(10) + 'TEX file: ' + links[txt_path]
+    )
+    log.info('run_aig_tex_file: DCL claims report done ' + str({k: v for k, v in s.items() if k != 'as_of'}))
+    return s, links
+
+
 def run_aig_tex_file():
     """Build the weekly AIG/Aronova TEX invoice-history file and post it to Brian's DM.
 
@@ -1570,6 +1627,15 @@ def run_aig_tex_file():
                             encoding='utf-8', errors='replace', env=env)
         if r2.returncode != 0:
             raise RuntimeError('Slack upload failed: ' + ((r2.stdout or '') + (r2.stderr or ''))[-500:])
+
+        # -- 5. AIG DCL claims report (Pablo's replication guide, added 2026-11-09) --
+        # Own try: the upload already succeeded, so a failure here must not read as a TEX failure.
+        try:
+            _run_aig_dcl_claims(txt_path, yyyymmdd, outputs_dir, skills_dir, env, now_local)
+        except Exception as dcl_exc:
+            log.error('run_aig_tex_file: DCL claims report failed: ' + str(dcl_exc), exc_info=True)
+            _post_slack(':warning: *AIG DCL claims report* failed -- the TEX upload itself was OK.'
+                        + chr(10) + '`' + str(dcl_exc)[:600] + '`')
 
         log.info('run_aig_tex_file: done. ' + str(stats))
 

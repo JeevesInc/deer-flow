@@ -863,6 +863,28 @@ def _read_mx_sofom(wb) -> dict:
     return out
 
 
+# The SOFOM BB of record is the daily BB pipeline's master in the CIM MX BB folder. Drive also holds same-named copies
+# saved elsewhere (e.g. 2026-11-10 20:46Z, a 20261109 copy with MXN 284.1M typed into the collection-account cash, L54),
+# and "newest modified anywhere" picked those: the state flipped to a +$7.4M excess while the BB run showed -$6.2M
+# (Brian 2026-11-10: "we have a deficiency, you see it every day when we run the BB").
+SOFOM_BB_FOLDER = os.environ.get("SOFOM_BB_FOLDER", "10awZXyaElSUsK2fRnMOG7gOJ9QXH2Ev8")
+
+
+def _latest_pipeline_sofom(svc):
+    import re as _re
+    try:
+        fs = svc.files().list(
+            q=f"'{SOFOM_BB_FOLDER}' in parents and name contains 'SOFOM Borrowing Base - Master' and trashed=false",
+            fields="files(id,name,modifiedTime)", orderBy="modifiedTime desc", pageSize=50,
+            supportsAllDrives=True, includeItemsFromAllDrives=True).execute().get("files", [])
+    except Exception as e:  # noqa: BLE001
+        log.error("SOFOM BB folder listing failed (%s); falling back to Drive-wide search", e)
+        return None
+    fs = [f for f in fs if _re.search(r"Master - \d{8}\.xlsx$", f["name"])]
+    fs.sort(key=lambda f: (_re.search(r"(\d{8})\.xlsx$", f["name"]).group(1), f["modifiedTime"]), reverse=True)
+    return fs[0] if fs else None
+
+
 def fetch_bb_metrics() -> dict:
     """Pull latest US Bridge + MX SOFOM BB from Drive."""
     svc = dfu.get_drive_service()
@@ -872,7 +894,7 @@ def fetch_bb_metrics() -> dict:
     # 2026-08-10 bridge base in the 2026-08-11 digest).
     bridge_enabled = os.environ.get("BRIDGE_BB_ENABLED") == "1"
     bridge_file = dfu.search_latest_bb(svc, "Bridge Borrowing Base") if bridge_enabled else None
-    sofom_file = dfu.search_latest_bb(svc, "SOFOM Borrowing Base")
+    sofom_file = _latest_pipeline_sofom(svc) or dfu.search_latest_bb(svc, "SOFOM Borrowing Base")
 
     us: dict = {}
     if bridge_file:

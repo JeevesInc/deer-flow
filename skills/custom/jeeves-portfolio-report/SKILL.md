@@ -127,13 +127,15 @@ After running `build_portfolio_report.py`, always:
    for August 2026 at $224,219,947.93.
 4. **Third tie-out: BOP continuity — this period's BOP must equal the prior report's EOP (L52 of the template), and any gap is TRACED BEFORE delivery, never just reported.** 2026-10-02 the Sept report shipped flagging a $93,805.28 BOP-vs-Aug-EOP gap as 'worth knowing'; Brian: *"So trace the break"*. Trace = company-level diff of template `loc` (prior EOP) vs this run's BOP rows; for each mover check `is_in_repayment` / RPP start date in GWC (`loan_reference_number LIKE 'RPP%'`), charge-off flag and restated balances. Known cause: accounts flagged into an RPP retroactively AFTER the prior report ran (Sept: companies 30957 + 28826, RPPJVLCOP3251/3250, flagged from 8/26-27) drop out of BOP and are not caught by the in-period Modification line. Deliver the explanation table with the report.
 
+**Charge-Offs & 90+ DPD tab (Brian, 2026-11-02):** the builder now calls charge_off_sheet.add_charge_off_sheet (step 5b) to rebuild the tab each month: LOC + RPP charge-offs in period and LOC 90+ / RPP 90-120 at EOP, by name, sorted by amount. Each section has a check row vs Summary L17 / L60 / L14+L15 / L58 that must be 0.00. Names come from dms_mysql_jeeves_raw.companies because charged-off cos are not on the loc tape.
+
 Known, pre-existing and NOT introduced by the build: 6 error literals on `Summary (2)`
 (`L5 =loc!#REF!` plus five `ARRAY_CONSTRAIN`/`ARRAYFORMULA` Google-Sheets leftovers). `Summary`
 itself is clean. Also: **the builder does NOT refresh the `loans` tab** (nor `Sheet1`) — it
 carries the prior month's rows, which is why Summary rows 21-25 read 0.00 every month.
 
 `Portfolio Reporting/202609/` folder id `1x4_CJ566Lx8ntLIPZTp9ymJ8ZmThkLZb` (created 2026-09-01).
-Template of record for the November build (October period) is now
+2026-11-02: Nov report (Oct period) built, id 1GQTqs1RcNXMnr3VFqrqhNcvzL5j90qo4 in 202611/ (folder id 1VcZ-FmtfKAmh7ae8OZmG7V4OPnc7RyHu) - TEMPLATE OF RECORD for the December build. MoM shift was a no-op again (0 cached col-L); col N written by hand, all 3 tie-outs held. Builder deletes _template_portfolio.xlsx after the run - re-download the template to WORKSPACE for Step 2b. Previous template of record (November build) was
 `Portfolio Report - 20261001.xlsx`, id `1ocnfvrXah-naXrJzVmiI6hpt1ygP_8JB`, in `202610/` (folder id `1mof8L-Cv3XQ9O1Rrxr9bgUiQcXrADZLu`). 2026-10-02: builder crashed on missing `sql/` dir (left in jeeves-borrowing-base at the 9/14 move) - patched to fall back to that dir. The 20260901 template HAD cached col-L values (opened in Excel 9/23), so the MoM shift worked and N4/N5 were correct - still verify every month.
 
 ---

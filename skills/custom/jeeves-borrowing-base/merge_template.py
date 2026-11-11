@@ -185,6 +185,28 @@ def main():
 
             _copy_sheet_data(source_ws, target_ws, add_index=needs_index)
 
+        # SOFOM master: Exhibit A!L6 (USDMXN, feeds Exhibit B) = the latest tape
+        # date's FX, never the template's carried value (Brian 2026-11-06: "use the
+        # daily tape FX moving forward"; L6 had sat at a hardcoded 16.95).
+        # Fail-closed: no FX on the tape -> no workbook.
+        if 'Exhibit A' in template_wb.sheetnames and 'tape' in data_sheet_names:
+            tws = data_wb['tape']
+            hdr = [c.value for c in tws[1]]
+            i_dt, i_ccy, i_sr = hdr.index('dt'), hdr.index('currency'), hdr.index('spot_rate')
+            rows = [r for r in tws.iter_rows(min_row=2, values_only=True) if r[i_dt] is not None]
+            last = max(r[i_dt] for r in rows)
+            rates = sorted(1.0 / float(r[i_sr]) for r in rows
+                           if r[i_dt] == last and str(r[i_ccy]) in ('484', 'MXN')
+                           and r[i_sr] not in (None, '') and float(r[i_sr]) > 0)
+            if not rates:
+                print(f"ERROR: no MXN spot_rate on tape for {last}; refusing to build "
+                      f"with a stale Exhibit A L6.", file=sys.stderr)
+                sys.exit(2)
+            fx = round(rates[len(rates) // 2], 4)
+            old_fx = template_wb['Exhibit A']['L6'].value
+            template_wb['Exhibit A']['L6'].value = fx
+            print(f"Exhibit A L6 USDMXN: {old_fx} -> {fx} (tape {last}, median of {len(rates)} MXN rows)")
+
         # Determine output path
         if args.output:
             output_path = args.output

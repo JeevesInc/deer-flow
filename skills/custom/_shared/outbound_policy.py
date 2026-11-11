@@ -11,6 +11,13 @@ path (slack_tool send / send-as-owner / upload, cron emails) calls into this
 module and refuses anything that would reach someone outside Jeeves. There is
 deliberately no override flag; Brian is the override, by sending the draft.
 
+Standing exemptions are named in EXEMPTIONS below, in code, each approved by
+Brian. The agent cannot add one: an agent-written config file grants nothing.
+- sofom_tape (Brian, 2026-11-04, "You need to override"): the SOFOM daily tape
+  reply-all on the F/12339 > F/12340 Distribution thread, sent by
+  report_scheduler_cron.run_sofom_distribution, recipients limited to Jeeves
+  and CXC (the trustee). SOFOM_AUTO_SEND=0 turns it back into a draft.
+
 This module is the code-level layer. The credential-level layer, where the
 agent cannot reach any token that is able to send, is the outbound service in
 deer-flow/outbound/.
@@ -90,6 +97,29 @@ def assert_internal_emails(addrs, context: str = "") -> None:
     ext = [a for a in flat if not is_internal_email(a)]
     if ext:
         _block("email", ", ".join(ext), "recipient outside " + "/".join(sorted(INTERNAL_DOMAINS)), context)
+
+
+EXEMPTIONS = {
+    "sofom_tape": {"domains": {"cxc.com.mx"}},
+}
+
+
+def assert_exempt_emails(addrs, exemption: str, context: str = "") -> None:
+    """Raise unless every address is internal or on the named exemption's domains.
+    `addrs` are raw To/Cc/Bcc header values. An empty list or an unknown exemption also raises."""
+    from email.utils import getaddresses
+
+    ex = EXEMPTIONS.get(exemption)
+    if ex is None:
+        _block("email", "(any)", f"no exemption named {exemption!r}", context)
+    flat = [addr for _, addr in getaddresses([str(a) for a in addrs or [] if a]) if addr]
+    if not flat:
+        _block("email", "(no recipients)", "no recipients to verify", context)
+    allowed = INTERNAL_DOMAINS | ex["domains"]
+    ext = [a for a in flat if _domain(a) not in allowed]
+    if ext:
+        _block("email", ", ".join(ext), f"recipient outside the {exemption} exemption ("
+               + "/".join(sorted(allowed)) + ")", context)
 
 
 _team_cache: dict[int, str] = {}

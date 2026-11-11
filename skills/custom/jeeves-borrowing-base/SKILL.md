@@ -97,6 +97,7 @@ sending that, don't ever draft an email like that."*
   2026-09-23: *"Use the closest date and just fill from that"*; Privy from 9/11 data). Do not stop
   to ask, and do not leave explanatory comments on the lender-facing certificate itself — Brian had
   to say *"Remove errant comments."* Notes go in the Slack delivery, never in the artifact.
+- **EXCEL IS INSTALLED (Office16 EXCEL.EXE, win32com works as SYSTEM — verified 2026-11-05; Brian: "it's my laptop, I know it has Excel").** Never claim "no Excel". Recalc / screenshot a workbook via COM: DispatchEx('Excel.Application'), Workbooks.Open(copy, UpdateLinks=0), CalculateFull(), Range.CopyPicture(1,2) -> ChartObjects.Add -> Chart.Paste -> Chart.Export(png). Pattern: workspace excel_shot.py. A Summary screenshot = this Excel render, never an HTML mock or Sheets export.
 - **There is no LibreOffice/soffice on this box** — do not write recalc/convert scripts that shell
   out to it (two failed attempts 2026-09-23, `recalc.py` and `rc.py`). Recompute in Python; for PDF
   page images use a Python PDF library.
@@ -104,6 +105,8 @@ sending that, don't ever draft an email like that."*
 ---
 
 ## ⚠️ HARD RULES — scheduler edits and completion truth (added 2026-08-10)
+
+**R-MEB (added 2026-11-05, NB month-end BB 10/31):** before posting ANY Section 7.01(a) result, month-end BB or shortfall to Slack or a file, tie the build's Liquidity to the CICO *NB Liquidity* block total for the same date. A mismatch is a build bug until proven otherwise: post nothing numeric, fix the build first. If wrong figures were already posted, sweep every copy (Slack, Drive, logs, state JSON, memory) in one pass — Brian: *"get rid of anything anywhere that includes what you got wrong."* Never quote the wrong figures in skills, lessons or memory.
 
 0. **New or changed SQL born in this skill belongs in cfo-org-kb, and you CANNOT write it there with `write_file`/`str_replace` or with `skill_manage.py patch`.** Both fail: the clone is permission-denied to the write tools, and `skill_manage.py` edits the local clone with no git push, silently breaking the "GitHub is the only store, commit every query" rule. **Pattern:** write a python script to `WORKSPACE_PATH` that does plain `open().write()` into the clone, then `subprocess` the git add / commit / push with `cwd` set to the clone dir, and run it with `uv run python`. This is already a documented HARD RULE in cfo-org-kb/SKILL.md that recurred a 6th time on 2026-08-19 (Permission denied writing the new `nb_dq30_monthend_detail.sql`) because the work started HERE, in the borrowing-base skill, and cfo-org-kb/SKILL.md was never loaded. Read that rule before touching any .sql under cfo-org-kb.
 
@@ -184,6 +187,13 @@ answer this question from the skill's prose alone.
 
 ## MX Borrowing Base (SOFOM)
 
+### HARD RULES - MX BB (Brian, 2026-11-06)
+- **FX = that day's tape, always.** Brian: *"use the daily tape FX moving forward."* `merge_template.py` writes Exhibit A L6 (USD/MXN; feeds Exhibit B) = median tape MXN rate for the build date and fails closed if the tape has none. The template's old hardcoded 16.95 (unchanged since at least 9/25) hid the deficit: 11/5 was -$3.07M at 16.95 vs -$8.36M at tape 18.7723. Never quote a BB built at a carried/fixed rate.
+- **Asked about the MX BB in a shared channel -> open YOUR latest master first.** The scheduler builds and uploads `Jeeves SOFOM Borrowing Base - Master - {YYYYMMDD}.xlsx` to `CIM/{YYYYMM}/MX/` (~08:46). Never say "I don't have today's copy" - Brian: *"you finished the borrowing base at 8:46, don't make excuses, you have everything you need."* If a restricted session can't read state files, search the Drive folder.
+- **No speculation in front of the team.** Check Exhibit A inputs against the executed CIM agreement before calling any input a "bug"; give ONE walk in ONE currency (label MXN/USD); never ask the team which cell they read; never say "that's Brian's decision" in channel. Doubts go to Brian privately. Brian: *"super embarrassing. You don't sound like you know what you're talking about"* -> *"Can you just answer the original fucking question."*
+- **One number everywhere.** DM and channel got two different 11/5 deficits (-$8.7M vs -$8.36M) within minutes. The rebuilt master (Excel recalc) is the figure of record; reuse it, never recompute ad hoc.
+- **Inputs still carried, not refreshed [Needs Confirmation vs agreement]:** collection-account cash (MXN 25.5M every day since Sept), swap MTM, payment rate. Don't call them wrong in channel; confirm the source with Brian.
+
 ### 1. Generate data
 
 ```bash
@@ -219,6 +229,8 @@ An NB draw / Borrowing Request draft to the agent (WTNA) attaches **the borrowin
 2. **Liquidity in a draw package = the month-end figure already reported to NB** (record: `.deer-flow/nb_liquidity_reported.json`; 9/30 = $16,020,609.13). Never re-derive it from CICO, never offer an alternative reading, never raise it as an issue. Brian: *"the liquidity stays the exact same as we already showed them, which is the 16M, stop bringing this up"* (same framing corrected 10/05, 10/08, 10/16).
 3. **Post-signature fixes: never ask the signer to re-sign.** Regenerate the corrected pages and collate the existing signed signature pages into the updated PDF. Brian: *"we are not having him sign it again... just collate his signature page with the updated PDF."*
 4. **Before rewriting any `.deer-flow/*.json` state file, grep its consumers** (`cfo-org-kb/scripts`, `skills/custom`) and keep existing keys. 10/16: rewriting `nb_liquidity_reported.json` to a per-date schema broke `mission_control_snapshot.py` (`KeyError: 'liquidity'`) and dashboard 11645 showed the prior day until Brian said "so fix it?".
+
+5. **The draw AMOUNT comes from Brian's latest outbound statement, never an assumption.** Before filling a Borrowing Request, pro forma liquidity or pro forma Loans, search `in:sent newer_than:7d` to Goodwin, Akin, NB, WTNA and Alex for the amount, and cite the message in the reply. 2026-11-07: the First Amendment package for Melissa (draft `1a1b9c7ebd9dca4a`) was built at $50M ($79.2M pro forma liquidity, $150M pro forma Loans) and Brian was asked to confirm it. Twelve hours earlier he had already written to Tyler Garaffa: *"fully drawn and plan on 5M additional DDTL at closing"*. Only if no outbound amount exists, ask, and leave the amount blank in the docs instead of filling in a guess.
 
 ## NB borrowing base certificate — facility-specific rules (2026-07-28, Brian)
 
@@ -586,7 +598,5 @@ borrowing base, when it's built, I want the test as of the end of the previous m
   immediately before/after the draw on the latest data — not covered by the month-end test.
 
 
-## CICO daily balances email (LIVE 2026-10-08, approved by Brian)
-- Trigger: a Slack DM to the bot containing "CICO"/"balance"/"saldo" from Axel (U075NLRHYBX), William Filho (U0A5AT863BL) or Mariana (U09AGT85RSN). Hook: `backend/app/channels/slack.py` `_handle_cico_trigger` -> spawns `cico_daily_email.py --send --trigger-user <id>` (no agent turn; they are deliberately NOT on the DM allowlist). "CICO resend" adds `--force`. Same three IDs are in `slack_dm_monitor_cron.py` IGNORED_USERS (no holding note). slack.py edits need a GATEWAY restart.
-- Script pulls the newest `YYMMDD Jeeves - CICO.xlsx` from Axel's OneDrive (FinOps V3/CICO, top level) via Edge+Okta; from session 0 it hops to the desktop session (`zscaler-reauth/session_launcher.py`). Render logic is byte-identical to the approved 10/7 test (table verified identical). Date = latest Bank-balances column with >30 filled rows; subject `{yymmdd} CICO - Daily balances`.
-- Sends from Brian's Gmail to Mariana's 10/7 distribution list (12). One send per balance date (`_cico_email_state.json`); a repeat trigger for the same date tells the sender the latest date is unchanged. Confirmation (date, total cash, $1M+ moves) goes to the trigger user and Brian; failures too. Manual test: `cico_daily_email.py --send --no-fetch --to brian.mauck@tryjeeves.com`.
+## CICO daily balances email -> see `jeeves-cico` skill
+The daily CICO email is treasury reporting, not a borrowing base; its runbook lives in `custom/jeeves-cico/SKILL.md`. Scripts `cico_daily_email.py` / `cico_fetch_balances.py` stay in this folder only because build_nb.py imports the fetcher and the slack.py hook points here.

@@ -210,20 +210,12 @@ def write_month_end_liquidity(wb, me):
                       file=sys.stderr)
             raise RuntimeError('{} controlled account(s) missing from the {} CICO email -- '
                                'refusing to test Section 7.01(a)'.format(len(unmatched), lbl))
-        fxv = {}
-        for r in rows:
-            ccy = ba.cell(row=r, column=3).value
-            if ccy == 'USD':
-                fxv[r] = 1.0
-            elif ccy in me['fx']:
-                fxv[r] = round(me['fx'][ccy], 6)
-            else:
-                fxv[r] = _f(ba.cell(row=r, column=18).value) or 0.0
-                print('  7.01(a) {}: no tape FX for {} (row {}) -- used as-of rate'.format(lbl, ccy, r))
+        # 2026-11-04: CICO balances are already USD equivalents -- never re-apply FX.
+        fxv = {r: 1.0 for r in rows}
         src = me.get('subj', '')
-    ba.cell(row=1, column=19).value = ('balance in original currency -- month-end {} '
+    ba.cell(row=1, column=19).value = ('balance, USD equivalent per CICO -- month-end {} '
                                        '(Section 7.01(a) test date; {})'.format(lbl, src.strip()))
-    ba.cell(row=1, column=20).value = 'FX rate, USD per 1 unit (tape spot_rate {})'.format(lbl)
+    ba.cell(row=1, column=20).value = 'FX (1.0 -- CICO balances are already USD; {})'.format(lbl)
     ba.cell(row=1, column=21).value = ('counted toward Liquidity at month-end {} '
                                        '(Section 7.01(a) test, after 20% haircut)'.format(lbl))
     for r in range(2, ba.max_row + 1):
@@ -331,13 +323,18 @@ def _latest_original_cico_id(service, extra_q, stamp=None):
     q = 'subject:"{} CICO" {}'.format(stamp, extra_q) if stamp else \
         'subject:"CICO- Daily balances" {}'.format(extra_q)
     res = service.users().messages().list(userId='me', q=q, maxResults=30).execute()
+    # 2026-11-04: pick the newest BALANCE DATE, not the newest send -- 261029 and 261030
+    # were both sent 11/1 and the 261029 one landed last, so the 11/01 weekly carried 10/29.
+    best = None
     for m in res.get('messages', []):
         md = service.users().messages().get(userId='me', id=m['id'], format='metadata',
                                             metadataHeaders=['Subject']).execute()
         subj = {h['name'].title(): h['value'] for h in md['payload'].get('headers', [])}.get('Subject', '')
         if _CICO_ORIG_RE.match(subj) and (not stamp or subj.strip().startswith(stamp)):
-            return m['id']
-    return None
+            st = subj.strip()[:6]
+            if best is None or st > best[0]:
+                best = (st, m['id'])
+    return best[1] if best else None
 
 
 def fetch_cico(msg_id=None):
@@ -629,14 +626,14 @@ def build(tape, template, out_path, as_of, cico=None, cico_meta=None, fx=None,
             stamp = cico_meta
             ba.cell(row=1, column=16).value = 'CICO acct ({} daily balances email)'.format(stamp)
         print('bank_accts: updated {} balances from CICO'.format(len(matched)))
-        if fx:
-            n = 0
-            for row in labels:
-                ccy = ba.cell(row=row, column=3).value
-                if ccy in fx:
-                    ba.cell(row=row, column=18).value = round(fx[ccy], 6)
-                    n += 1
-            print('bank_accts: refreshed {} FX rates from tape spot_rate'.format(n))
+        # 2026-11-04: the CICO 'Bank balances' figures are USD EQUIVALENTS (email legend
+        # 'USD'; section totals sum across currencies; Axel's NB Liquidity block applies
+        # the 80% haircut straight to them). Never multiply them by tape FX. Col R is therefore 1.0 for every CICO-sourced row.
+        for row in labels:
+            ba.cell(row=row, column=18).value = 1.0
+        ba.cell(row=1, column=17).value = 'balance, USD equivalent (as reported in the CICO email)'
+        ba.cell(row=1, column=18).value = 'FX (1.0 -- CICO balances are already USD)'
+        print('bank_accts: CICO balances are USD -- FX set to 1.0 on {} rows'.format(len(labels)))
 
     if me_liq is not None:
         write_month_end_liquidity(wb, me_liq)
@@ -698,6 +695,11 @@ DQ30_HDR = ['month_end', 'company_id', 'loan_id', 'name', 'country', 'currency_c
 def month_end_window(as_of, n=3):
     """The n most recently ENDED calendar month ends as of `as_of` (oldest first)."""
     d = _d(as_of)
+    d = d.date() if hasattr(d, 'date') else d
+    # 2026-11-04: a month-end as-of (10/31 month-end certificate) tests THAT month-end --
+    # 7.01(b) is 'as of the last day of any calendar month'.
+    if (d + dt.timedelta(days=1)).day == 1:
+        d = d + dt.timedelta(days=1)
     first = dt.date(d.year, d.month, 1)
     ends = []
     for _ in range(n):

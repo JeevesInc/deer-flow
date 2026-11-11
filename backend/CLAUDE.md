@@ -142,7 +142,7 @@ from deerflow.config import get_app_config
 - Extends `AgentState` with: `sandbox`, `thread_data`, `title`, `artifacts`, `todos`, `uploaded_files`, `viewed_images`
 - Uses custom reducers: `merge_artifacts` (deduplicate), `merge_viewed_images` (merge/clear)
 
-**Runtime Configuration** (via `config.configurable`):
+**Runtime Configuration** (send as the run's `context`; the server mirrors it into `config.configurable`. LangGraph 0.6+ returns 400 if a run sets **both** — see `tickets/runner.run_body`):
 - `thinking_enabled` - Enable model's extended thinking
 - `model_name` - Select specific LLM model
 - `is_plan_mode` - Enable TodoList middleware

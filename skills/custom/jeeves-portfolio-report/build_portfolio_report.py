@@ -257,6 +257,18 @@ def main():
         print(f"    mods: {len(df_mods)} rows x {len(df_mods.columns)} cols")
         _replace_data_sheet(wb, 'mods', df_mods, include_index=False)
 
+        # ── Step 5b: Charge-Offs & 90+ DPD by name (Brian, 2026-11-02) ──
+        sys.path.insert(0, SCRIPT_DIR)
+        from charge_off_sheet import add_charge_off_sheet
+        bop_start = date_beg + dt.timedelta(days=1)
+        con2 = connect()
+        try:
+            co_res = add_charge_off_sheet(wb, df_loc, df_rollforward, df_mods,
+                                          bop_start, date_end, con2)
+        finally:
+            con2.close()
+        print(f"    Charge-Offs & 90+ DPD tab: {co_res}")
+
         # ── Step 6: Save ───────────────────────────────────────────────
         filename = f"Portfolio Report - {month_str}01.xlsx"
         output_path = os.path.join(output_dir, filename)

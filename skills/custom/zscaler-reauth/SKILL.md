@@ -110,6 +110,11 @@ the session-1 headless reauth path works with no human. It does NOT cover cold p
 **Root cause:** after a ZSATray restart the new tray auto-launches its own PKCE URL with a 30s timer; the script slept 12s to 'settle', clicked Authenticate again (rejected: 'already autenticating'), then tailed the log 10s — handoff landed at ~45s.
 **Fix (scripts/zscaler_reauth.py, backup .bak_20261015):** settle 12s→2s, return CLICKED straight after restart, rescan the log on disk before tailing. Monitor runs from Task Scheduler — kill PID and it respawns with new code. Restored 2026-10-15 10:07 on first patched attempt. Read ZSATray_*.log (timestamps local despite (-0700)) before blaming Okta.
 
+### 7. agent-desktop (vercel-labs) as a GUI fallback — tried 2026-10-31, NOT working yet
+- Installed v1.0.2 at `C:\Jeeves\redshift-bot\tools\agent-desktop\agent-desktop.exe`. The gateway runs as SYSTEM in session 0, so every call MUST go through `session_launcher.run_in_user_session`; a direct call sees no desktop.
+- ZSATray has no window in `list-apps`; its icon is in the hidden tray. `open-system-surface system-tray` returns `POLICY_DENIED` (not a timing issue, don't retry it), then `TIMEOUT`. Taskbar snapshot + chevron click succeed, but the overflow surface is `WINDOW_NOT_FOUND` on this Win11 build.
+- Three failures on that path = stop. Untried next routes: `snapshot --surface desktop` right after the chevron click, or relaunching `ZSATray.exe` to raise its window. The Playwright reauth (`reauth.py`) is still the path of record.
+
 ## Diagnosing: read the RIGHT log
 
 Live logs are the `deerflow-*.log` family in `C:\Jeeves\redshift-bot\logs\` (services back on

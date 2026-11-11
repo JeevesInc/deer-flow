@@ -299,6 +299,51 @@ def _run_action_learner() -> None:
         traceback.print_exc()
 
 
+CICO_NOTES_QUERY = ('(from:gemini-notes@google.com subject:CICO) OR '
+                    '(subject:"CICO -" -subject:"Daily balances" -subject:Invitation from:(axel@tryjeeves.com OR william.filho@tryjeeves.com)) newer_than:2d')
+
+
+def _dispatch_cico_notes_check() -> None:
+    """Brian 2026-11-09: "You got notes from the CICO update today. That happens every week. See what else needs to
+    be incorporated into cash planner." Standing input: every new CICO meeting-notes email (Gemini) or FinOps
+    'CICO - <Month>' forecast email gets one agent run that diffs it against Cash Planner, opens a Ticket for the
+    gaps and builds them. Message ids are remembered in state so each email is handled once. Non-fatal."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gmail_tool
+        svc = gmail_tool._get_service()
+        msgs = svc.users().messages().list(userId='me', q=CICO_NOTES_QUERY, maxResults=10).execute().get('messages', [])
+        state = load_state()
+        seen = set(state.get('cico_notes_seen', []))
+        new = [m['id'] for m in msgs if m['id'] not in seen]
+        if not new:
+            return
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / '_shared'))
+        from autonomous_dispatch import dispatch
+        prompt = (
+            "Weekly CICO notes -> Cash Planner (standing instruction from Brian, 2026-11-09: \"You got notes from the CICO "
+            "update today. That happens every week. See what else needs to be incorporated into cash planner\").\n"
+            f"New CICO emails (gmail message ids): {', '.join(new)}. Read each one (gmail_tool.py read; pull inline images "
+            "of forecast tables via the Gmail API) and the newest 'YYMMDD Jeeves - CICO.xlsx' in .deer-flow/treasury/CICO.\n"
+            "Diff every item against Cash Planner (C:\\Jeeves\\cash-planner master; trace each line to its source model, e.g. "
+            "the 9:30 run in cfo-org-kb, before calling anything missing). Skip CICO-only spreadsheet fixes. Open ONE Ticket "
+            "with the gaps (mandate quotes the standing instruction) and build them in a separate git worktree, never in the "
+            "shared C:\\Jeeves\\cash-planner tree. Then DM Brian a short list: gaps found, built, and still open, with PR links. "
+            "If nothing new is needed, DM one line saying so."
+        )
+        ok = dispatch(prompt, notification=None, report_result=False, category="CICO notes check",
+                      source_id=f"cico-notes-{new[0]}", source_metadata={"message_ids": new})
+        if ok:
+            state['cico_notes_seen'] = sorted(seen | set(new))[-200:]
+            save_state(state)
+            log.info("CICO notes check dispatched for %s", new)
+        else:
+            log.warning("CICO notes check rejected (capacity); retry next cycle")
+    except Exception as e:
+        log.error("CICO notes check failed (non-fatal): %s", e)
+        traceback.print_exc()
+
+
 def run_eod_review() -> None:
     log.info("Starting EOD review...")
 
@@ -307,6 +352,7 @@ def run_eod_review() -> None:
     # calls). If it fails it does not block the EOD agent dispatch.
     _run_proposal_learner()
     _run_action_learner()
+    _dispatch_cico_notes_check()
 
     state = load_state()
 

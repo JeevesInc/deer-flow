@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 320,
+      "applications": 324,
       "created": "2026-04-07",
-      "last_applied": "2026-11-09T20:17:24.243083+00:00",
+      "last_applied": "2026-11-11T10:13:36.506976+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6510,6 +6510,166 @@
       "solution": "",
       "target_skills": [
         "jeeves-cico"
+      ]
+    },
+    "pat-2026-11-10-408": {
+      "id": "pat-2026-11-10-408",
+      "name": "Bound slots by every attendee's local workday (no later than",
+      "source": "ep-2026-11-10-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-10",
+      "last_applied": "2026-11-10T16:47:40.424459+00:00",
+      "category": "general",
+      "pattern": "Bound slots by every attendee's local workday (no later than ~5pm ET for East Coast folks, no earlier than 8am PT for Brian); a calendar showing free in the evening is not availability",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "google-calendar"
+      ]
+    },
+    "pat-2026-11-10-409": {
+      "id": "pat-2026-11-10-409",
+      "name": "Never ship a status chip/label as a literal. Every status mu",
+      "source": "ep-2026-11-10-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-10",
+      "last_applied": "2026-11-10T22:54:55.501378+00:00",
+      "category": "general",
+      "pattern": "Never ship a status chip/label as a literal. Every status must be computed from the data's as-of date vs the expected date (last closed business day / month); a job 'ok' is not freshness; unfed sources show 'Not fed' in red. When auditing for 'frozen', grep status literals too, not just dates.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-11-11-410": {
+      "id": "pat-2026-11-11-410",
+      "name": "When an app is retired, grep every consumer for its feeds an",
+      "source": "ep-2026-11-11-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T01:16:28.547497+00:00",
+      "category": "general",
+      "pattern": "When an app is retired, grep every consumer for its feeds and APIs and remove them in the same change. In cash-planner edit build/cp_template.html AND index.html. A git add with one bad pathspec stages nothing - check git show --stat before merging.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cfo-org-kb"
+      ]
+    },
+    "pat-2026-11-11-411": {
+      "id": "pat-2026-11-11-411",
+      "name": "Cash Planner: never edit or switch branches in the shared ca",
+      "source": "ep-2026-11-11-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T01:28:31.149599+00:00",
+      "category": "general",
+      "pattern": "Cash Planner: never edit or switch branches in the shared cash-planner tree (other threads keep WIP there; it is the live server dir). Work in a git worktree under Jeeves _wt, merge the PR, then ff-pull the live tree keeping index.html data lines. When the in-app assistant says a line is a static CICO memo, that is a gap to fix in debtLayer, not an explanation.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cash-planner"
+      ]
+    },
+    "pat-2026-11-11-412": {
+      "id": "pat-2026-11-11-412",
+      "name": "Never claim a Cash Planner line or screen no longer reads CI",
+      "source": "ep-2026-11-11-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T01:42:15.866454+00:00",
+      "category": "general",
+      "pattern": "Never claim a Cash Planner line or screen no longer reads CICO without a per-cell provenance check against the live page (fcCalc layers: FINC, MDL930, debtLayer, curves, rules; everything else is CICO). Feeds that run are not feeds that are used: check the page actually calls the endpoint. Audit script pattern: workspace audit_fc.py.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cash-planner"
+      ]
+    },
+    "pat-2026-11-11-413": {
+      "id": "pat-2026-11-11-413",
+      "name": "RULE (Brian 2026-11-10): Cash Planner replaces CICO. Every v",
+      "source": "ep-2026-11-11-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T01:47:42.801210+00:00",
+      "category": "general",
+      "pattern": "RULE (Brian 2026-11-10): Cash Planner replaces CICO. Every value is an actual (real data), data feed, input, forecast or calculation. CICO may only seed inputs once into Cash Planner storage; it is never a live source, never a fallback. Do not propose falling back to CICO for any line.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "cash-planner"
+      ]
+    },
+    "pat-2026-11-11-414": {
+      "id": "pat-2026-11-11-414",
+      "name": "For planning, CIM MX base = receivables x advance + swap (co",
+      "source": "ep-2026-11-11-008",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T03:02:34.101708+00:00",
+      "category": "general",
+      "pattern": "For planning, CIM MX base = receivables x advance + swap (collection cash excluded). A CIM deficiency is not a paydown: recycling stops and that cash stays in the trust as restricted. Cash Planner moves the deficiency from Available to Restricted cash monthly (PR #50).",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-11-11-415": {
+      "id": "pat-2026-11-11-415",
+      "name": "A total move > ~20% d/d or a currency subtotal going to 0 me",
+      "source": "ep-2026-11-11-013",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T05:44:38.779012+00:00",
+      "category": "general",
+      "pattern": "A total move > ~20% d/d or a currency subtotal going to 0 means an input tab (FX) is missing, not real cash movement",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-cico"
+      ]
+    },
+    "pat-2026-11-11-416": {
+      "id": "pat-2026-11-11-416",
+      "name": "Never hand-maintain data that an existing workbook already c",
+      "source": "ep-2026-11-11-014",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T05:52:56.918941+00:00",
+      "category": "general",
+      "pattern": "Never hand-maintain data that an existing workbook already carries; a mismatch is resolved by diffing source versions to the exact change, not flagged",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-borrowing-base"
+      ]
+    },
+    "pat-2026-11-11-417": {
+      "id": "pat-2026-11-11-417",
+      "name": "Cash Planner REPLACES CICO. (1) Every module is connected: d",
+      "source": "ep-2026-11-11-016",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T10:13:36.605437+00:00",
+      "category": "general",
+      "pattern": "Cash Planner REPLACES CICO. (1) Every module is connected: debt, BB, draws, collections all flow into the forecast - check the wiring before shipping any screen. (2) Never ask Brian for an input that exists: facility pricing is in the executed agreements, SOFR is public (CME), draws are in the advance-request workbooks, bases are in the BB masters. (3) If CICO is wrong, do the correct thing in the app and note it; do not ask. (4) Known facility state (CIM deficiency, NB liquidity shortfall) must show in the app; sanity-check outputs against it before reporting done. Exception: historical CICO actuals (e.g. Mastercard pre-11/10) are frozen hard-coded per Brian.",
+      "problem": "Cash Planner build 2026-11-10: Brian corrected the same root failure ~6 times in one day (debt screen not feeding forecast; asking him for cost of capital / SOFR / advance requests the agent already had; reproducing CICO errors; CIM base counting cash).",
+      "solution": "",
+      "target_skills": [
+        "cash-planner"
       ]
     }
   }

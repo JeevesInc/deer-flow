@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 324,
+      "applications": 325,
       "created": "2026-04-07",
-      "last_applied": "2026-11-11T10:13:36.506976+00:00",
+      "last_applied": "2026-11-12T10:06:28.820953+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6670,6 +6670,22 @@
       "solution": "",
       "target_skills": [
         "cash-planner"
+      ]
+    },
+    "pat-2026-11-11-418": {
+      "id": "pat-2026-11-11-418",
+      "name": "For Redshift network or allowlist questions on DEV tickets, ",
+      "source": "ep-2026-11-11-017",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-11",
+      "last_applied": "2026-11-11T16:07:56.557025+00:00",
+      "category": "general",
+      "pattern": "For Redshift network or allowlist questions on DEV tickets, answer from sys_connection_log (bmauck can see all users, about 7 days of retention). stl_connection_log is permission-denied because bmauck is not a superuser. Group by remote_host and user_name. Do not alias a column as host because it is a reserved word and raises a syntax error. Give the factual answer and leave the removal decision to the tool owner.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "linear"
       ]
     }
   }

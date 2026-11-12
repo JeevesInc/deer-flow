@@ -5,7 +5,7 @@ Jeeves Mexico SPV Monthly Servicer Report - April 2026
 Period: BOP=2026-04-01, EOP=2026-04-30
 """
 
-import os, sys, datetime as dt, importlib.util, warnings
+import os, sys, sys, datetime as dt, importlib.util, warnings
 from pathlib import Path
 warnings.filterwarnings('ignore')
 
@@ -301,6 +301,15 @@ for row in ws_bank.iter_rows(min_row=2):
     for cell in row:
         if cell.column == 3:
             cell.value = '[FILL IN]'
+
+# --- Exhibit B G82 Liquidity (8.1(x)) from the as-sent month-end CICO (Brian 2026-11-12) ---
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mx_liquidity
+_liq = mx_liquidity.compute(EOP_DATE)
+wb['Exhibit B']['G82'].value = round(_liq['liquidity'])
+from openpyxl.comments import Comment as _C
+wb['Exhibit B']['G82'].comment = _C(mx_liquidity.bridge_text(_liq), 'DeerFlow')
+print(mx_liquidity.bridge_text(_liq))
 
 # --- Save ---
 os.makedirs(OUTPUTS_PATH, exist_ok=True)

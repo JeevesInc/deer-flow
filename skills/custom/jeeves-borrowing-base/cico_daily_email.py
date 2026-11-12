@@ -111,6 +111,16 @@ def completeness(FILE):
         elif (L.lower().startswith("total") and isinstance(p, (int, float)) and abs(p) >= 1000
               and isinstance(v, (int, float)) and abs(v) < 0.5):
             zeroed.append((r + 1, L, p))
+    # 2026-11-10: FX tab had no 10-Nov rates -> FX rows (589-597) = 0 -> every non-USD account
+    # IFERROR'd to 0 and the email went out at 18.6M (-53.2M d/d). Zeros are not blanks, so the
+    # check above missed it. Refuse when any FX rate row is 0/blank on the current date.
+    CCYS = {'MXN', 'COP', 'CLP', 'PEN', 'BRL', 'GBP', 'EUR', 'CAD'}
+    for r in range(end, len(grid)):
+        g = grid[r][6] if len(grid[r]) > 6 else None
+        if isinstance(g, str) and g.strip().upper() in CCYS:
+            p, v = grid[r][prev], grid[r][cur]
+            if isinstance(p, (int, float)) and p > 0 and not (isinstance(v, (int, float)) and v > 0):
+                blanks.append((r + 1, f'FX rate {g.strip().upper()} - FX tab has no rate for this date, so every {g.strip().upper()} account converts to 0'))
     return dict(d_cur=hdr[cur], d_prev=hdr[prev], blanks=blanks, zeroed=zeroed)
 
 
@@ -481,6 +491,7 @@ def main():
     ap.add_argument("--file"); ap.add_argument("--no-fetch", action="store_true")
     ap.add_argument("--trigger-user"); ap.add_argument("--force", action="store_true")
     ap.add_argument("--fetch-only", action="store_true")
+    ap.add_argument("--correction", action="store_true")  # resend with 'CORRECTED: ' subject (implies --force)
     ap.add_argument("--trigger-channel"); ap.add_argument("--trigger-ts")
     a = ap.parse_args()
     if a.fetch_only:
@@ -504,7 +515,8 @@ def main():
         except Exception as e:
             say("cash-state write failed (email unaffected):", repr(e))
         key = f"{b['d_cur']:%Y-%m-%d}"
-        subject = f"{b['d_cur']:%y%m%d} CICO - Daily balances"
+        subject = ("CORRECTED: " if a.correction else "") + f"{b['d_cur']:%y%m%d} CICO - Daily balances"
+        if a.correction: a.force = True
         (TREAS / "cico_daily_email_preview.html").write_text(b["html"], encoding="utf-8")
         tot = f"${b['total']:,.0f}" if isinstance(b["total"], (int, float)) else "n/a"
         dlt = (f" ({'+' if b['total_delta'] >= 0 else '-'}${abs(b['total_delta']):,.0f} d/d)"

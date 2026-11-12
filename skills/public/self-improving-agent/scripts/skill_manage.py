@@ -301,7 +301,11 @@ def cmd_append(args):
 def cmd_log(args):
     """Log an episode to episodic memory."""
     try:
-        episode_data = json.loads(args.episode)
+        raw = args.episode
+        if raw.startswith("@"):
+            with open(raw[1:], encoding="utf-8") as fh:
+                raw = fh.read()
+        episode_data = json.loads(raw)
     except json.JSONDecodeError as e:
         print(f"ERROR: Invalid JSON: {e}", file=sys.stderr)
         sys.exit(1)

@@ -429,3 +429,7 @@ with open(path, 'w') as f:
 - [A Survey on the Memory Mechanism of Large Language Model Agents](https://dl.acm.org/doi/10.1145/3748302)
 - [Lifelong Learning of LLM based Agents](https://arxiv.org/html/2501.07278v1)
 - Based on [charon-fan/agent-playbook](https://github.com/charon-fan/agent-playbook) self-improving-agent skill
+
+
+## Hard rule — episode JSON (2026-11-12)
+`log <skill> --episode @<path>.json` reads the episode from a file. Write that file from Python with `json.dumps(...)`. Never hand-type episode JSON containing Windows paths: a raw `C:\Jeeves` backslash fails with `Invalid JSON: Invalid \escape` (hit 2026-11-11, thread b82c6246).

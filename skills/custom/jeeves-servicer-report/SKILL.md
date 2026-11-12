@@ -100,7 +100,7 @@ instead of answered: *"bro you sent the file. just look at it and see if it's th
 Write ONLY these cells: Exhibit A L6 (FX spot), L10:L25 (rollforward values), K31 (EOP account count);
 Exhibit B H52 and H53 plus H58 and H59 (roll the prior month's cached H51, H52, H57, H58 forward),
 G144 and G154 (interest period days = days in month), D36 (collection-account available amount - blank
-it, Brian fills); bank_accts column C; and the tape and lista tabs. Everything else is a live formula
+it, Brian fills); **Exhibit B G82 Liquidity** (every month - `mx_liquidity.py --period-end <EOM> --report <xlsx> --write`; build_mx_servicer_report.py calls it); bank_accts column C; and the tape and lista tabs. Everything else is a live formula
 (L31, L33, L35, concentration block H40:L50, L56 from hedge, L83 from historical_draws, all Exhibit B
 DQ SUMIFS). FX source that keeps the workbook internally consistent: reciprocal of
 `loc_tape.spot_rate` at EOP (7-31-26 gives 17.3476); prior months used a slightly different market
@@ -112,6 +112,10 @@ Exhibit A L12 plus L13:L22 minus L25 MUST tie (L12 + monthly flows - L25 = 0). A
 
 Brian's standing fills (2026-08-10): bank balances = 0, no draws in a month with no new draw rows,
 hedge MTM and collection-account available amount are his; he wants the FX spot filled by the agent.
+
+### HARD RULE — Exhibit B G82 Liquidity is refreshed EVERY month (Brian 2026-11-12: "Use the 50 number and make sure you update it going forward")
+
+G82 sat as a hardcode of 29,682,880 (the 5/29 CICO) from the 20260715 report through 20261115 - five reports with stale Liquidity. It is a typed input, so nothing flags it. Each month run `mx_liquidity.py` (this skill dir): Unrestricted Cash per the LSA 8.1(x) definition = CICO Total cash at the last balance date <= period end, from the AS-SENT CICO file for that date (later files restate prior days - Oct-26: 52.84M as sent vs 67.36M in the 261110 file; use as-sent), less accounts above Total cash whose Purpose says collateral/reserve. It writes G82 plus a bridge comment. Oct-26 = 50,194,887 (10/30). G83 (3-mo avg net operating losses x4) is also a stale 0 - [Needs Confirmation] from Accounting's monthly financials.
 
 ### Cash balance — show BOTH dates (Alejandra Granados, CIM, 2026-08-27)
 

@@ -12,8 +12,14 @@ file-deletion incident playbook.
 So: commit them. This does not make the edits any more live (they already are --
 the gateway loads from disk), it makes them recoverable and reviewable.
 
-Deliberately does NOT push: putting unreviewed agent edits into shared history
-is a separate decision (Brian, 2026-08-17).
+PUSH POLICY (changed 2026-11-12). Until then this deliberately did NOT push
+(Brian, 2026-08-17), so local main silently drifted from origin/main (2 ahead /
+3 behind by 11/12) and every PR merge left the working tree stale. Brian,
+2026-11-12: "The GH is your to manage ... find a best practice". So now, after
+committing, publish(): fetch -> rebase onto origin/main -> push
+agent/self-edits-YYYYMMDD -> PR -> squash-merge once mergeable -> delete the
+branch -> reset local main to origin/main (only when trees are identical).
+Any failure aborts cleanly and DMs Brian; nothing is force-pushed to main.
 
 Run as a cron in cron_supervisor.py (daily, after dreams and the 03:00 backup).
 """
@@ -245,6 +251,83 @@ def bump_parent_pointer() -> str | None:
     logger.info("[selfedit-commit] bumped parent pointer as %s", sha)
     return sha
 
+GH_TIMEOUT = 60
+MERGE_WAIT_SECONDS = 10 * 60
+
+
+def _gh(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *args], cwd=str(REPO), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=GH_TIMEOUT, check=True)
+
+
+def _repo_slug() -> str:
+    return _gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").stdout.strip()
+
+
+def publish() -> str | None:
+    """Get local main's self-edit commits onto origin/main through a PR, then resync.
+
+    Returns the merged PR URL, or None when there was nothing to publish.
+    Raises on failure (run_loop alerts); a failed rebase is aborted first.
+    """
+    if _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
+        logger.warning("[selfedit-commit] HEAD is not main -- not publishing")
+        return None
+    if _mid_operation():
+        return None
+    _git("fetch", "origin", "--prune")
+    ahead = int(_git("rev-list", "--count", "origin/main..HEAD").stdout.strip() or 0)
+    if ahead == 0:
+        behind = int(_git("rev-list", "--count", "HEAD..origin/main").stdout.strip() or 0)
+        if behind:
+            _git("merge", "--ff-only", "origin/main")
+            logger.info("[selfedit-commit] fast-forwarded main by %d", behind)
+        return None
+    try:
+        _git("rebase", "--autostash", "origin/main")
+    except subprocess.CalledProcessError:
+        try:
+            _git("rebase", "--abort")
+        except subprocess.CalledProcessError:
+            pass
+        raise
+    branch = f"agent/self-edits-{dt.date.today():%Y%m%d}"
+    _git("push", "-f", "origin", f"HEAD:refs/heads/{branch}")
+    files = _git("diff", "--name-only", "origin/main..HEAD").stdout.split()
+    body = ("Nightly agent self-edits (dreams / skill_manage), auto-published by "
+            "selfedit_commit_cron.publish().\n\n" + "\n".join(f"- {f}" for f in files[:60]))
+    existing = _gh("pr", "list", "--head", branch, "--state", "open", "--json", "number",
+                   "-q", ".[0].number").stdout.strip()
+    if existing:
+        num = existing
+    else:
+        url = _gh("pr", "create", "--base", "main", "--head", branch,
+                  "--title", f"chore(self-edit): nightly agent self-edits {dt.date.today():%Y-%m-%d}",
+                  "--body", body).stdout.strip()
+        num = url.rstrip("/").rsplit("/", 1)[-1]
+    slug = _repo_slug()
+    deadline = time.time() + MERGE_WAIT_SECONDS
+    state = ""
+    while time.time() < deadline:
+        state = _gh("pr", "view", num, "--json", "mergeStateStatus", "-q", ".mergeStateStatus").stdout.strip()
+        if state in ("CLEAN", "HAS_HOOKS"):
+            break
+        time.sleep(30)
+    if state not in ("CLEAN", "HAS_HOOKS"):
+        raise RuntimeError(f"self-edit PR #{num} not mergeable after wait (state={state})")
+    _gh("api", "-X", "PUT", f"repos/{slug}/pulls/{num}/merge", "-f", "merge_method=squash")
+    try:
+        _git("push", "origin", "--delete", branch)
+    except subprocess.CalledProcessError:
+        pass
+    _git("fetch", "origin", "--prune")
+    if _git("diff", "--name-only", "HEAD", "origin/main").stdout.strip():
+        raise RuntimeError(f"PR #{num} merged but local HEAD tree != origin/main; left local main as-is")
+    _git("reset", "--mixed", "origin/main")  # keeps any newer on-disk edits as dirty files
+    logger.info("[selfedit-commit] published self-edits via PR #%s; main == origin/main", num)
+    return f"https://github.com/{slug}/pull/{num}"
+
+
 def _seconds_until_next_run() -> float:
     now = dt.datetime.now()
     today_run = now.replace(hour=COMMIT_HOUR_LOCAL, minute=COMMIT_MINUTE_LOCAL,
@@ -262,6 +345,7 @@ def run_loop() -> None:
         try:
             commit_once()
             bump_parent_pointer()
+            publish()
         except subprocess.CalledProcessError as e:
             logger.exception("[selfedit-commit] git failed")
             detail = (e.stderr or e.stdout or str(e))[-600:]
@@ -282,5 +366,7 @@ if __name__ == "__main__":
         print(f"committed: {result}" if result else "nothing committed")
         bumped = bump_parent_pointer()
         print(f"parent bumped: {bumped}" if bumped else "parent pointer unchanged")
+        if "--no-publish" not in sys.argv:
+            print(f"published: {publish()}")
     else:
         run_loop()

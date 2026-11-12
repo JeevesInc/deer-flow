@@ -255,75 +255,75 @@ GH_TIMEOUT = 60
 MERGE_WAIT_SECONDS = 10 * 60
 
 
-def _gh(*args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], cwd=str(REPO), capture_output=True, text=True,
+def _gh(*args: str, repo: Path = REPO) -> subprocess.CompletedProcess:
+    return subprocess.run(["gh", *args], cwd=str(repo), capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=GH_TIMEOUT, check=True)
 
 
-def _repo_slug() -> str:
-    return _gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").stdout.strip()
+def _repo_slug(repo: Path = REPO) -> str:
+    return _gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner", repo=repo).stdout.strip()
 
 
-def publish() -> str | None:
+def publish(repo: Path = REPO) -> str | None:
     """Get local main's self-edit commits onto origin/main through a PR, then resync.
 
     Returns the merged PR URL, or None when there was nothing to publish.
     Raises on failure (run_loop alerts); a failed rebase is aborted first.
     """
-    if _git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
+    if _git_in(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() != "main":
         logger.warning("[selfedit-commit] HEAD is not main -- not publishing")
         return None
-    if _mid_operation():
+    if _mid_operation(repo):
         return None
-    _git("fetch", "origin", "--prune")
-    ahead = int(_git("rev-list", "--count", "origin/main..HEAD").stdout.strip() or 0)
+    _git_in(repo, "fetch", "origin", "--prune")
+    ahead = int(_git_in(repo, "rev-list", "--count", "origin/main..HEAD").stdout.strip() or 0)
     if ahead == 0:
-        behind = int(_git("rev-list", "--count", "HEAD..origin/main").stdout.strip() or 0)
+        behind = int(_git_in(repo, "rev-list", "--count", "HEAD..origin/main").stdout.strip() or 0)
         if behind:
-            _git("merge", "--ff-only", "origin/main")
+            _git_in(repo, "merge", "--ff-only", "origin/main")
             logger.info("[selfedit-commit] fast-forwarded main by %d", behind)
         return None
     try:
-        _git("rebase", "--autostash", "origin/main")
+        _git_in(repo, "rebase", "--autostash", "origin/main")
     except subprocess.CalledProcessError:
         try:
-            _git("rebase", "--abort")
+            _git_in(repo, "rebase", "--abort")
         except subprocess.CalledProcessError:
             pass
         raise
     branch = f"agent/self-edits-{dt.date.today():%Y%m%d}"
-    _git("push", "-f", "origin", f"HEAD:refs/heads/{branch}")
-    files = _git("diff", "--name-only", "origin/main..HEAD").stdout.split()
+    _git_in(repo, "push", "-f", "origin", f"HEAD:refs/heads/{branch}")
+    files = _git_in(repo, "diff", "--name-only", "origin/main..HEAD").stdout.split()
     body = ("Nightly agent self-edits (dreams / skill_manage), auto-published by "
             "selfedit_commit_cron.publish().\n\n" + "\n".join(f"- {f}" for f in files[:60]))
     existing = _gh("pr", "list", "--head", branch, "--state", "open", "--json", "number",
-                   "-q", ".[0].number").stdout.strip()
+                   "-q", ".[0].number", repo=repo).stdout.strip()
     if existing:
         num = existing
     else:
         url = _gh("pr", "create", "--base", "main", "--head", branch,
                   "--title", f"chore(self-edit): nightly agent self-edits {dt.date.today():%Y-%m-%d}",
-                  "--body", body).stdout.strip()
+                  "--body", body, repo=repo).stdout.strip()
         num = url.rstrip("/").rsplit("/", 1)[-1]
-    slug = _repo_slug()
+    slug = _repo_slug(repo)
     deadline = time.time() + MERGE_WAIT_SECONDS
     state = ""
     while time.time() < deadline:
-        state = _gh("pr", "view", num, "--json", "mergeStateStatus", "-q", ".mergeStateStatus").stdout.strip()
+        state = _gh("pr", "view", num, "--json", "mergeStateStatus", "-q", ".mergeStateStatus", repo=repo).stdout.strip()
         if state in ("CLEAN", "HAS_HOOKS"):
             break
         time.sleep(30)
     if state not in ("CLEAN", "HAS_HOOKS"):
         raise RuntimeError(f"self-edit PR #{num} not mergeable after wait (state={state})")
-    _gh("api", "-X", "PUT", f"repos/{slug}/pulls/{num}/merge", "-f", "merge_method=squash")
+    _gh("api", "-X", "PUT", f"repos/{slug}/pulls/{num}/merge", "-f", "merge_method=squash", repo=repo)
     try:
-        _git("push", "origin", "--delete", branch)
+        _git_in(repo, "push", "origin", "--delete", branch)
     except subprocess.CalledProcessError:
         pass
-    _git("fetch", "origin", "--prune")
-    if _git("diff", "--name-only", "HEAD", "origin/main").stdout.strip():
+    _git_in(repo, "fetch", "origin", "--prune")
+    if _git_in(repo, "diff", "--name-only", "HEAD", "origin/main").stdout.strip():
         raise RuntimeError(f"PR #{num} merged but local HEAD tree != origin/main; left local main as-is")
-    _git("reset", "--mixed", "origin/main")  # keeps any newer on-disk edits as dirty files
+    _git_in(repo, "reset", "--mixed", "origin/main")  # keeps any newer on-disk edits as dirty files
     logger.info("[selfedit-commit] published self-edits via PR #%s; main == origin/main", num)
     return f"https://github.com/{slug}/pull/{num}"
 
@@ -344,8 +344,9 @@ def run_loop() -> None:
         time.sleep(_seconds_until_next_run())
         try:
             commit_once()
+            publish(REPO)            # deer-flow first: its main sha becomes the pointer target
             bump_parent_pointer()
-            publish()
+            publish(REPO.parent)     # then the parent repo (redshift-bot) pointer bump
         except subprocess.CalledProcessError as e:
             logger.exception("[selfedit-commit] git failed")
             detail = (e.stderr or e.stdout or str(e))[-600:]
@@ -367,6 +368,7 @@ if __name__ == "__main__":
         bumped = bump_parent_pointer()
         print(f"parent bumped: {bumped}" if bumped else "parent pointer unchanged")
         if "--no-publish" not in sys.argv:
-            print(f"published: {publish()}")
+            print(f"published deer-flow: {publish(REPO)}")
+            print(f"published parent: {publish(REPO.parent)}")
     else:
         run_loop()

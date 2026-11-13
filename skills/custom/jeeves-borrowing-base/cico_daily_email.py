@@ -256,8 +256,22 @@ def fetch_latest():
                 okta_tries += 1
                 if okta_tries > 3:
                     break
+                fp = page.get_by_text("Sign in with Okta FastPass")
                 btn = page.get_by_text("Open Okta Verify", exact=True)
-                if btn.count():
+                pw = page.locator('input[type="password"], input[name="credentials.passcode"]')
+                body = page.inner_text("body") if page.locator("body").count() else ""
+                # 2026-11-12 (after Okta password change): Okta now asks for the password, then a
+                # security method, before FastPass. Each step is handled here; then loop again.
+                if pw.count() and pw.first.is_visible():
+                    pw.first.fill(zr.OKTA_PASSWORD)
+                    page.locator('input[type="submit"], button[type="submit"]').first.click()
+                    okta_tries -= 1; page.wait_for_timeout(3000); continue
+                if "security method" in body:
+                    zr._select_mfa_option(page); okta_tries -= 1; continue
+                if fp.count() and fp.first.is_visible():
+                    fp.first.click()
+                    zr._handle_open_okta_verify_button(page)
+                elif btn.count():
                     zr._handle_open_okta_verify_button(page)
                 else:
                     zr._handle_okta_flow(page)

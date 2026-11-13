@@ -257,16 +257,32 @@ def _get_client():
 
 
 def _get_brian_dm_channel(client) -> str:
-    result = client.conversations_list(types='im', limit=100)
-    for ch in result['channels']:
+    # 2026-11-12: conversations_list(types='im', limit=100) is one unpaginated page; once the
+    # bot had >100 IMs Brian's DM fell off it and the cron crash-looped after the 10:05 restart,
+    # DMing a supervisor alert per attempt. conversations_open returns the existing DM directly.
+    try:
+        ch = client.conversations_open(users=BRIAN_USER_ID)['channel']['id']
+        if ch:
+            return ch
+    except Exception as e:
+        log.warning('conversations_open failed (%s); paginating conversations_list', e)
+    for ch in _get_im_channels(client):
         if ch.get('user') == BRIAN_USER_ID:
             return ch['id']
     raise RuntimeError(f'Could not find DM channel with Brian ({BRIAN_USER_ID})')
 
 
 def _get_im_channels(client) -> list:
-    result = client.conversations_list(types='im', limit=100)
-    return result.get('channels', [])
+    chans, cursor = [], None
+    while True:
+        kw = {'types': 'im', 'limit': 200}
+        if cursor:
+            kw['cursor'] = cursor
+        result = client.conversations_list(**kw)
+        chans.extend(result.get('channels', []))
+        cursor = (result.get('response_metadata') or {}).get('next_cursor')
+        if not cursor:
+            return chans
 
 
 def _get_display_name(client, user_id: str) -> str:

@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 325,
+      "applications": 327,
       "created": "2026-04-07",
-      "last_applied": "2026-11-12T10:06:28.820953+00:00",
+      "last_applied": "2026-11-12T22:24:44.777164+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6686,6 +6686,134 @@
       "solution": "",
       "target_skills": [
         "linear"
+      ]
+    },
+    "pat-2026-11-12-419": {
+      "id": "pat-2026-11-12-419",
+      "name": "Never create reply drafts threaded under an unsent draft. Dr",
+      "source": "ep-2026-11-12-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T17:59:41.956297+00:00",
+      "category": "general",
+      "pattern": "Never create reply drafts threaded under an unsent draft. Draft the parent alone; create the replies only after Brian has sent it, using the SENT message id with gmail_tool draft <message_id>.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "gmail"
+      ]
+    },
+    "pat-2026-11-12-420": {
+      "id": "pat-2026-11-12-420",
+      "name": "slack_dm_monitor used one unpaginated conversations_list(typ",
+      "source": "ep-2026-11-12-003",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T18:15:04.414450+00:00",
+      "category": "general",
+      "pattern": "slack_dm_monitor used one unpaginated conversations_list(types='im', limit=100) page; at 104 IMs Brian's DM fell off and the cron crash-looped after a gateway restart, each attempt DMing a supervisor alert. Use conversations_open(users=...) to resolve a DM id, paginate any conversations_list. A gateway restart also SIGINTs in-flight report_scheduler subprocesses (receivable forecast rc=3221225786 KeyboardInterrupt) which stay '_failed' until re-run by hand.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
+      ]
+    },
+    "pat-2026-11-12-421": {
+      "id": "pat-2026-11-12-421",
+      "name": "A detached gateway restart launched by a run fired at 10:05,",
+      "source": "ep-2026-11-12-004",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T18:18:29.939622+00:00",
+      "category": "general",
+      "pattern": "A detached gateway restart launched by a run fired at 10:05, 20s after Brian said 'the analyst is working, don't restart'. It killed the receivable forecast and the in-flight reply, and exposed a slack-dm-monitor crash loop. Daytime restarts: schedule overnight (04:15, after selfedit 03:30) unless Brian asks for now; any detached restart must check for busy runs and _running scheduler keys first and abort if any exist.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "self-improving-agent"
+      ]
+    },
+    "pat-2026-11-12-422": {
+      "id": "pat-2026-11-12-422",
+      "name": "New data sources for the churn model are additive features. ",
+      "source": "ep-2026-11-12-005",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T19:58:17.124317+00:00",
+      "category": "general",
+      "pattern": "New data sources for the churn model are additive features. Evaluate as base vs base+new on the same OOT split (whole book + big-credit segment), report incremental lift; never pitch them as a competing model or a pass/fail.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-11-12-423": {
+      "id": "pat-2026-11-12-423",
+      "name": "Before adding a feature family, grep the project for it: leg",
+      "source": "ep-2026-11-12-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T20:21:19.947503+00:00",
+      "category": "general",
+      "pattern": "Before adding a feature family, grep the project for it: legacy Pendo NPS was already in W7 (D9). Also check the source date range against the labelled grid: in-app survey started after the last labelled row, so it could only be checked outside the model. A 3-variant W7 eval with rolling refits runs ~30 min: launch it in the background and log to a file, since a single bash call times out at 600s.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-11-12-424": {
+      "id": "pat-2026-11-12-424",
+      "name": "For a Refresh or Roll-forward tracker row, open the prior fi",
+      "source": "ep-2026-11-12-007",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-12",
+      "last_applied": "2026-11-12T21:57:46.573127+00:00",
+      "category": "general",
+      "pattern": "For a Refresh or Roll-forward tracker row, open the prior file in the counterparty's VDR (Box 'Jeeves-BBVA Data Room' 375845462246) and re-run the same query over the same population, with the same columns, through the new date. Then check that the overlapping months tie to the prior file. The Jan-26 rollforward was loc_acct_rollforward_cumul.sql looped monthly and limited to BR/CO/US (MX excluded). Build new artifacts only for rows marked New with no prior file, and verify that in the VDR and in sent mail first.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-diligence"
+      ]
+    },
+    "pat-2026-11-13-425": {
+      "id": "pat-2026-11-13-425",
+      "name": "Before calling a source exhausted: cover volume, topics, tex",
+      "source": "ep-2026-11-13-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-13",
+      "last_applied": "2026-11-13T00:11:31.062488+00:00",
+      "category": "general",
+      "pattern": "Before calling a source exhausted: cover volume, topics, text, OUR responsiveness, timing (local time of day/weekday), WHO raises it (role/title/owner via Redshift users.jobtitle + primary_account_owners), internal notes; run RFE on an in-train validation split; report univariate signal separately from incremental lift over the production model.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-analytics"
+      ]
+    },
+    "pat-2026-11-13-426": {
+      "id": "pat-2026-11-13-426",
+      "name": "For CICO, a login/fetch failure is the task: repair the sess",
+      "source": "ep-2026-11-13-002",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-13",
+      "last_applied": "2026-11-13T10:09:30.604436+00:00",
+      "category": "general",
+      "pattern": "For CICO, a login/fetch failure is the task: repair the session, retry, send today's date; never offer an older date.",
+      "problem": "2026-11-12 Brian said 'CICO'; agent reported the SharePoint fetch broke and offered to send 11/2 instead of fixing it.",
+      "solution": "Patched cico_daily_email.py login path; 261111 and 261112 sent. Added HARD RULES to jeeves-cico SKILL.md.",
+      "target_skills": [
+        "jeeves-cico"
       ]
     }
   }

@@ -12,3 +12,10 @@ Scripts live in `custom/jeeves-borrowing-base/` (`cico_daily_email.py`, `cico_fe
 - Script pulls the newest `YYMMDD Jeeves - CICO.xlsx` from Axel's OneDrive (FinOps V3/CICO, top level) via Edge+Okta; from session 0 it hops to the desktop session (`zscaler-reauth/session_launcher.py`). Render logic is byte-identical to the approved 10/7 test (table verified identical). Date = latest Bank-balances column with >30 filled rows; subject `{yymmdd} CICO - Daily balances`.
 - Sends from Brian's Gmail to Mariana's 10/7 distribution list (12). One send per balance date (`_cico_email_state.json`); a repeat trigger for the same date tells the sender the latest date is unchanged. Confirmation (date, total cash, $1M+ moves) goes to the trigger user and Brian; failures too. Manual test: `cico_daily_email.py --send --no-fetch --to brian.mauck@tryjeeves.com`.
 - **Missed date = backfill it yourself, no asking.** When a run failed or anyone asks "is there a CICO for <date>?" and it didn't go out: run the script for that date (that day's CICO file via `--file`; confirm the subject date in a `--to brian` dry send or the render before the real send), send oldest-first, then tell the trigger user / reply-all to the asker (gmail SKILL send rule) that you sent it and why it was late. 2026-11-01: Brian had to push twice ("Could you just check if you can run the 10/29?" -> "So why don't you do it").
+
+
+
+<!-- Evolution: 2026-11-13 | source: self-improving-agent -->
+## HARD RULES
+
+- **"CICO" = send TODAY's CICO. A fetch/login failure is the task, not the answer.** On a SharePoint/Okta/M365 login failure (e.g. after Brian's Okta password change, 2026-11-12), repair the session in `cico_daily_email.py`'s fetch path, retry, and send today's date. Never reply with the error plus an offer to send an older date - on 2026-11-12 that drew "the fuck? I asked you to send the CICO for today" and "you did this before, figure it out". Before saying it is broken, search past episodes (`skill_manage.py search "CICO login"`) for the prior fix.

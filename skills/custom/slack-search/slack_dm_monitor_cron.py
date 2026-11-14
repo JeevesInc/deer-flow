@@ -68,6 +68,15 @@ def _load_allowlist() -> dict:
         return {BRIAN_USER_ID: {'name': 'Brian Mauck'}}
 
 
+def _load_blocklist() -> dict:
+    """Returns {user_id: {...}} of senders Brian has blacklisted: no reply, no ack, no triage ping."""
+    try:
+        with open(_allowlist_path()) as f:
+            return json.load(f).get('blocked', {}) or {}
+    except Exception:
+        return {}
+
+
 ACK_COOLDOWN_HOURS = int(os.environ.get('SLACK_GATED_ACK_COOLDOWN_HOURS', '24'))
 
 GATED_RECEIPT_TEXT = (
@@ -405,6 +414,25 @@ def run_loop():
                 if new_msgs:
                     sender_name = _get_display_name(client, other_user)
                     log.info("%d new msg(s) from %s", len(new_msgs), sender_name)
+
+                    if other_user in _load_blocklist():
+                        # Blacklisted by Brian: silent. Log only, advance cursor, no ack/triage.
+                        for msg in new_msgs:
+                            state.setdefault('blocked_log', []).append({
+                                'sender_id': other_user, 'channel_id': channel_id,
+                                'ts': msg['ts'], 'text': msg.get('text', ''),
+                                'logged_at': datetime.now().isoformat()})
+                            # Brian still wants to know: plain ping to him, nothing to the sender.
+                            try:
+                                _notify_gated_message(client, brian_dm, sender_name + ' [BLACKLISTED]',
+                                                      other_user, msg, False)
+                            except Exception as e:
+                                log.error('Blacklist ping failed: %s', e)
+                            cur_seen = state['seen_ts'].get(channel_id, '0')
+                            if float(msg['ts']) > float(cur_seen):
+                                state['seen_ts'][channel_id] = msg['ts']
+                        log.info('Ignored %d msg(s) from blacklisted %s', len(new_msgs), sender_name)
+                        continue
 
                     allowlist = _load_allowlist()
                     if other_user not in allowlist:

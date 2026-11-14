@@ -37,9 +37,9 @@
       "name": "Skill guidance updated based on experience",
       "source": "ep-2026-04-07-001",
       "confidence": 1.0,
-      "applications": 327,
+      "applications": 330,
       "created": "2026-04-07",
-      "last_applied": "2026-11-12T22:24:44.777164+00:00",
+      "last_applied": "2026-11-13T18:59:20.175700+00:00",
       "category": "general",
       "pattern": "Skill guidance updated based on experience",
       "problem": "Patched skill guidance in gmail",
@@ -6814,6 +6814,38 @@
       "solution": "Patched cico_daily_email.py login path; 261111 and 261112 sent. Added HARD RULES to jeeves-cico SKILL.md.",
       "target_skills": [
         "jeeves-cico"
+      ]
+    },
+    "pat-2026-11-13-427": {
+      "id": "pat-2026-11-13-427",
+      "name": "Before setting clause (x), net the balance for any recycling",
+      "source": "ep-2026-11-13-006",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-13",
+      "last_applied": "2026-11-13T21:01:26.631293+00:00",
+      "category": "general",
+      "pattern": "Before setting clause (x), net the balance for any recycling released between the balance print and the letter (search Gmail 'Recycling Request' newer_than:2d, Marisol's 'I confirm the release'). Monex's stated Cuenta de Pago balance is authoritative; when it differs from ours, reconcile it to named movements before replying, never push back on an unexplained gap.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "jeeves-servicer-report"
+      ]
+    },
+    "pat-2026-11-14-428": {
+      "id": "pat-2026-11-14-428",
+      "name": "When summarizing what Brian said to someone, include only Br",
+      "source": "ep-2026-11-14-001",
+      "confidence": 0.7,
+      "applications": 1,
+      "created": "2026-11-14",
+      "last_applied": "2026-11-14T10:11:59.429194+00:00",
+      "category": "general",
+      "pattern": "When summarizing what Brian said to someone, include only Brian's words; anything the other party said (names, guesses) is labeled with who said it, or left out. Every person named in a draft must trace to a quoted line, with its speaker.",
+      "problem": "",
+      "solution": "",
+      "target_skills": [
+        "slack-search"
       ]
     }
   }
